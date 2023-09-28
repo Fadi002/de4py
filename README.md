@@ -34,5 +34,8 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
   </tbody>
 </table>
 
-# Disclaimer and License Notice
-This tool are for educational purposes only, never try deobfuscating someone's software without permission, me (Fadi002) are not responsible for any kind of misuse. and this tool are licensed under GNU General Public License v3.0.
+## Disclaimer
+This tool are for educational purposes only, never try deobfuscating someone's software without permission, me (Fadi002) are not responsible for any kind of misuse.
+
+## License Notice
+this tool are licensed under GNU General Public License v3.0.
