@@ -35,10 +35,21 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
 </table>
 
 ## Screenshots
-<a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Home.png?raw=true"></img></a>
-<a href="#about"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Deobfuscator.png?raw=true"></img></a>
-<a href="#about"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Shell.png?raw=true"></img></a>
-<a href="#about"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/About.png?raw=true"></img></a>
+
+ <div class="row">
+  <div class="column">
+    <a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Home.png?raw=true"></img></a>
+  </div>
+  <div class="column">
+    <a href="#about"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Deobfuscator.png?raw=true"></img></a>
+  </div>
+  <div class="column">
+    <a href="#about"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Shell.png?raw=true"></img></a>
+  </div>
+  <div class="column">
+    <a href="#about"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/About.png?raw=true"></img></a>
+  </div>
+</div> 
 ## Disclaimer
 This tool are for educational purposes only, never try deobfuscating someone's software without permission, me (Fadi002) are not responsible for any kind of misuse.
 
