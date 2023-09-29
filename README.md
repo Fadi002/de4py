@@ -31,6 +31,10 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
       <td>Pyshell GUI</td>
       <td>Custom GUI to make it easy to execute python code inside the desired process.</td>
     </tr>
+    <tr>
+      <td>Beautiful UI</td>
+      <td>why use console when you can have a nice-on-the-eyes GUI, am i right? ;)</td>
+    </tr>
   </tbody>
 </table>
 
