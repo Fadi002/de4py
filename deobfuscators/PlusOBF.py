@@ -9,4 +9,4 @@ def PlusOBF(file_path):
             file.write("# Cleaned with de4py | https://github.com/Fadi002/de4py\n"+cleaned)
         return "Saved as "+filename+'-cleaned.py'
     except Exception as e:
-        return 'Detected PlusOBF but Failed to deobfuscated\n'+e
+        return 'Detected PlusOBF but Failed to deobfuscate\n'+e
