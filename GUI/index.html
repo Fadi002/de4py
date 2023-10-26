@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="icon" type="image/png" href="/de4py.ico" />
+    <script type="text/javascript" src="/eel.js"></script>
+    <script type="text/javascript" src="js/scripts.js"></script>
+    <title>de4py</title>
+  </head>
+  <body>
+    <div id="notification-container" style="position:fixed;pointer-events:none;"></div>
+    <div id="loading-spin">
+      <div id="loading-spinner"></div>
+    </div>
+    <div class="loading-screen">
+      <div class="loading-bar">
+        <div class="loading-bar-fill"></div>
+      </div>
+      <div class="loading-message">Loading de4py...</div>
+    </div>
+    <div class="navbar" id="navbar" style="left: -310px;">
+      <div onclick="navto('home')" class="btn sebtn" style="background-image: url('feather/home.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">Home</div>
+      <div onclick="navto('deobfuscator')" class="btn" style="background-image: url('feather/layers.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">Deobfuscator</div>
+      <div onclick="navto('pyshell')" class="btn" style="background-image: url('feather/terminal.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">PyShell</div>
+      <div onclick="navto('about')" class="btn" style="background-image: url('feather/info.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">About</div>
+    </div>
+    <div class="menulol-container" id="menulol" style="left: 20px;">
+      <div class="menulol">&#9776;</div>
+    </div>
+    <div class="content-container">
+      <section id="home" class="center active">
+        <h1>De4py home</h1>
+        <div class="frame" style="position: absolute; top: 120px;left:100px; width:300px; ">
+          <h1>Change LOG</h1>
+          <div style="max-height:250px;" id="changeLog" class="scroll-box"></div>
+        </div>
+        <div class="frame" style="position: absolute; top: 120px;left:600px; width:300px; ">
+          <h1>Environment info</h1>
+          <ul>
+            <li>Python version: <span id="pv">{NULL}</span>
+            </li>
+            <li>Arch: <span id="arch">{NULL}</span>
+            </li>
+            <li>Operating System: <span id="os">{NULL}</span>
+            </li>
+          </ul>
+        </div>
+        <div class="frame" style="position: absolute; top: 320px;left:600px; width:300px; ">
+          <div class="clock-container">
+            <div class="clock" id="clock">Loading...</div>
+          </div>
+        </div>
+      </section>
+      <section id="deobfuscator" class="hidden center">
+        <h1>De4py deobfuscator</h1>
+        <div class="frame" style="position: absolute; top: 120px; left: 50px; width: 350px; height: 150px;">
+          <input onclick="getpath()" type="button" id="fileinput" style="display: none;">
+          <label class="btns" for="fileinput" style="cursor: pointer;">Select a file</label>
+          <span class="frame" style="padding:10px" id="selectedFileName">None</span>
+          <button style="margin-top: 70px;margin-left:100px;" class="btns" onclick="startdeobf()">Deobfuscate</button>
+        </div>
+        <div class="frame" style="position: absolute; top: 120px;left:500px; width:400px; height:350px;">
+          <h1> Output: <button onclick="document.getElementById('output').select(); document.execCommand('copy');createnotification('success', 'Copied');" style="margin-left: 150px;" class="btns">Copy Output</button>
+          </h1>
+          <textarea class="scroll-box" id="outputDEOBF" style="height:260px;width: 380px; background-color:#1f1f1f; color: white;font-family: 'Share Tech Mono', monospace; resize:none;outline: none;"></textarea>
+        </div>
+      </section>
+      <section id="pyshell" class="center hidden">
+        <h1>De4py pyshell</h1>
+        <div class="frame" style="position: absolute; top: 120px; left: 50px; width: 350px; height: 85px;">
+          <label for="pidinput">Target pid:</label>
+          <input type="text" id="pidinput" class="custom-input">
+          <button style="margin-top: 15px;margin-left:120px;" class="btns" onclick="injectpyshell()">Inject</button>
+        </div>
+        <div class="frame" style="position: absolute; top: 270px; left: 50px; width: 890px; height: 240px; padding:0px;">
+          <h1 style="margin-left:390px;">Commands</h1>
+          <div style="padding-left: 40px;">
+            <button class="btns" onclick="exec_command('ExecPY')">exec py code</button>
+            <button class="btns" onclick="exec_command('ForceCrash')">crash process</button>
+            <button class="btns" onclick="exec_command('GetFunctions')">get all functions</button>
+            <button class="btns" onclick="pid_widget(1)">force show console</button>
+          </div>
+          <div style="padding-left: 40px;margin-top: 20px;">
+            <button class="btns" onclick="exec_command('PyshellGUI')">Pyshell (tkinter GUI)</button>
+            <button class="btns" onclick="exec_command('DumpStrings')">Dump strings</button>
+            <button class="btns" onclick="exec_command('delExit')">Remove exit function</button>
+            <button class="btns" onclick="exec_command('DeattachDLL')">Deattach DLL</button>
+          </div>
+        </div>
+        <div class="frame" style="position: absolute; top: 120px;left:500px; width:400px; height:85px;">
+          <h3>Output:</h3>
+          <textarea class="scroll-box" id="outputPYSHELL" style="height:5px;width: 380px; background-color:#1f1f1f; color: white;font-family: 'Share Tech Mono', monospace; resize:none;outline: none;overflow:hidden;"></textarea>
+        </div>
+        <div id="IDKWHATSHOULDINAMEIT" style="position: fixed;top: 0;left: 0;width: 100%;height: 100%;backdrop-filter: blur(5px);background-color: rgba(0, 0, 0, 0.5);z-index: 9999;display:none;">
+          <div style="padding-left: 800px;margin-top: 50px;">
+            <button class="btns" onclick="pid_widget(0)">X</button>
+          </div>
+          <div class="frame" style="position: absolute; top: 120px;left:300px; width:400px; height:100px">
+            <label for="scpid">Target pid:</label>
+            <input type="text" id="scpid" class="custom-input">
+            <div style="padding-left: 100px;margin-top: 30px;">
+              <button class="btns" onclick="exec_command('ShowConsole')">unhide console</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="about" class="center hidden">
+        <div class="about-info frame">
+          <h1>About</h1>
+          <p>GitHub: <a href="https://github.com/fadi002" target="_blank">fadi002</a>
+          </p>
+          <p>Discord: @0xmrpepe</p>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

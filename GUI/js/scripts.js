@@ -1,0 +1,232 @@
+var injected;
+var path;
+setTimeout(showMenu, 2000);
+
+eel.expose(dead_process);
+
+function dead_process() {
+    injected = false;
+    createnotification("warning", "Process crashed/died/killed");
+}
+
+async function exec_command(command) {
+    if (command == 'ShowConsole') {
+        var pid = document.getElementById('scpid')
+        if (pid.value.trim() == '') {
+            createnotification('warning', "Type process id first");
+            return;
+        }
+        pid_widget(0)
+        document.getElementById('outputPYSHELL').textContent = await eel.showconsole(pid.value.trim())();
+        createnotification("success", "Command executed");
+        return;
+    }
+    if (!injected) {
+        createnotification("failure", "Please injected a process first")
+    } else {
+        if (command == 'DumpStrings') {
+            document.getElementById('outputPYSHELL').textContent = await eel.dumpstring()();
+            createnotification("success", "Command executed");
+        } else if (command == 'GetFunctions') {
+            document.getElementById('outputPYSHELL').textContent = await eel.getfunctions()();
+            createnotification("success", "Command executed");
+        } else if (command == 'DeattachDLL') {
+            injected = false;
+            if (eel.write_to_pipe(command)) {
+                createnotification("success", "Command executed");
+            }
+        } else if (command == "ExecPY") {
+            var path = await eel.file_explorer()();
+            document.getElementById('outputPYSHELL').textContent = await eel.execpython(path)();
+            createnotification("success", "Command executed");
+        } else {
+            if (eel.write_to_pipe(command)) {
+                createnotification("success", "Command executed");
+            }
+        }
+    }
+}
+
+function pid_widget(method) {
+    if (!method) {
+        document.getElementById('IDKWHATSHOULDINAMEIT').style.display = 'none';
+    } else {
+        document.getElementById('IDKWHATSHOULDINAMEIT').style.display = 'flex';
+    }
+}
+
+function updatetime() {
+    const now = new Date();
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const seconds = now.getSeconds().toString().padStart(2, '0');
+    document.getElementById('clock').textContent = `${hours}:${minutes}:${seconds}`;
+}
+
+function navto(id) {
+    var sec = document.getElementsByTagName('section');
+    for (var i = 0; i < sec.length; i++) {
+        sec[i].classList.add('hidden');
+        sec[i].classList.remove('active');
+    }
+    var as = document.getElementById(id);
+    as.classList.remove('hidden');
+    as.classList.add('active');
+}
+
+async function loadchangelog() {
+    try {
+        var response = await eel.changelog()();
+        var data = JSON.parse(response);
+        changelogd(data);
+    } catch (err) {
+        console.log('Error loading changelog:', err);
+    }
+}
+
+function showMenu() {
+    var loadingScreen = document.getElementsByClassName('loading-screen')[0];
+    loadingScreen.style.display = 'none';
+}
+
+function changelogd(data) {
+    const logContainer = document.getElementById('changeLog');
+    data.forEach(versionData => {
+        const versionElement = document.createElement('div');
+        versionElement.classList.add('version');
+        versionElement.innerHTML = `<h3>Version ${versionData.version}</h3>`;
+        const changesList = document.createElement('ul');
+        versionData.changes.forEach(change => {
+            const changeItem = document.createElement('li');
+            changeItem.textContent = change;
+            changesList.appendChild(changeItem);
+        });
+        versionElement.appendChild(changesList);
+        logContainer.appendChild(versionElement);
+    });
+}
+
+async function load_info() {
+    eel.get_info()().then(data => {
+        document.getElementById('pv').textContent = data['pv'];
+        document.getElementById('arch').textContent = data['arch'];
+        document.getElementById('os').textContent = data['os'];
+    });
+}
+
+function createnotification(type, message) {
+    const container = document.getElementById('notification-container');
+
+    if (container.childElementCount >= 1) {
+        const firstnotification = container.firstElementChild;
+        if (firstnotification) {
+            container.removeChild(firstnotification);
+        }
+    }
+    var notification = document.createElement('div');
+    var content = document.createElement('div');
+    var progress = document.createElement('div');
+    var icon = document.createElement('div');
+    notification.className = 'notification-bar ' + type;
+    content.className = 'notification-content';
+    content.innerHTML = message;
+    progress.className = 'notification-progress';
+    icon.className = 'notification-icon ' + type;
+    notification.appendChild(icon);
+    notification.appendChild(content);
+    notification.appendChild(progress);
+    container.appendChild(notification);
+    setTimeout(function() {
+        container.removeChild(notification);
+    }, 5000);
+}
+
+async function injectpyshell() {
+    const loadingspin = document.getElementById('loading-spin');
+    const loadingSpinner = document.getElementById('loading-spinner');
+    const pidinput = document.getElementById("pidinput");
+    const outputt = document.getElementById('outputPYSHELL');
+    if (pidinput.value.trim() == '') {
+        createnotification('warning', "Type process id first");
+        return
+    }
+    loadingspin.style.display = 'block';
+    loadingSpinner.style.display = 'block';
+    try {
+        const result = await eel.inject_shell(pidinput.value.trim())();
+        outputt.textContent = result;
+        injected = true;
+        createnotification('success', 'pyshell injector function executed');
+    } catch {
+        createnotification('failure', 'pyshell injector function failed');
+        outputt.textContent = `failed to inject pyshell`;
+    }
+    loadingspin.style.display = 'none';
+    loadingSpinner.style.display = 'none';
+}
+
+async function startdeobf() {
+    const loadingspin = document.getElementById('loading-spin');
+    const loadingSpinner = document.getElementById('loading-spinner');
+    const outputt = document.getElementById('outputDEOBF');
+    if (!path) {
+        createnotification('warning', "Select a file first");
+        return
+    }
+    loadingspin.style.display = 'block';
+    loadingSpinner.style.display = 'block';
+    try {
+        const result = await eel.protector_detector(path)();
+        outputt.textContent = result;
+        createnotification('success', 'Deobfuscation function executed');
+    } catch (error) {
+        createnotification('failure', 'Deobfuscation function failed');
+        outputt.textContent = `An error occurred: ${error}`;
+    }
+    loadingspin.style.display = 'none';
+    loadingSpinner.style.display = 'none';
+}
+
+async function getpath() {
+    var dosya_path = await eel.file_explorer()();
+    if (dosya_path) {
+        var filename = dosya_path.match(/\/([^\/]+)$/);
+        if (filename && filename.length > 1) {
+            document.getElementById('selectedFileName').textContent = filename[1];
+        }
+        path = dosya_path
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadchangelog();
+    load_info();
+    setInterval(updatetime, 1000);
+    const navbar = document.getElementById('navbar');
+    const menuToggle = document.getElementById('menulol');
+    const buttons = document.querySelectorAll('.btn');
+    const contentContainer = document.querySelector('.content-container');
+    menuToggle.addEventListener('click', function() {
+        navbar.style.left = (navbar.style.left === '0px' || navbar.style.left === '') ? '-310px' : '0px';
+        menuToggle.style.left = (navbar.style.left === '0px') ? '220px' : '20px';
+        contentContainer.classList.toggle('open');
+    });
+    buttons.forEach(function(button) {
+        button.addEventListener('click', function() {
+            buttons.forEach(function(btn) {
+                btn.classList.remove('sebtn');
+            });
+            this.classList.add('sebtn');
+        });
+    });
+    var progressBar = document.querySelector('.loading-bar-fill');
+    var width = 0;
+    var interval = setInterval(function() {
+        if (width >= 100) {
+            clearInterval(interval);
+        } else {
+            width++;
+            progressBar.style.width = width + '%';
+        }
+    }, 20);
+});
