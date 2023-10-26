@@ -1,7 +1,7 @@
 import subprocess
 import os
 import time
-#I HATE CTYPES THAT WHY I USED C++ TO MAKE THE INJECTOR XD
+# I HATE CTYPES THAT'S WHY I USED C++ TO MAKE THE INJECTOR XD
 def execute_command(command):
     process = subprocess.Popen(command ,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     exit_code = process.wait()
