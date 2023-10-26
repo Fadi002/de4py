@@ -1,4 +1,4 @@
-<a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/de4py.png?raw=true" width="400"></img></a>
+<a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/de4py.jpg?raw=true" width="400"></img></a>
 # de4py
 <p align="center"><b>what is de4py?</b></p>
 De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advanced features that enables malware analysts and reverse engineers to deobfuscate python files and more.
