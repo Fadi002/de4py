@@ -8,7 +8,7 @@ obfuscators = [
     ("PlusOBF",r"exec\(\"\"\.join\(\[chr\(len\(i\)\) for i in d\]\)\)",PlusOBF),
     ('jawbreaker', r'([a-zA-Z_]\w{3})\s*=\s*([^;]+);', jawbreaker),
     ("wodx", r'(?:__NO_NO){23}', wodx),
-    ("BlankOBF", r"import base64, lzma; exec\(compile\(lzma\.decompress\(base64\.b64decode\(b'([A-Za-z0-9+/=]+)'\)\), \"<string>\", \"exec\"\)\)", BlankOBF),
+    ("BlankOBF", r"import\s*base64,\s*lzma;\s*exec\(compile\(lzma\.decompress\(base64\.b64decode\(b'([A-Za-z0-9+/=]+)'\)\)\s*,\s*\"<string>\"\s*,\s*\"exec\"\)\)", BlankOBF),
 ]
 def detect_obfuscator(file_path):
     file_data = open(file_path,'r',encoding='utf8').read()
