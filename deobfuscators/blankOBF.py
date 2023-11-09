@@ -15,7 +15,12 @@ def disasm(text):
     original_stdout = sys.stdout
     try:
         sys.stdout = disassembly_output
-        dis.dis(marshal.loads(base64.b64decode(codecs.decode(variable_list[0][1], 'rot13')+variable_list[2][1]+variable_list[3][1][::-1]+variable_list[1][1])))
+        marshal_code=(base64.b64decode(codecs.decode(variable_list[0][1], 'rot13')+variable_list[2][1]+variable_list[3][1][::-1]+variable_list[1][1]))
+        try:
+            dis.dis(marshal.loads(marshal_code))
+        except:
+            print("failed to dis marshal code so heres the marshal code only:\n")
+            print(marshal_code)
     finally:
         sys.stdout = original_stdout
     disassembly_text = disassembly_output.getvalue()

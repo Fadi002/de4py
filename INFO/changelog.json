@@ -4,5 +4,11 @@
         "changes": [
             "De4py released"
         ]
+    },
+    {
+        "version": "1.0.1",
+        "changes": [
+            "bug fixed for BlankOBF deobfuscator"
+        ]
     }
 ]
