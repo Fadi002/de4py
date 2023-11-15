@@ -8,7 +8,13 @@
     {
         "version": "1.0.1",
         "changes": [
-            "bug fixed for BlankOBF deobfuscator"
+            "Bug fixed for BlankOBF deobfuscator"
+        ]
+    },
+    {
+        "version": "1.0.2",
+        "changes": [
+            "Add support for Hyperion obfuscator"
         ]
     }
 ]
