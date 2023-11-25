@@ -51,7 +51,7 @@ def file_explorer():
     root = Tk()
     root.withdraw()
     root.wm_attributes('-topmost', 1)
-    file_path = filedialog.askopenfilename(filetypes=[("Python Files", "*.py"),("exe Files", "*.exe"),("All Files", "*.*")])
+    file_path = filedialog.askopenfilename(filetypes=[("Python Files", "*.py"),("Python compiled Files", "*.pyc"),("exe Files", "*.exe"),("All Files", "*.*")])
     return file_path
 
 
