@@ -24,6 +24,7 @@
       <div onclick="navto('home')" class="btn sebtn" style="background-image: url('feather/home.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">Home</div>
       <div onclick="navto('deobfuscator')" class="btn" style="background-image: url('feather/layers.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">Deobfuscator</div>
       <div onclick="navto('pyshell')" class="btn" style="background-image: url('feather/terminal.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">PyShell</div>
+      <div onclick="navto('analyzer')" class="btn" style="background-image: url('feather/file-text.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">Analyzer</div>
       <div onclick="navto('about')" class="btn" style="background-image: url('feather/info.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">About</div>
     </div>
     <div class="menulol-container" id="menulol" style="left: 20px;">
@@ -56,13 +57,13 @@
       <section id="deobfuscator" class="hidden center">
         <h1>De4py deobfuscator</h1>
         <div class="frame" style="position: absolute; top: 120px; left: 50px; width: 350px; height: 150px;">
-          <input onclick="getpath()" type="button" id="fileinput" style="display: none;">
+          <input onclick="getpath(0)" type="button" id="fileinput" style="display: none;">
           <label class="btns" for="fileinput" style="cursor: pointer;">Select a file</label>
           <span class="frame" style="padding:10px" id="selectedFileName">None</span>
           <button style="margin-top: 70px;margin-left:100px;" class="btns" onclick="startdeobf()">Deobfuscate</button>
         </div>
         <div class="frame" style="position: absolute; top: 120px;left:500px; width:400px; height:350px;">
-          <h1> Output: <button onclick="document.getElementById('output').select(); document.execCommand('copy');createnotification('success', 'Copied');" style="margin-left: 150px;" class="btns">Copy Output</button>
+          <h1> Output: <button onclick="document.getElementById('outputDEOBF').select(); document.execCommand('copy');createnotification('success', 'Copied');" style="margin-left: 150px;" class="btns">Copy Output</button>
           </h1>
           <textarea class="scroll-box" id="outputDEOBF" style="height:260px;width: 380px; background-color:#1f1f1f; color: white;font-family: 'Share Tech Mono', monospace; resize:none;outline: none;"></textarea>
         </div>
@@ -103,6 +104,28 @@
             <div style="padding-left: 100px;margin-top: 30px;">
               <button class="btns" onclick="exec_command('ShowConsole')">unhide console</button>
             </div>
+          </div>
+        </div>
+      </section>
+      <section id="analyzer" class="center hidden">
+        <h1>Analyzer</h1>
+        <div class="frame" style="position: absolute; top: 120px; left: 50px; width: 350px; height: 50px;">
+          <input onclick="getpath(1)" type="button" id="fileinputa" style="display: none;">
+          <label class="btns" for="fileinputa" style="cursor: pointer;">Select a file</label>
+          <span class="frame" style="padding:10px" id="selectedFileName1">None</span>
+        </div>
+        <div class="frame" style="position: absolute; top: 120px;left:500px; width:400px; height:360px;">
+          <h1> Output: <button onclick="document.getElementById('outputanalyzer').select(); document.execCommand('copy');createnotification('success', 'Copied');" style="margin-left: 150px;" class="btns">Copy Output</button></h1>
+          <textarea class="scroll-box" id="outputanalyzer" style="height:250px;width: 380px; background-color:#1f1f1f; color: white;font-family: 'Share Tech Mono', monospace; resize:none;outline: none;"></textarea>
+        </div>
+        <div class="frame" style="position: absolute; top: 230px; left: 50px; width: 390px; height: 290px; padding:0px;">
+          <h1 style="margin-left:150px;">options</h1>
+          <div>
+            <button style="margin-bottom: 15px;" class="btns" onclick="analyzer_command('detect_packer')">exe packer detector</button>
+            <button style="margin-bottom: 15px;" class="btns" onclick="analyzer_command('unpack_exe')">unpack exe</button>
+            <button style="margin-bottom: 15px;" class="btns" onclick="analyzer_command('sus_strings_lookup')">sus strings lookup</button>
+            <button style="margin-bottom: 15px;" class="btns" onclick="analyzer_command('all_strings_lookup')">all strings lookup</button>
+            <button style="margin-bottom: 15px;" class="btns" onclick="analyzer_command('get_file_hashs')">get file hashs</button>
           </div>
         </div>
       </section>

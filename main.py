@@ -9,6 +9,8 @@ from tkinter import Tk, filedialog
 from dlls import shell
 from util import tui, update, gen_path
 from config import config
+from analyzer import detect_packer, unpack_file, get_file_hashs, sus_strings_lookup, all_strings_lookup
+
 
 HANDLE = None
 tui.clear_console()
@@ -49,7 +51,7 @@ def file_explorer():
     root = Tk()
     root.withdraw()
     root.wm_attributes('-topmost', 1)
-    file_path = filedialog.askopenfilename(filetypes=[("Python Files", "*.py")])
+    file_path = filedialog.askopenfilename(filetypes=[("Python Files", "*.py"),("exe Files", "*.exe"),("All Files", "*.*")])
     return file_path
 
 
@@ -142,7 +144,7 @@ def read_from_pipe():
 
 
 def main():
-    eel.start('index.html',size=(1024, 589))
+    eel.start('index.html',size=(1024, 589),port=3456)
 
 
 if __name__ == '__main__':
