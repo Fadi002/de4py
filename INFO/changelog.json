@@ -16,5 +16,13 @@
         "changes": [
             "Add support for Hyperion obfuscator"
         ]
+    },
+    {
+        "version": "1.0.3",
+        "changes": [
+            "Add support for pyobfuscate.com obfuscator",
+            "Added file analyzer feature",
+            "Fixed some bugs"
+        ]
     }
 ]
