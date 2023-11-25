@@ -1,5 +1,7 @@
 var injected;
 var path;
+var bin_path;
+
 setTimeout(showMenu, 2000);
 
 eel.expose(dead_process);
@@ -187,14 +189,57 @@ async function startdeobf() {
     loadingSpinner.style.display = 'none';
 }
 
-async function getpath() {
+async function getpath(x) {
     var dosya_path = await eel.file_explorer()();
     if (dosya_path) {
         var filename = dosya_path.match(/\/([^\/]+)$/);
         if (filename && filename.length > 1) {
-            document.getElementById('selectedFileName').textContent = filename[1];
+            if (x) {
+                document.getElementById('selectedFileName1').textContent = filename[1];
+                bin_path = dosya_path
+            } else {
+                document.getElementById('selectedFileName').textContent = filename[1];
+                path = dosya_path
+            }   
         }
-        path = dosya_path
+    }
+}
+
+async function analyzer_command(command) {
+    if (!bin_path) {
+        createnotification('warning', "Select a file first");
+        return
+    }
+    if (command == "detect_packer") {
+        if (bin_path.endsWith(".exe")) {
+            document.getElementById('outputanalyzer').textContent = await eel.detect_packer(bin_path)();
+            createnotification("success", "Command executed");
+            return
+        } else {
+            createnotification("failure", "only exe files are supported")
+            return
+        }
+    } else if (command == "unpack_exe") {
+        if (bin_path.endsWith(".exe")) {
+            document.getElementById('outputanalyzer').textContent = await eel.unpack_file(bin_path)();
+            createnotification("success", "Command executed");
+            return
+        } else {
+            createnotification("failure", "only exe files are supported")
+            return
+        }
+    } else if (command == "sus_strings_lookup") {
+        document.getElementById('outputanalyzer').textContent = JSON.stringify(JSON.parse(await eel.sus_strings_lookup(bin_path)()), null, 2);
+        createnotification("success", "Command executed");
+        return
+    } else if (command == "all_strings_lookup") {
+        document.getElementById('outputanalyzer').textContent = await eel.all_strings_lookup(bin_path)();
+        createnotification("success", "Command executed");
+        return
+    } else if (command == "get_file_hashs") {
+        document.getElementById('outputanalyzer').textContent = await eel.get_file_hashs(bin_path)();
+        createnotification("success", "Command executed");
+        return
     }
 }
 
