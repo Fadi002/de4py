@@ -10,9 +10,10 @@ from dlls import shell
 from util import tui, update, gen_path
 from config import config
 from analyzer import detect_packer, unpack_file, get_file_hashs, sus_strings_lookup, all_strings_lookup
-
+import time 
 
 HANDLE = None
+HANDLE_analyzer = None
 tui.clear_console()
 tui.setup_logging()
 print(tui.__BANNER__)
@@ -92,6 +93,13 @@ def dumpstring():
      write_to_pipe("DumpStrings||"+path)
      return "saved as "+ filename
 
+@eel.expose
+def openanalyzerhandle():
+     global HANDLE_analyzer
+     write_to_pipe("GetAnalyzerHandle")
+     HANDLE_analyzer = os.open('\\\\.\\pipe\\de4py_analyzer', os.O_RDWR)
+     threading.Thread(target=update_hooks_output, args=()).start()
+     return "Executed | click the button again to open the menu"
 
 @eel.expose
 def getfunctions():
@@ -124,9 +132,6 @@ def get_info():
     oss = system_info.system+" "+system_info.release
     return {"pv":pv,"arch":arch,"os":oss}
 
-
-
-
 @eel.expose
 def write_to_pipe(message):
         global HANDLE
@@ -136,15 +141,51 @@ def write_to_pipe(message):
         else: 
              return False
 
+@eel.expose
+def monitorfileshook(var):
+     if var:
+          write_to_pipe("MonitorFiles")
+          return "Monitor files hook has been installed"
+     else:
+          write_to_pipe("UnMonitorFiles")
+          return "Monitor files hook has been uninstalled"
+
+@eel.expose
+def monitorprocesseshook(var):
+     if var:
+          write_to_pipe("MonitorProcesses")
+          return "Monitor processes hook has been installed"
+     else:
+          write_to_pipe("UnMonitorProcesses")
+          return "Monitor processes hook has been uninstalled"
+
+@eel.expose
+def monitorconnectionshook(var):
+     if var:
+          write_to_pipe("MonitorConnections")
+          return "Monitor connections hook has been installed"
+     else:
+          write_to_pipe("UnMonitorConnections")
+          return "Monitor connections hook has been uninstalled"
+
+def update_hooks_output():
+    global HANDLE_analyzer
+    try:
+         while True:
+            message = os.read(HANDLE_analyzer, 4096).decode()
+            eel.add_text_winapihook(message)
+    except Exception as e:
+         print(f"Error occurred while reading from HANDLE_analyzer: {str(e)}")
 
 def read_from_pipe():
     global HANDLE
     message = os.read(HANDLE, 1024).decode()
     return message
 
-
 def main():
-    eel.start('index.html',size=(1024, 589),port=3456)
+    # eel.start('index.html',size=(1024, 589),port=3456)
+    eel.start('index.html',size=(1024, 589),port=5456)
+
 
 
 if __name__ == '__main__':

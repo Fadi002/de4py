@@ -6,6 +6,12 @@
      font-family: 'Share Tech Mono', monospace;
      color: white;
 }
+.winbox.winAPIhooking .wb-body {
+    color: #fff;
+    background: #0f0f0f;
+    overflow:hidden;
+}
+
  body {
      width: 100wh;
      height: 100vh;
@@ -305,4 +311,3 @@
      box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15), 0 0 12px #4ba3e2;
      background-color: #444444;
 }
- 

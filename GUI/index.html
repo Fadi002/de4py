@@ -31,6 +31,29 @@
       <div class="menulol">&#9776;</div>
     </div>
     <div class="content-container">
+      <section id="winAPIhooking" class="center hidden">
+        <h1>Memory analyze commands</h1>
+        <div class="frame" style="position: absolute; top: 120px;left:500px; width:400px; height:360px;">
+          <h1> Output: <button onclick="document.getElementById('outputwinapihooks').select(); document.execCommand('copy');createnotification('success', 'Copied');" style="margin-left: 150px;" class="btns">Copy Output</button></h1>
+          <textarea class="scroll-box" id="outputwinapihooks" style="height:250px;width: 380px; background-color:#1f1f1f; color: white;font-family: 'Share Tech Mono', monospace; resize:none;outline: none;"></textarea>
+        </div>
+      <div style="position: absolute; top: 120px; left: 50px; width: 350px; height: 150px;">
+        <div class="checkbox-container">
+          <label for="MFBOX">Monitor Files:</label>
+          <input type="checkbox" id="MFBOX">
+        </div>
+        <div class="checkbox-container">
+          <label for="MPBOX">Monitor Processes:</label>
+          <input type="checkbox" id="MPBOX">
+        </div>
+        <div class="checkbox-container">
+          <label for="MCBOX">Monitor Connections:</label>
+          <input type="checkbox" id="MCBOX">
+        </div>
+        <br>
+        <button class="btns" onclick="navto('pyshell')">Back to PyShell menu</button>
+      </div>
+      </section>
       <section id="home" class="center active">
         <h1>De4py home</h1>
         <div class="frame" style="position: absolute; top: 120px;left:100px; width:300px; ">
@@ -88,6 +111,9 @@
             <button class="btns" onclick="exec_command('DumpStrings')">Dump strings</button>
             <button class="btns" onclick="exec_command('delExit')">Remove exit function</button>
             <button class="btns" onclick="exec_command('DeattachDLL')">Deattach DLL</button>
+          </div>
+          <div style="padding-left: 40px;margin-top: 20px;">
+            <button class="btns" onclick="exec_command('GetAnalyzerHandle')">Memory analyze commands</button>
           </div>
         </div>
         <div class="frame" style="position: absolute; top: 120px;left:500px; width:400px; height:85px;">
