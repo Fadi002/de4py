@@ -1,6 +1,9 @@
+/*************Dont touch*************/
 var injected;
 var path;
 var bin_path;
+var analyzer_handle;
+/*************Dont touch*************/
 
 setTimeout(showMenu, 2000);
 
@@ -8,7 +11,14 @@ eel.expose(dead_process);
 
 function dead_process() {
     injected = false;
+    analyzer_handle = false;
     createnotification("warning", "Process crashed/died/killed");
+}
+
+eel.expose(add_text_winapihook);
+function add_text_winapihook(text) {
+    var outputwinAPIhooks = document.getElementById('outputwinapihooks')
+    outputwinAPIhooks.textContent = outputwinAPIhooks.textContent+"\n"+text;
 }
 
 async function exec_command(command) {
@@ -41,6 +51,14 @@ async function exec_command(command) {
             var path = await eel.file_explorer()();
             document.getElementById('outputPYSHELL').textContent = await eel.execpython(path)();
             createnotification("success", "Command executed");
+        } else if (command == "GetAnalyzerHandle") {
+            if (!analyzer_handle) {
+                document.getElementById('outputPYSHELL').textContent = await eel.openanalyzerhandle()();
+                analyzer_handle = true;
+                createnotification("success", "Command executed");
+            } else {
+                navto('winAPIhooking');
+            }
         } else {
             if (eel.write_to_pipe(command)) {
                 createnotification("success", "Command executed");
@@ -251,10 +269,34 @@ document.addEventListener('DOMContentLoaded', function() {
     const menuToggle = document.getElementById('menulol');
     const buttons = document.querySelectorAll('.btn');
     const contentContainer = document.querySelector('.content-container');
+    const MFBOX = document.getElementById('MFBOX');
+    const MPBOX = document.getElementById('MPBOX');
+    const MCBOX = document.getElementById('MCBOX');
     menuToggle.addEventListener('click', function() {
         navbar.style.left = (navbar.style.left === '0px' || navbar.style.left === '') ? '-310px' : '0px';
         menuToggle.style.left = (navbar.style.left === '0px') ? '220px' : '20px';
         contentContainer.classList.toggle('open');
+    });
+    MFBOX.addEventListener('change', async function() {
+        if (this.checked) {
+            add_text_winapihook(await eel.monitorfileshook(true)());
+        } else {
+            add_text_winapihook(await eel.monitorfileshook(false)());
+        }
+    });    
+    MPBOX.addEventListener('change', async function() {
+        if (this.checked) {
+            add_text_winapihook(await eel.monitorprocesseshook(true)());
+        } else {
+            add_text_winapihook(await eel.monitorprocesseshook(false)());
+        }
+    });
+    MCBOX.addEventListener('change', async function() {
+        if (this.checked) {
+            add_text_winapihook(await eel.monitorconnectionshook(true)());
+        } else {
+            add_text_winapihook(await eel.monitorconnectionshook(false)());
+        }
     });
     buttons.forEach(function(button) {
         button.addEventListener('click', function() {
