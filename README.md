@@ -36,6 +36,10 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
       <td>GUI and Console Support</td>
       <td>De4py supports both console and GUI, but why use console when you can have a nice-on-the-eyes GUI, am i right? ;)</td>
     </tr>
+    <tr>
+      <td>Behavior Monitoring</td>
+      <td>De4py can monitor python files and see if they opened any files handles, opened a process, wrote/readed the memory of other processes and also monitoring if the process terminated other processes, in addition to sockets monitoring.</td>
+    </tr>
   </tbody>
 </table>
 
