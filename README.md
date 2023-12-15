@@ -38,7 +38,7 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
     </tr>
     <tr>
       <td>File Analyzer</td>
-      <td>an analyzer that have many features like detecting if the python program is packed and tries to unpack it if it was using pyinstaller for example, it also got a feature that shows either all strings or suspicious strings (suspicious strings like: IPs, websites, and "token" "discord" "leveldb" strings and other suspicious strings in the file) and shows them in a nice output window..</td>
+      <td>an analyzer that have many features like detecting if the python program is packed and tries to unpack it if it was using pyinstaller for example, it also got a feature that shows either all strings or suspicious strings (suspicious strings like: IPs, websites, and "token" "discord" "leveldb" strings and other suspicious strings in the file) and shows them in a nice output window.</td>
     </tr>
     <tr>
       <td>Behavior Monitoring</td>
