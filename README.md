@@ -60,7 +60,7 @@ All contributions are welcomed.
 
 
 ## Disclaimer
-This tool are for educational purposes only, never try deobfuscating someone's software without permission, me (Fadi002) are not responsible for any kind of misuse.
+This tool are for educational purposes only, never try deobfuscating someone's software without permission, ALL developers and contributors are not responsible for any kind of misuse.
 
 ## License Notice
 this tool are licensed under GNU General Public License v3.0.
