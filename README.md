@@ -10,7 +10,7 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
   <tbody>
     <tr>
      <td>Deobfuscation</td>
-     <td>De4py support some popular obfuscators, like: Jawbreaker, BlankOBF, PlusOBF, Wodx, pyobfuscate.com obfuscator</td>
+     <td>De4py support some popular obfuscators, like: Jawbreaker, BlankOBF, PlusOBF, Wodx, Hyperion, pyobfuscate.com obfuscator</td>
     </tr>
     <tr>
       <td>Pycode Execution</td>
