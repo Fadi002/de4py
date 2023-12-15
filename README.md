@@ -37,6 +37,10 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
       <td>De4py supports both console and GUI, but why use console when you can have a nice-on-the-eyes GUI, am i right? ;)</td>
     </tr>
     <tr>
+      <td>File Analyzer</td>
+      <td>an analyzer that have many features like detecting if the python program is packed and tries to unpack it if it was using pyinstaller for example, it also got a feature that shows either all strings or suspicious strings (suspicious strings like: IPs, websites, and "token" "discord" "leveldb" strings and other suspicious strings in the file) and shows them in a nice output window..</td>
+    </tr>
+    <tr>
       <td>Behavior Monitoring</td>
       <td>De4py can monitor python processes and see if they opened any files handles, opened a process, wrote/readed the memory of other processes and also monitoring if the process terminated other processes, in addition to sockets monitoring (including the size of data that is being sent and the ip that is being sent/recieved from).</td>
     </tr>
