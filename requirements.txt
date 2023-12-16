@@ -1,0 +1,6 @@
+requests
+eel
+psutil
+pyinstaller
+py2exe
+pycryptodome
