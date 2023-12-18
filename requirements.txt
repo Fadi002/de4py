@@ -4,3 +4,5 @@ psutil
 pyinstaller
 py2exe
 pycryptodome
+colorama
+xdis
