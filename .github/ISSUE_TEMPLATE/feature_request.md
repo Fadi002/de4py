@@ -3,7 +3,7 @@ name: Feature request
 about: Suggest an idea for this project
 title: "[FEAT.]"
 labels: enhancement
-assignees: Fadi002
+assignees: Fadi002 or AdvDebug
 
 ---
 
