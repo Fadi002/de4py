@@ -42,7 +42,7 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
     </tr>
     <tr>
       <td>Behavior Monitoring</td>
-      <td>De4py can monitor python processes and see if they opened any files handles, opened a process, wrote/readed the memory of other processes and also monitoring if the process terminated other processes, in addition to sockets monitoring (including the size of data that is being sent and the ip that is being sent/recieved from).</td>
+      <td>De4py can monitor python processes and see if they opened any files handles, opened a process, wrote/readed the memory of other processes and also monitoring if the process terminated other processes, in addition to sockets monitoring (including the size of data that is being sent and the ip that is being sent/recieved from) along with dumping socket content to a file and dumping OpenSSL encrypted content decrypted into a file.</td>
     </tr>
   </tbody>
 </table>
