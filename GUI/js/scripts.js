@@ -12,6 +12,12 @@ eel.expose(dead_process);
 function dead_process() {
     injected = false;
     analyzer_handle = false;
+    MFBOX.checked = false
+    MPBOX.checked = false
+    MCBOX.checked = false
+    MCDUMPBOX.checked = false
+    SSLBOX.checked = false
+    navto("pyshell")
     createnotification("warning", "Process crashed/died/killed");
 }
 
@@ -44,6 +50,12 @@ async function exec_command(command) {
             createnotification("success", "Command executed");
         } else if (command == 'DeattachDLL') {
             injected = false;
+            analyzer_handle = false;
+            MFBOX.checked = false
+            MPBOX.checked = false
+            MCBOX.checked = false
+            MCDUMPBOX.checked = false
+            SSLBOX.checked = false
             if (eel.write_to_pipe(command)) {
                 createnotification("success", "Command executed");
             }
@@ -272,6 +284,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const MFBOX = document.getElementById('MFBOX');
     const MPBOX = document.getElementById('MPBOX');
     const MCBOX = document.getElementById('MCBOX');
+    const MCDUMPBOX = document.getElementById('MCDUMPBOX');
+    const SSLBOX = document.getElementById('SSLBOX');
+    MCDUMPBOX.disabled = true;
     menuToggle.addEventListener('click', function() {
         navbar.style.left = (navbar.style.left === '0px' || navbar.style.left === '') ? '-310px' : '0px';
         menuToggle.style.left = (navbar.style.left === '0px') ? '220px' : '20px';
@@ -293,9 +308,25 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     MCBOX.addEventListener('change', async function() {
         if (this.checked) {
+            MCDUMPBOX.disabled = false;
             add_text_winapihook(await eel.monitorconnectionshook(true)());
         } else {
             add_text_winapihook(await eel.monitorconnectionshook(false)());
+            MCDUMPBOX.disabled = true;
+        }
+    });
+    MCDUMPBOX.addEventListener('change', async function() {
+        if (this.checked) {
+            add_text_winapihook(await eel.dumpsocketcontent(true)());
+        } else {
+            add_text_winapihook(await eel.dumpsocketcontent(false)());
+        }
+    });
+    SSLBOX.addEventListener('change', async function() {
+        if (this.checked) {
+            add_text_winapihook(await eel.dumpopensslcontent(true)());
+        } else {
+            add_text_winapihook(await eel.dumpopensslcontent(false)());
         }
     });
     buttons.forEach(function(button) {

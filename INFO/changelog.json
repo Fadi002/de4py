@@ -28,7 +28,14 @@
     {
         "version": "1.0.4",
         "changes": [
-            "Added WinAPI hooking features Monitoring Files, Monitoring Processes and Monitoring Connections "
+            "Added WinAPI hooking features Monitoring Files, Monitoring Processes and Monitoring Connections"
+        ]
+    },
+    {
+        "version": "1.0.5",
+        "changes": [
+            "Fixed some bugs",
+            "Added openssl + sockets dumper to text file"
         ]
     }   
 ]

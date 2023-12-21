@@ -4,13 +4,15 @@
       |                  de4py project                     |
 *********************************************************************/
 #include "SDK.h"
-#include <Windows.h>
 #include <iostream>
+#include <Windows.h>
 #include <detours.h>
 #include <stdlib.h>
 #include <sstream>
 #include <codecvt>
+#include <regex>
 #pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "winhttp.lib")
 //using namespace std;
 HANDLE pipe = NULL;
 HANDLE pipe_analyzer = NULL;
@@ -28,7 +30,7 @@ typedef struct _OBJECT_ATTRIBUTES {
     ULONG              Attributes;
     PVOID              SecurityDescriptor;
     PVOID              SecurityQualityOfService;
-} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
+} OBJECT_ATTRIBUTES, * POBJECT_ATTRIBUTES;
 
 typedef struct _IO_STATUS_BLOCK
 {
@@ -45,6 +47,60 @@ typedef struct _CLIENT_ID {
     PVOID              UniqueThread;
 } CLIENT_ID, * PCLIENT_ID;
 
+typedef struct
+{
+    int type;
+} BIO_METHOD;
+
+typedef struct bio_st
+{
+    BIO_METHOD* method;
+    void* callback;
+    char* cb_arg;
+    int init;
+    int shutdown;
+    int flags;
+    int retry_reason;
+    int num;
+    void* ptr;
+    struct bio_st* next_bio;
+    struct bio_st* prev_bio;
+    int refs;
+    unsigned long num_read;
+    unsigned long num_write;
+} BIO;
+
+typedef struct
+{
+    int version;
+    int type;
+    void* method;
+
+    BIO* rbio;
+    BIO* wbio;
+    BIO* bbio;
+
+    int rwstate;
+    int in_handshake;
+    void* handshake_func;
+
+    int server;
+    int new_session;
+    int quiet_shutdown;
+    int shutdown;
+    int state;
+    int rstate;
+
+    void* init_buf;
+    void* init_msg;
+    int   init_num;
+    int   init_off;
+
+    unsigned char* packet;
+    unsigned int   packet_length;
+
+} SSL;
+
 typedef NTSTATUS(NTAPI* RealNtCreateFile)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, PIO_STATUS_BLOCK, PLARGE_INTEGER, ULONG, ULONG, ULONG, ULONG, PVOID, ULONG);
 typedef NTSTATUS(NTAPI* RealNtOpenProcess)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, PCLIENT_ID);
 typedef NTSTATUS(NTAPI* RealNtWriteVirtualMemory)(HANDLE, PVOID, LPCVOID, SIZE_T, PSIZE_T);
@@ -53,6 +109,10 @@ typedef NTSTATUS(NTAPI* RealNtTerminateProcess)(HANDLE, NTSTATUS);
 typedef SOCKET(WINAPI* RealSocket)(int, int, int);
 typedef int (WINAPI* RealSend)(SOCKET, const char*, int, int);
 typedef int (WINAPI* RealRecv)(SOCKET, char*, int, int);
+typedef int(__cdecl* RealSSL_read_ex)(SSL*, void*, size_t, size_t*);
+typedef int(__cdecl* RealSSL_write_ex)(SSL*, const void*, size_t, size_t*);
+typedef int(__cdecl* RealSSL_read)(SSL*, void*, size_t);
+typedef int(__cdecl* RealSSL_write)(SSL*, const void*, size_t);
 
 bool Pyshell_GUI() {
     try
@@ -66,7 +126,7 @@ bool Pyshell_GUI() {
     {
         return false;
     }
-    
+
 }
 bool exec(char* code) {
     try {
@@ -293,6 +353,9 @@ SOCKET WINAPI HookedSocket(int af, int type, int protocol)
     return sock;
 }
 
+BOOL DumpContent = FALSE;
+char DumpPath[MAX_PATH + 1];
+
 HANDLE SendMutex = CreateMutex(NULL, FALSE, NULL);
 int WINAPI HookedSend(SOCKET sock, const char* buf, int len, int flags)
 {
@@ -305,10 +368,23 @@ int WINAPI HookedSend(SOCKET sock, const char* buf, int len, int flags)
         getpeername(sock, (sockaddr*)&destAddress, &destAddrSize);
         char* Address = inet_ntoa(destAddress.sin_addr);
         std::string Info("The Process successfully sent \"");
-        Info.append(std::to_string(Status).c_str());
+        Info.append(std::to_string(Status));
         Info.append("\" bytes of data to: ");
         Info.append(Address);
         SendMessageToPipe(pipe_analyzer, Info.c_str());
+        if (DumpContent && DumpPath != NULL)
+        {
+            HANDLE File = CreateFileA(DumpPath, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (File != INVALID_HANDLE_VALUE)
+            {
+                SetFilePointer(File, 0, NULL, FILE_END);
+                std::string Buffer(buf);
+                Buffer.append("\n");
+                DWORD Written = 0;
+                WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL);
+                CloseHandle(File);
+            }
+        }
     }
     else
     {
@@ -331,11 +407,24 @@ int WINAPI HookedRecv(SOCKET sock, char* buf, int len, int flags)
         int destAddrSize = sizeof(destAddress);
         getpeername(sock, (sockaddr*)&destAddress, &destAddrSize);
         char* Address = inet_ntoa(destAddress.sin_addr);
-        std::string Info("The Process successfully recieved \"");
+        std::string Info("The Process successfully sent \"");
         Info.append(std::to_string(Status).c_str());
-        Info.append("\" bytes of data from: ");
+        Info.append("\" bytes of data to: ");
         Info.append(Address);
         SendMessageToPipe(pipe_analyzer, Info.c_str());
+        if (DumpContent && DumpPath != NULL)
+        {
+            HANDLE File = CreateFileA(DumpPath, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (File != INVALID_HANDLE_VALUE)
+            {
+                SetFilePointer(File, 0, NULL, FILE_END);
+                std::string Buffer(buf);
+                Buffer.append("\n");
+                DWORD Written = 0;
+                WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL);
+                CloseHandle(File);
+            }
+        }
     }
     else
     {
@@ -373,6 +462,171 @@ void MonitorConnections(BOOL Unhook)
         DetourTransactionCommit();
         IsHookedConnectionsMon = true;
     }
+}
+
+char DumpSSLPath[MAX_PATH + 1];
+RealSSL_read_ex OriginalSSL_read_ex = nullptr;
+RealSSL_write_ex OriginalSSL_write_ex = nullptr;
+RealSSL_read OriginalSSL_read = nullptr;
+RealSSL_write OriginalSSL_write = nullptr;
+
+HANDLE SSL_readexMutex = CreateMutex(NULL, FALSE, NULL);
+int HookedSSL_read_ex(SSL* ssl, void* buf, size_t num, size_t* readbytes)
+{
+    WaitForSingleObject(SSL_readexMutex, INFINITE);
+    if (DumpSSLPath != NULL)
+    {
+        HANDLE File = CreateFileA(DumpSSLPath, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (File != INVALID_HANDLE_VALUE)
+        {
+            SetFilePointer(File, 0, NULL, FILE_END);
+            std::string Buffer(static_cast<char*>(buf), num);
+            Buffer.append("\n");
+            DWORD Written = 0;
+            WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL);
+            CloseHandle(File);
+        }
+    }
+    int value = OriginalSSL_read_ex(ssl, buf, num, readbytes);
+    ReleaseMutex(SSL_readexMutex);
+    return value;
+}
+
+HANDLE SSL_writeexMutex = CreateMutex(NULL, FALSE, NULL);
+int HookedSSL_write_ex(SSL* s, const void* buf, size_t num, size_t* written)
+{
+    WaitForSingleObject(SSL_writeexMutex, INFINITE);
+    if (DumpSSLPath != NULL)
+    {
+        HANDLE File = CreateFileA(DumpSSLPath, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (File != INVALID_HANDLE_VALUE)
+        {
+            SetFilePointer(File, 0, NULL, FILE_END);
+            std::string Buffer(static_cast<const char*>(buf), num);
+            Buffer.append("\n");
+            DWORD Written = 0;
+            WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL);
+            CloseHandle(File);
+        }
+    }
+    int value = OriginalSSL_write_ex(s, buf, num, written);
+    ReleaseMutex(SSL_writeexMutex);
+    return value;
+}
+
+HANDLE SSL_readMutex = CreateMutex(NULL, FALSE, NULL);
+int HookedSSL_read(SSL* ssl, void* buf, size_t num)
+{
+    WaitForSingleObject(SSL_readMutex, INFINITE);
+    if (DumpSSLPath != NULL)
+    {
+        HANDLE File = CreateFileA(DumpSSLPath, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (File != INVALID_HANDLE_VALUE)
+        {
+            SetFilePointer(File, 0, NULL, FILE_END);
+            std::string Buffer(static_cast<char*>(buf), num);
+            Buffer.append("\n");
+            DWORD Written = 0;
+            WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL);
+            CloseHandle(File);
+        }
+    }
+    int value = OriginalSSL_read(ssl, buf, num);
+    ReleaseMutex(SSL_readMutex);
+    return value;
+}
+
+HANDLE SSL_writeMutex = CreateMutex(NULL, FALSE, NULL);
+int HookedSSL_write(SSL* s, const void* buf, size_t num)
+{
+    WaitForSingleObject(SSL_writeMutex, INFINITE);
+    if (DumpSSLPath != NULL)
+    {
+        HANDLE File = CreateFileA(DumpSSLPath, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (File != INVALID_HANDLE_VALUE)
+        {
+            SetFilePointer(File, 0, NULL, FILE_END);
+            std::string Buffer(static_cast<const char*>(buf), num);
+            Buffer.append("\n");
+            DWORD Written = 0;
+            WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL);
+            CloseHandle(File);
+        }
+    }
+    int value = OriginalSSL_write(s, buf, num);
+    ReleaseMutex(SSL_writeMutex);
+    return value;
+}
+
+BOOL IsDumping = FALSE;
+void DumpSSL(bool Unhook)
+{
+    if (Unhook)
+    {
+        DetourTransactionBegin();
+        DetourUpdateThread(GetCurrentThread());
+        DetourDetach(&(LPVOID&)OriginalSSL_read_ex, HookedSSL_read_ex);
+        DetourDetach(&(LPVOID&)OriginalSSL_write_ex, HookedSSL_write_ex);
+        DetourTransactionCommit();
+        IsDumping = false;
+    }
+    else
+    {
+        DetourTransactionBegin();
+        DetourUpdateThread(GetCurrentThread());
+        HMODULE hModule = GetModuleHandle(L"libssl-1_1.dll");
+        PBYTE Real = (PBYTE)GetProcAddress(hModule, "SSL_read_ex");
+        if (Real[0] == 0xE9) {
+            int offset = *(int*)(Real + 1);
+            void* realFunction = (void*)(Real + 5 + offset);
+            OriginalSSL_read_ex = (RealSSL_read_ex)realFunction;
+        }
+        else
+        {
+            OriginalSSL_read_ex = reinterpret_cast<RealSSL_read_ex>(DetourFindFunction("libssl-1_1.dll", "SSL_read_ex"));
+        }
+        DetourAttach(&(LPVOID&)OriginalSSL_read_ex, HookedSSL_read_ex);
+        PBYTE Real2 = (PBYTE)GetProcAddress(hModule, "SSL_write_ex");
+        if (Real2[0] == 0xE9) {
+            int offset = *(int*)(Real2 + 1);
+            void* realFunction = (void*)(Real2 + 5 + offset);
+            OriginalSSL_write_ex = (RealSSL_write_ex)realFunction;
+        }
+        else
+        {
+            OriginalSSL_write_ex = reinterpret_cast<RealSSL_write_ex>(DetourFindFunction("libssl-1_1.dll", "SSL_write_ex"));
+        }
+        DetourAttach(&(LPVOID&)OriginalSSL_write_ex, HookedSSL_write_ex);
+        PBYTE Real3 = (PBYTE)GetProcAddress(hModule, "SSL_read");
+        if (Real3[0] == 0xE9) {
+            int offset = *(int*)(Real3 + 1);
+            void* realFunction = (void*)(Real3 + 5 + offset);
+            OriginalSSL_read = (RealSSL_read)realFunction;
+        }
+        else
+        {
+            OriginalSSL_read = reinterpret_cast<RealSSL_read>(DetourFindFunction("libssl-1_1.dll", "SSL_read"));
+        }
+        DetourAttach(&(LPVOID&)OriginalSSL_read, HookedSSL_read);
+        PBYTE Real4 = (PBYTE)GetProcAddress(hModule, "SSL_write");
+        if (Real4[0] == 0xE9) {
+            int offset = *(int*)(Real4 + 1);
+            void* realFunction = (void*)(Real4 + 5 + offset);
+            OriginalSSL_write = (RealSSL_write)realFunction;
+        }
+        else
+        {
+            OriginalSSL_write = reinterpret_cast<RealSSL_write>(DetourFindFunction("libssl-1_1.dll", "SSL_write"));
+        }
+        DetourAttach(&(LPVOID&)OriginalSSL_write, HookedSSL_write);
+        DetourTransactionCommit();
+        IsDumping = true;
+    }
+}
+
+//just to make the code look cleaner
+int IsEqual(const char* str1, const char* str2) {
+    return strcmp(str1, str2) == 0;
 }
 
 DWORD WINAPI MainThread(HMODULE hModule)
@@ -421,13 +675,13 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         std::cerr << "exception: " << e.what() << std::endl;
                     }
                 }
-                else if (strcmp(buffer, "ForceCrash") == 0) {
+                else if (IsEqual(buffer, "ForceCrash")) {
                     SendMessageToPipe(pipe, "OK.");
                     DisconnectNamedPipe(pipe);
                     CloseHandle(pipe);
                     Force_crash();
                 }
-                else if (strcmp(buffer, "GetAnalyzerHandle") == 0) {
+                else if (IsEqual(buffer, "GetAnalyzerHandle")) {
                     if (pipe_analyzer != NULL)
                     {
                         SendMessageToPipe(pipe, "Analyzation pipe already exists.");
@@ -452,7 +706,7 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         }
                     }
                 }
-                else if (strcmp(buffer, "MonitorFiles") == 0) {
+                else if (IsEqual(buffer, "MonitorFiles")) {
                     if (pipe_analyzer != NULL)
                     {
                         if (IsHookedFileMon)
@@ -470,7 +724,7 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         SendMessageToPipe(pipe, "Please do the \"GetAnalyzerHandle\" command before using this.");
                     }
                 }
-                else if (strcmp(buffer, "UnMonitorFiles") == 0) {
+                else if (IsEqual(buffer, "UnMonitorFiles")) {
                     if (pipe_analyzer != NULL)
                     {
                         if (!IsHookedFileMon)
@@ -488,7 +742,7 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         SendMessageToPipe(pipe, "Please do the \"GetAnalyzerHandle\" command before using this.");
                     }
                 }
-                else if (strcmp(buffer, "MonitorProcesses") == 0) {
+                else if (IsEqual(buffer, "MonitorProcesses")) {
                     if (pipe_analyzer != NULL)
                     {
                         if (IsHookedProcessMon)
@@ -506,7 +760,7 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         SendMessageToPipe(pipe, "Please do the \"GetAnalyzerHandle\" command before using this.");
                     }
                 }
-                else if (strcmp(buffer, "UnMonitorProcesses") == 0) {
+                else if (IsEqual(buffer, "UnMonitorProcesses")) {
                     if (pipe_analyzer != NULL)
                     {
                         if (!IsHookedProcessMon)
@@ -524,7 +778,7 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         SendMessageToPipe(pipe, "Please do the \"GetAnalyzerHandle\" command before using this.");
                     }
                 }
-                else if (strcmp(buffer, "MonitorConnections") == 0) {
+                else if (IsEqual(buffer, "MonitorConnections")) {
                     if (pipe_analyzer != NULL)
                     {
                         if (IsHookedConnectionsMon)
@@ -542,7 +796,7 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         SendMessageToPipe(pipe, "Please do the \"GetAnalyzerHandle\" command before using this.");
                     }
                 }
-                else if (strcmp(buffer, "UnMonitorConnections") == 0) {
+                else if (IsEqual(buffer, "UnMonitorConnections")) {
                     if (pipe_analyzer != NULL)
                     {
                         if (!IsHookedConnectionsMon)
@@ -560,31 +814,13 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         SendMessageToPipe(pipe, "Please do the \"GetAnalyzerHandle\" command before using this.");
                     }
                 }
-                else if (strcmp(buffer, "DeattachDLL") == 0){
-                    if (pipe_analyzer != NULL)
-                    {
-                        if (!IsHookedConnectionsMon)
-                        {
-                            SendMessageToPipe(pipe, "not monitoring in the first place.");
-                        }
-                        else
-                        {
-                            MonitorConnections(true);
-                            SendMessageToPipe(pipe, "OK.");
-                        }
-                    }
-                    else
-                    {
-                        SendMessageToPipe(pipe, "Please do the \"GetAnalyzerHandle\" command before using this.");
-                    }
-                }
-                else if (strcmp(buffer, "DeattachDLL") == 0) {
+                else if (IsEqual(buffer, "DeattachDLL")) {
                     SendMessageToPipe(pipe, "OK.");
                     DisconnectNamedPipe(pipe);
                     CloseHandle(pipe);
                     unload_dll(hModule);
                 }
-                else if (strcmp(buffer, "delExit") == 0) {
+                else if (IsEqual(buffer, "delExit")) {
                     if (exec(const_cast<char*>(ExitHook.c_str()))) {
                         SendMessageToPipe(pipe, "OK.");
                     }
@@ -648,6 +884,106 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         SendMessageToPipe(pipe, "Failed.");
                     }
                 }
+                else if (std::string(buffer).rfind("DumpConnections", 0) == 0) {
+                    std::string lol(buffer);
+                    size_t ok = lol.find("||");
+                    if (ok != std::string::npos) {
+                        std::string Path = lol.substr(ok + 2);
+                        DWORD attrib = GetFileAttributesA(Path.c_str());
+                        if (attrib != INVALID_FILE_ATTRIBUTES && (attrib & FILE_ATTRIBUTE_DIRECTORY) == 0)
+                        {
+                            if (pipe_analyzer != NULL)
+                            {
+                                if (!IsHookedConnectionsMon)
+                                {
+                                    SendMessageToPipe(pipe, "not monitoring in the first place.");
+                                }
+                                else
+                                {
+                                    strcpy_s(DumpPath, MAX_PATH, Path.c_str());
+                                    DumpContent = TRUE;
+                                    SendMessageToPipe(pipe, "OK.");
+                                }
+                            }
+                            else
+                            {
+                                SendMessageToPipe(pipe, "Please do the \"GetAnalyzerHandle\" command before using this.");
+                            }
+                        }
+                        else
+                        {
+                            SendMessageToPipe(pipe, "File not found.");
+                        }
+                    }
+                }
+                else if (IsEqual(buffer, "StopDumpingConnections")) {
+                    if (pipe_analyzer != NULL)
+                    {
+                        if (!DumpContent)
+                        {
+                            SendMessageToPipe(pipe, "not dumping in the first place.");
+                        }
+                        else
+                        {
+                            DumpContent = FALSE;
+                            SendMessageToPipe(pipe, "OK.");
+                        }
+                    }
+                    else
+                    {
+                        SendMessageToPipe(pipe, "Please do the \"GetAnalyzerHandle\" command before using this.");
+                    }
+                }
+                else if (std::string(buffer).rfind("DumpOpenSSL", 0) == 0) {
+                    std::string lol(buffer);
+                    size_t ok = lol.find("||");
+                    if (ok != std::string::npos) {
+                        std::string Path = lol.substr(ok + 2);
+                        DWORD attrib = GetFileAttributesA(Path.c_str());
+                        if (attrib != INVALID_FILE_ATTRIBUTES && (attrib & FILE_ATTRIBUTE_DIRECTORY) == 0)
+                        {
+                            if (pipe_analyzer != NULL)
+                            {
+                                if (GetModuleHandle(L"libssl-1_1.dll") != NULL)
+                                {
+                                    strcpy_s(DumpSSLPath, MAX_PATH, Path.c_str());
+                                    DumpSSL(false);
+                                    SendMessageToPipe(pipe, "OK.");
+                                }
+                                else
+                                {
+                                    SendMessageToPipe(pipe, "OpenSSL library are not found in the target process.");
+                                }
+                            }
+                            else
+                            {
+                                SendMessageToPipe(pipe, "Please do the \"GetAnalyzerHandle\" command before using this.");
+                            }
+                        }
+                        else
+                        {
+                            SendMessageToPipe(pipe, "File not found.");
+                        }
+                    }
+                }
+                else if (IsEqual(buffer, "StopDumpingSSL")) {
+                    if (pipe_analyzer != NULL)
+                    {
+                        if (!IsDumping)
+                        {
+                            SendMessageToPipe(pipe, "not dumping in the first place.");
+                        }
+                        else
+                        {
+                            DumpSSL(true);
+                            SendMessageToPipe(pipe, "OK.");
+                        }
+                    }
+                    else
+                    {
+                        SendMessageToPipe(pipe, "Please do the \"GetAnalyzerHandle\" command before using this.");
+                    }
+                }
                 else {
                     SendMessageToPipe(pipe, "WTF?");
                 }
@@ -656,13 +992,9 @@ DWORD WINAPI MainThread(HMODULE hModule)
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
     }
-    
 }
 
-BOOL APIENTRY DllMain( HMODULE hModule,
-                       DWORD  ul_reason_for_call,
-                       LPVOID lpReserved
-                     )
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
     switch (ul_reason_for_call)
     {
