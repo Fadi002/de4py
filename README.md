@@ -53,7 +53,7 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
   <a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Deobfuscator.png?raw=true" width="400"></img></a>
   <a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Shell.png?raw=true" width="400"></img></a>
   <a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/WinAPIHooking.png?raw=true" width="400"></img></a>
-  <a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/analyzer.png?raw=true" width="400"></img></a>
+  <a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Analyzer.png?raw=true" width="400"></img></a>
   <a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/About.png?raw=true" width="400"></img></a>
 </p>
 
