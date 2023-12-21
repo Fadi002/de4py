@@ -14,12 +14,13 @@ import time
 
 HANDLE = None
 HANDLE_analyzer = None
+STOP_THREADS = False
+
 tui.clear_console()
 tui.setup_logging()
 print(tui.__BANNER__)
 logging.info("Starting de4py")
 eel.init('gui')
-
 
 
 def cupdate():
@@ -77,13 +78,17 @@ def changelog():
 @eel.expose
 def processchecker(pid):
     global HANDLE
+    global HANDLE_analyzer
     while True:
         try:
             process = psutil.Process(pid)
         except psutil.NoSuchProcess:
             del HANDLE
+            del HANDLE_analyzer
             HANDLE=None
+            HANDLE_analyzer=None
             eel.dead_process()
+            STOP_THREADS=True
             break
 
 
@@ -136,10 +141,22 @@ def get_info():
 def write_to_pipe(message):
         global HANDLE
         os.write(HANDLE, message.encode())
-        if read_from_pipe() == 'OK.':
+        response = read_from_pipe()
+        if response == 'OK.':
              return True
-        else: 
+        else:
              return False
+        
+def write_to_pipe_detailed(message):
+        global HANDLE
+        os.write(HANDLE, message.encode())
+        response = read_from_pipe()
+        return response
+
+def read_from_pipe():
+    global HANDLE
+    message = os.read(HANDLE, 1024).decode()
+    return message
 
 @eel.expose
 def monitorfileshook(var):
@@ -167,20 +184,45 @@ def monitorconnectionshook(var):
      else:
           write_to_pipe("UnMonitorConnections")
           return "Monitor connections hook has been uninstalled"
+     
+def dealwithfilesocket():
+     if not os.path.exists(os.getcwd() + "\\SocketDump.txt"):
+          open(os.getcwd() + "\\SocketDump.txt", 'w').close()
+
+def dealwithfilessl():
+     if not os.path.exists(os.getcwd() + "\\OpenSSLDump.txt"):
+          open(os.getcwd() + "\\OpenSSLDump.txt", 'w').close()
+
+@eel.expose
+def dumpsocketcontent(var):
+     if var:
+          dealwithfilesocket()
+          response = write_to_pipe("DumpConnections||" + os.getcwd() + "\\SocketDump.txt")
+          return "starting to dump sockets content to the current script directory."
+     else:
+          response = write_to_pipe("StopDumpingConnections")
+          return "stopped dumping socket content."
+     
+@eel.expose
+def dumpopensslcontent(var):
+     if var:
+          dealwithfilessl()
+          return write_to_pipe_detailed("DumpOpenSSL||" + os.getcwd() + "\\OpenSSLDump.txt")
+     else:
+          return write_to_pipe_detailed("StopDumpingSSL")
 
 def update_hooks_output():
     global HANDLE_analyzer
+    global STOP_THREADS
     try:
          while True:
+            if STOP_THREADS:
+                 STOP_THREADS=False
+                 break
             message = os.read(HANDLE_analyzer, 4096).decode()
             eel.add_text_winapihook(message)
     except Exception as e:
-         print(f"Error occurred while reading from HANDLE_analyzer: {str(e)}")
-
-def read_from_pipe():
-    global HANDLE
-    message = os.read(HANDLE, 1024).decode()
-    return message
+         logging.error(f"Error occurred while reading from HANDLE_analyzer: {str(e)}")
 
 def main():
     # eel.start('index.html',size=(1024, 589),port=3456)
@@ -189,5 +231,8 @@ def main():
 
 
 if __name__ == '__main__':
-    cupdate()
-    main()
+     try:
+          cupdate()
+     except:
+          logging.error("Failed to check the update")
+     main()

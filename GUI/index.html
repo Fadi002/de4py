@@ -32,7 +32,7 @@
     </div>
     <div class="content-container">
       <section id="winAPIhooking" class="center hidden">
-        <h1>Memory analyze commands</h1>
+        <h1>Behavior Monitoring</h1>
         <div class="frame" style="position: absolute; top: 120px;left:500px; width:400px; height:360px;">
           <h1> Output: <button onclick="document.getElementById('outputwinapihooks').select(); document.execCommand('copy');createnotification('success', 'Copied');" style="margin-left: 150px;" class="btns">Copy Output</button></h1>
           <textarea class="scroll-box" id="outputwinapihooks" style="height:250px;width: 380px; background-color:#1f1f1f; color: white;font-family: 'Share Tech Mono', monospace; resize:none;outline: none;"></textarea>
@@ -49,6 +49,12 @@
         <div class="checkbox-container">
           <label for="MCBOX">Monitor Connections:</label>
           <input type="checkbox" id="MCBOX">
+          <label for="MCDUMPBOX">Dump Socket:</label>
+          <input type="checkbox" id="MCDUMPBOX">
+        </div>
+        <div class="checkbox-container">
+          <label for="SSL">Dump OpenSSL Encrypted traffic:</label>
+          <input type="checkbox" id="SSLBOX">
         </div>
         <br>
         <button class="btns" onclick="navto('pyshell')">Back to PyShell menu</button>
@@ -113,7 +119,7 @@
             <button class="btns" onclick="exec_command('DeattachDLL')">Deattach DLL</button>
           </div>
           <div style="padding-left: 40px;margin-top: 20px;">
-            <button class="btns" onclick="exec_command('GetAnalyzerHandle')">Memory analyze commands</button>
+            <button class="btns" onclick="exec_command('GetAnalyzerHandle')">Behavior Monitoring</button>
           </div>
         </div>
         <div class="frame" style="position: absolute; top: 120px;left:500px; width:400px; height:85px;">
