@@ -37,5 +37,11 @@
             "Fixed some bugs",
             "Added openssl + sockets dumper to text file"
         ]
-    }   
+    },
+    {
+        "version": "1.0.6",
+        "changes": [
+            "Added CLI mode (use --cli to run it)"
+        ]
+    }  
 ]
