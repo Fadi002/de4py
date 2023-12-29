@@ -3,15 +3,22 @@
          | De4py project : https://github.com/Fadi002/de4py |
 *********************************************************************
 '''
-import os, msvcrt, eel, logging, requests, sys, platform, threading, psutil
+import os, msvcrt, eel, logging, requests, sys, platform, threading, psutil, colorama, signal
+from config import config
+from util import tui, update, gen_path, rpc
+if len(sys.argv) > 1 and sys.argv[1] == "--cli":
+    from TUI import cli
+    cli.start()
 from deobfuscators.detector import detect_obfuscator
 from tkinter import Tk, filedialog
 from dlls import shell
-from util import tui, update, gen_path
-from config import config
 from analyzer import detect_packer, unpack_file, get_file_hashs, sus_strings_lookup, all_strings_lookup
 import time 
-
+def signal_handler(sig, frame):
+    print(f"{colorama.Fore.CYAN}Exiting....{colorama.Style.RESET_ALL}")
+    rpc.KILL_THREAD = True
+    sys.exit(0)
+signal.signal(signal.SIGINT, signal_handler)
 HANDLE = None
 HANDLE_analyzer = None
 STOP_THREADS = False
@@ -23,7 +30,7 @@ logging.info("Starting de4py")
 eel.init('gui')
 
 
-def cupdate():
+def cupdate() -> None:
     if update.check_update():
             logging.info("You are using the latest version")
     else:
@@ -36,11 +43,12 @@ def cupdate():
                 if msvcrt.kbhit():
                     key = msvcrt.getch()
                     logging.warning("Exiting...")
-                    exit(0)
+                    rpc.KILL_THREAD = True
+                    sys.exit(0)
 
 
 @eel.expose
-def protector_detector(file_path):
+def protector_detector(file_path) -> str:
     try:
          result=detect_obfuscator(file_path)
          return result
@@ -49,7 +57,7 @@ def protector_detector(file_path):
     
 
 @eel.expose
-def file_explorer():
+def file_explorer() -> str:
     root = Tk()
     root.withdraw()
     root.wm_attributes('-topmost', 1)
@@ -58,7 +66,7 @@ def file_explorer():
 
 
 @eel.expose
-def inject_shell(pid):
+def inject_shell(pid) -> str:
      global HANDLE
      l = shell.inject_shell(pid)
      if l[1]:
@@ -70,13 +78,13 @@ def inject_shell(pid):
 
 
 @eel.expose
-def changelog():
+def changelog() -> str:
     response = requests.get(config.__CHANGELOG_URL__)
     return response.text
 
 
 @eel.expose
-def processchecker(pid):
+def processchecker(pid) -> str:
     global HANDLE
     global HANDLE_analyzer
     while True:
@@ -93,13 +101,13 @@ def processchecker(pid):
 
 
 @eel.expose
-def dumpstring():
+def dumpstring() -> str:
      path, filename = gen_path(__file__)
      write_to_pipe("DumpStrings||"+path)
      return "saved as "+ filename
 
 @eel.expose
-def openanalyzerhandle():
+def openanalyzerhandle() -> str:
      global HANDLE_analyzer
      write_to_pipe("GetAnalyzerHandle")
      HANDLE_analyzer = os.open('\\\\.\\pipe\\de4py_analyzer', os.O_RDWR)
@@ -107,20 +115,20 @@ def openanalyzerhandle():
      return "Executed | click the button again to open the menu"
 
 @eel.expose
-def getfunctions():
+def getfunctions() -> str:
      path, filename = gen_path(__file__)
      write_to_pipe("GetFunctions||"+path)
      return "saved as "+ filename
 
 
 @eel.expose
-def execpython(path):
+def execpython(path) -> str:
      write_to_pipe("ExecPY||"+path)
      return "Executed"
 
 
 @eel.expose
-def showconsole(pid):
+def showconsole(pid) -> str:
      if shell.show_console(pid):
           return "DONE"
      else:
@@ -128,7 +136,7 @@ def showconsole(pid):
 
 
 @eel.expose
-def get_info():
+def get_info() -> str:
     pv = platform.python_version()
     arch = platform.architecture()[0]
     if not arch.startswith('64'):
@@ -138,7 +146,7 @@ def get_info():
     return {"pv":pv,"arch":arch,"os":oss}
 
 @eel.expose
-def write_to_pipe(message):
+def write_to_pipe(message) -> str:
         global HANDLE
         os.write(HANDLE, message.encode())
         response = read_from_pipe()
@@ -147,19 +155,19 @@ def write_to_pipe(message):
         else:
              return False
         
-def write_to_pipe_detailed(message):
+def write_to_pipe_detailed(message) -> str:
         global HANDLE
         os.write(HANDLE, message.encode())
         response = read_from_pipe()
         return response
 
-def read_from_pipe():
+def read_from_pipe() -> str:
     global HANDLE
     message = os.read(HANDLE, 1024).decode()
     return message
 
 @eel.expose
-def monitorfileshook(var):
+def monitorfileshook(var) -> str:
      if var:
           write_to_pipe("MonitorFiles")
           return "Monitor files hook has been installed"
@@ -168,7 +176,7 @@ def monitorfileshook(var):
           return "Monitor files hook has been uninstalled"
 
 @eel.expose
-def monitorprocesseshook(var):
+def monitorprocesseshook(var) -> str:
      if var:
           write_to_pipe("MonitorProcesses")
           return "Monitor processes hook has been installed"
@@ -177,7 +185,7 @@ def monitorprocesseshook(var):
           return "Monitor processes hook has been uninstalled"
 
 @eel.expose
-def monitorconnectionshook(var):
+def monitorconnectionshook(var) -> str:
      if var:
           write_to_pipe("MonitorConnections")
           return "Monitor connections hook has been installed"
@@ -185,7 +193,7 @@ def monitorconnectionshook(var):
           write_to_pipe("UnMonitorConnections")
           return "Monitor connections hook has been uninstalled"
      
-def dealwithfilesocket():
+def dealwithfilesocket() -> str:
      if not os.path.exists(os.getcwd() + "\\SocketDump.txt"):
           open(os.getcwd() + "\\SocketDump.txt", 'w').close()
 
@@ -194,7 +202,7 @@ def dealwithfilessl():
           open(os.getcwd() + "\\OpenSSLDump.txt", 'w').close()
 
 @eel.expose
-def dumpsocketcontent(var):
+def dumpsocketcontent(var) -> str:
      if var:
           dealwithfilesocket()
           response = write_to_pipe("DumpConnections||" + os.getcwd() + "\\SocketDump.txt")
@@ -204,7 +212,7 @@ def dumpsocketcontent(var):
           return "stopped dumping socket content."
      
 @eel.expose
-def dumpopensslcontent(var):
+def dumpopensslcontent(var) -> str:
      if var:
           dealwithfilessl()
           return write_to_pipe_detailed("DumpOpenSSL||" + os.getcwd() + "\\OpenSSLDump.txt")
@@ -224,15 +232,18 @@ def update_hooks_output():
     except Exception as e:
          logging.error(f"Error occurred while reading from HANDLE_analyzer: {str(e)}")
 
-def main():
+def main() -> None:
     # eel.start('index.html',size=(1024, 589),port=3456)
     eel.start('index.html',size=(1024, 589),port=5456)
-
+    rpc.KILL_THREAD = True
 
 
 if __name__ == '__main__':
      try:
           cupdate()
-     except:
+     except Exception as e:
+          print(e)
           logging.error("Failed to check the update")
+     if config.__RPC__:
+          rpc.start_RPC()
      main()
