@@ -61,6 +61,9 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
 ## Contributions
 All contributions are welcomed.
 
+## Social media links
+At this moment we have discord only https://discord.gg/tytfp9XwTZ
+
 
 ## Disclaimer
 This tool are for educational purposes only, never try deobfuscating someone's software without permission, ALL developers and contributors are not responsible for any kind of misuse.
