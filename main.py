@@ -3,13 +3,21 @@
          | De4py project : https://github.com/Fadi002/de4py |
 *********************************************************************
 '''
-import os, msvcrt, eel, logging, requests, sys, platform, threading, psutil, colorama, signal
+LOAD_PLUGINS = True # Change that to true if you want to load the plugins
+
+import sys
+sys.dont_write_bytecode = True
+if len(sys.argv) > 1 and sys.argv[1] == "--test":
+     from util.test import main
+     main()
+import os, msvcrt, eel, logging, requests, platform, threading, psutil, colorama, signal
 from config import config
+from plugins import plugins
 from util import tui, update, gen_path, rpc
 if len(sys.argv) > 1 and sys.argv[1] == "--cli":
     from TUI import cli
     cli.start()
-from deobfuscators.detector import detect_obfuscator
+from deobfuscators.detector import detect_obfuscator, obfuscators
 from tkinter import Tk, filedialog
 from dlls import shell
 from analyzer import detect_packer, unpack_file, get_file_hashs, sus_strings_lookup, all_strings_lookup
@@ -28,7 +36,6 @@ tui.setup_logging()
 print(tui.__BANNER__)
 logging.info("Starting de4py")
 eel.init('gui')
-
 
 def cupdate() -> None:
     if update.check_update():
@@ -232,9 +239,36 @@ def update_hooks_output():
     except Exception as e:
          logging.error(f"Error occurred while reading from HANDLE_analyzer: {str(e)}")
 
+@eel.expose
+def get_plugins():
+    code = plugins.html_result
+    plugins.html_result = ''
+    return code
+
+@eel.expose
+def load_plugins():
+     if LOAD_PLUGINS:
+         loaded_plugins = plugins.load_plugins()
+         for plugin in loaded_plugins:
+             if plugin["type"] == "deobfuscator":
+                  plugin = plugin["instance"]
+                  obfuscators.append((plugin.plugin_name, plugin.regex, plugin.deobfuscator_function))
+                  plugins.build_html({"name":plugin.plugin_name, "creator":plugin.creator, "link":plugin.link})
+                  logging.info(f"Loaded deobfuscator plugin {plugin.plugin_name}")
+             elif plugin["type"] == "theme":
+                  plugin = plugin["instance"]
+                  plugins.build_html({"name":plugin.plugin_name, "creator":plugin.creator, "link":plugin.link})
+                  eel.applyCSS(plugin.css)
+                  logging.info(f"Loaded theme plugin {plugin.plugin_name}")
+     else:
+          plugins.html_result = """
+<div class="center">
+<h1>Plugins are disabled</h1>
+</div>
+"""
+
 def main() -> None:
-    # eel.start('index.html',size=(1024, 589),port=3456)
-    eel.start('index.html',size=(1024, 589),port=5456)
+    eel.start('index.html', size=(1024, 589), port=5456)
     rpc.KILL_THREAD = True
 
 
