@@ -4,30 +4,38 @@
       |                  de4py project                     |
 *********************************************************************/
 #include "SDK.h"
-
+#include <Psapi.h>
 _Py_SetProgramName Py_SetProgramName;
 _PyEval_InitThreads PyEval_InitThreads;
 _PyGILState_Ensure PyGILState_Ensure;
 _PyGILState_Release PyGILState_Release;
 _PyRun_SimpleStringFlags PyRun_SimpleStringFlags;
 
+HMODULE GetPyDll()
+{
+    HANDLE hProcess = GetCurrentProcess();
+    HMODULE hModules[1024];
+    DWORD cbNeeded;
+    HMODULE Python = NULL;
+    if (EnumProcessModules(hProcess, hModules, sizeof(hModules), &cbNeeded))
+    {
+        for (DWORD i = 0; i < (cbNeeded / sizeof(HMODULE)); i++) {
+            char szModule[MAX_PATH];
+            if (GetModuleFileNameExA(hProcess, hModules[i], szModule, sizeof(szModule) / sizeof(char))) {
+                if (strstr(szModule, "python3") != NULL) {
+                    Python = hModules[i];
+                    break;
+                }
+            }
+        }
+    }
+    CloseHandle(hProcess);
+    return Python;
+}
+
 void SDK::InitCPython()
 {
-    HMODULE hPython = 0x0;
-    if (GetModuleHandleA("Python39.dll"))
-        hPython = GetModuleHandleA("Python39.dll");
-    else if (GetModuleHandleA("Python38.dll"))
-        hPython = GetModuleHandleA("Python38.dll");
-    else if (GetModuleHandleA("Python37.dll"))
-        hPython = GetModuleHandleA("Python37.dll");
-    else if (GetModuleHandleA("Python310.dll"))
-        hPython = GetModuleHandleA("Python310.dll");
-    else if (GetModuleHandleA("Python311.dll"))
-        hPython = GetModuleHandleA("Python311.dll");
-    else if (GetModuleHandleA("Python312.dll"))
-        hPython = GetModuleHandleA("Python312.dll");
-    else if (GetModuleHandleA("Python313.dll"))
-        hPython = GetModuleHandleA("Python313.dll");
+    HMODULE hPython = GetPyDll();
     Py_SetProgramName = (_Py_SetProgramName)(GetProcAddress(hPython, "Py_SetProgramName"));
     PyEval_InitThreads = (_PyEval_InitThreads)(GetProcAddress(hPython, "PyEval_InitThreads"));
     PyGILState_Ensure = (_PyGILState_Ensure)(GetProcAddress(hPython, "PyGILState_Ensure"));

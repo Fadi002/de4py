@@ -11,12 +11,14 @@
 #include <sstream>
 #include <codecvt>
 #include <regex>
+#define SECURITY_WIN32
+#include <security.h>
+#include <Sspi.h>
+#include <Psapi.h>
 #pragma comment(lib, "Ws2_32.lib")
-#pragma comment(lib, "winhttp.lib")
 //using namespace std;
 HANDLE pipe = NULL;
 HANDLE pipe_analyzer = NULL;
-
 typedef struct _UNICODE_STRING {
     USHORT Length;
     USHORT MaximumLength;
@@ -30,7 +32,7 @@ typedef struct _OBJECT_ATTRIBUTES {
     ULONG              Attributes;
     PVOID              SecurityDescriptor;
     PVOID              SecurityQualityOfService;
-} OBJECT_ATTRIBUTES, * POBJECT_ATTRIBUTES;
+} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
 
 typedef struct _IO_STATUS_BLOCK
 {
@@ -106,13 +108,16 @@ typedef NTSTATUS(NTAPI* RealNtOpenProcess)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBU
 typedef NTSTATUS(NTAPI* RealNtWriteVirtualMemory)(HANDLE, PVOID, LPCVOID, SIZE_T, PSIZE_T);
 typedef NTSTATUS(NTAPI* RealNtReadVirtualMemory)(HANDLE, PVOID, PVOID, ULONG, PULONG);
 typedef NTSTATUS(NTAPI* RealNtTerminateProcess)(HANDLE, NTSTATUS);
+typedef HHOOK(WINAPI* RealSetWindowsHookExAW)(int, HOOKPROC, HINSTANCE, DWORD);
 typedef SOCKET(WINAPI* RealSocket)(int, int, int);
 typedef int (WINAPI* RealSend)(SOCKET, const char*, int, int);
 typedef int (WINAPI* RealRecv)(SOCKET, char*, int, int);
-typedef int(__cdecl* RealSSL_read_ex)(SSL*, void*, size_t, size_t*);
-typedef int(__cdecl* RealSSL_write_ex)(SSL*, const void*, size_t, size_t*);
 typedef int(__cdecl* RealSSL_read)(SSL*, void*, size_t);
 typedef int(__cdecl* RealSSL_write)(SSL*, const void*, size_t);
+typedef int(__cdecl* RealSSL_read_ex)(SSL*, void*, size_t, size_t*);
+typedef int(__cdecl* RealSSL_write_ex)(SSL*, const void*, size_t, size_t*);
+typedef void*(__cdecl* RealPyEval_EvalCode)(void*, void*, void*);
+typedef void(__cdecl* PyMarshal_WriteObjectToFile)(void*, FILE*, int);
 
 bool Pyshell_GUI() {
     try
@@ -126,7 +131,7 @@ bool Pyshell_GUI() {
     {
         return false;
     }
-
+    
 }
 bool exec(char* code) {
     try {
@@ -156,7 +161,9 @@ HANDLE PipeMutex2 = CreateMutex(NULL, FALSE, NULL);
 bool SendMessageToPipe(HANDLE pipe, const char* message) {
     WaitForSingleObject(PipeMutex, INFINITE);
     DWORD bytesWritten = 0;
-    BOOL Status = WriteFile(pipe, message, strlen(message) + 1, &bytesWritten, NULL);
+    std::string message_modified(message);
+    message_modified.append("\n");
+    BOOL Status = WriteFile(pipe, message_modified.c_str(), message_modified.size() + 1, &bytesWritten, NULL);
     ReleaseMutex(PipeMutex);
     return Status;
 }
@@ -165,7 +172,7 @@ bool SendMessageToPipe(HANDLE pipe, const wchar_t* message) {
     WaitForSingleObject(PipeMutex2, INFINITE);
     DWORD bytesWritten = 0;
     std::wstring_convert<std::codecvt_utf8<wchar_t>> Converter;
-    std::string message2 = Converter.to_bytes(message);
+    std::string message2 = Converter.to_bytes(message).append("\n");
     BOOL Status = WriteFile(pipe, message2.c_str(), message2.size() + 1, &bytesWritten, NULL);
     ReleaseMutex(PipeMutex2);
     return Status;
@@ -174,6 +181,15 @@ bool SendMessageToPipe(HANDLE pipe, const wchar_t* message) {
 RealNtCreateFile OriginalNtCreateFile = nullptr;
 HANDLE NtCreateFileMutex = CreateMutex(NULL, FALSE, NULL);
 
+void AppendString(wchar_t* string1, const wchar_t* string2)
+{
+    if (string1 == NULL || string2 == NULL) {
+        return;
+    }
+    size_t size1 = wcslen(string1);
+    wcscpy_s(string1 + size1, wcslen(string1) - 1, string2);
+}
+
 NTSTATUS NTAPI HookedNtCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock, PLARGE_INTEGER AllocationSize, ULONG FileAttributes, ULONG ShareAccess, ULONG CreateDisposition, ULONG CreateOptions, PVOID EaBuffer, ULONG EaLength)
 {
     WaitForSingleObject(NtCreateFileMutex, INFINITE);
@@ -181,7 +197,28 @@ NTSTATUS NTAPI HookedNtCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess,
     NTSTATUS Status = OriginalNtCreateFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, AllocationSize, FileAttributes, ShareAccess, CreateDisposition, CreateOptions, EaBuffer, EaLength);
     if (Status == 0)
     {
-        std::wstring FileName(L"File Handle Opened: ");
+        wchar_t Message[256];
+        DWORD LastError = GetLastError();
+        if (CreateDisposition == CREATE_ALWAYS)
+        {
+            if (LastError == ERROR_ALREADY_EXISTS)
+            {
+                AppendString(Message, L"File Handle Opened: ");
+            }
+            else
+            {
+                AppendString(Message, L"File Created: ");
+            }
+        }
+        else if(CreateDisposition == CREATE_NEW)
+        {
+            AppendString(Message, L"File Created: ");
+        }
+        else
+        {
+            AppendString(Message, L"File Handle Opened: ");
+        }
+        std::wstring FileName(Message);
         FileName.append(szFileName.c_str());
         SendMessageToPipe(pipe_analyzer, FileName.c_str());
     }
@@ -288,7 +325,7 @@ NTSTATUS NTAPI HookedNtTerminateProcess(HANDLE hProcess, NTSTATUS ExitCode)
     WaitForSingleObject(NtTerminateProcessMutex, INFINITE);
     NTSTATUS Status = 0;
     DWORD PID = GetProcessId(hProcess);
-    if (PID != GetCurrentProcessId())
+    if (PID != GetCurrentProcessId() && PID != 0)
     {
         Status = OriginalNtTerminateProcess(hProcess, ExitCode);
         if (Status == 0)
@@ -308,8 +345,30 @@ NTSTATUS NTAPI HookedNtTerminateProcess(HANDLE hProcess, NTSTATUS ExitCode)
     }
 }
 
+RealSetWindowsHookExAW OriginalSetWindowsHookExAW = nullptr;
+HANDLE SetWindowsHookExAWMutex = CreateMutex(NULL, FALSE, NULL);
+HHOOK WINAPI HookedSetWindowsHookExAW(int idHook, HOOKPROC lpfn, HINSTANCE hMod, DWORD dwThreadId)
+{
+    WaitForSingleObject(SetWindowsHookExAWMutex, INFINITE);
+    HHOOK Status = OriginalSetWindowsHookExAW(idHook, lpfn, hMod, dwThreadId);
+    if (dwThreadId == 0 && Status != NULL)
+    {
+        if (idHook & WH_KEYBOARD || idHook & WH_KEYBOARD_LL)
+        {
+            SendMessageToPipe(pipe_analyzer, "The Process installed a global keyboard hook which can be used to monitor keystrokes.");
+        }
+
+        if (idHook & WH_MOUSE || idHook & WH_MOUSE_LL)
+        {
+            SendMessageToPipe(pipe_analyzer, "The Process installed a global mouse hook.");
+        }
+    }
+    ReleaseMutex(SetWindowsHookExAWMutex);
+    return Status;
+}
+
 BOOL IsHookedProcessMon = false;
-void MonitorProcessesHandles(BOOL Unhook)
+void MonitorGeneralProcessBehavior(BOOL Unhook)
 {
     if (Unhook)
     {
@@ -319,6 +378,7 @@ void MonitorProcessesHandles(BOOL Unhook)
         DetourDetach(&(PVOID&)OriginalNtWriteVirtualMemory, HookedNtWriteVirtualMemory);
         DetourDetach(&(PVOID&)OriginalNtReadVirtualMemory, HookedNtReadVirtualMemory);
         DetourDetach(&(PVOID&)OriginalNtTerminateProcess, HookedNtTerminateProcess);
+        DetourDetach(&(PVOID&)OriginalSetWindowsHookExAW, HookedSetWindowsHookExAW);
         DetourTransactionCommit();
         IsHookedProcessMon = false;
     }
@@ -334,6 +394,8 @@ void MonitorProcessesHandles(BOOL Unhook)
         DetourAttach(&(LPVOID&)OriginalNtReadVirtualMemory, HookedNtReadVirtualMemory);
         OriginalNtTerminateProcess = reinterpret_cast<RealNtTerminateProcess>(DetourFindFunction("ntdll.dll", "NtTerminateProcess"));
         DetourAttach(&(LPVOID&)OriginalNtTerminateProcess, HookedNtTerminateProcess);
+        OriginalSetWindowsHookExAW = reinterpret_cast<RealSetWindowsHookExAW>(DetourFindFunction("user32.dll", "SetWindowsHookExAW"));
+        DetourAttach(&(LPVOID&)OriginalSetWindowsHookExAW, HookedSetWindowsHookExAW);
         DetourTransactionCommit();
         IsHookedProcessMon = true;
     }
@@ -378,7 +440,7 @@ int WINAPI HookedSend(SOCKET sock, const char* buf, int len, int flags)
             if (File != INVALID_HANDLE_VALUE)
             {
                 SetFilePointer(File, 0, NULL, FILE_END);
-                std::string Buffer(buf);
+                std::string Buffer(buf, len);
                 Buffer.append("\n");
                 DWORD Written = 0;
                 WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL);
@@ -418,7 +480,7 @@ int WINAPI HookedRecv(SOCKET sock, char* buf, int len, int flags)
             if (File != INVALID_HANDLE_VALUE)
             {
                 SetFilePointer(File, 0, NULL, FILE_END);
-                std::string Buffer(buf);
+                std::string Buffer(buf, len);
                 Buffer.append("\n");
                 DWORD Written = 0;
                 WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL);
@@ -465,15 +527,15 @@ void MonitorConnections(BOOL Unhook)
 }
 
 char DumpSSLPath[MAX_PATH + 1];
-RealSSL_read_ex OriginalSSL_read_ex = nullptr;
-RealSSL_write_ex OriginalSSL_write_ex = nullptr;
 RealSSL_read OriginalSSL_read = nullptr;
 RealSSL_write OriginalSSL_write = nullptr;
+RealSSL_read_ex OriginalSSL_read_ex = nullptr;
+RealSSL_write_ex OriginalSSL_write_ex = nullptr;
 
-HANDLE SSL_readexMutex = CreateMutex(NULL, FALSE, NULL);
+HANDLE SSL_read_exMutex = CreateMutex(NULL, FALSE, NULL);
 int HookedSSL_read_ex(SSL* ssl, void* buf, size_t num, size_t* readbytes)
 {
-    WaitForSingleObject(SSL_readexMutex, INFINITE);
+    WaitForSingleObject(SSL_read_exMutex, INFINITE);
     if (DumpSSLPath != NULL)
     {
         HANDLE File = CreateFileA(DumpSSLPath, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -483,19 +545,24 @@ int HookedSSL_read_ex(SSL* ssl, void* buf, size_t num, size_t* readbytes)
             std::string Buffer(static_cast<char*>(buf), num);
             Buffer.append("\n");
             DWORD Written = 0;
-            WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL);
+            if (!WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL))
+                printf("Error: %i", GetLastError());
             CloseHandle(File);
+        }
+        else
+        {
+            printf("Error: %i", GetLastError());
         }
     }
     int value = OriginalSSL_read_ex(ssl, buf, num, readbytes);
-    ReleaseMutex(SSL_readexMutex);
+    ReleaseMutex(SSL_read_exMutex);
     return value;
 }
 
-HANDLE SSL_writeexMutex = CreateMutex(NULL, FALSE, NULL);
+HANDLE SSL_write_exMutex = CreateMutex(NULL, FALSE, NULL);
 int HookedSSL_write_ex(SSL* s, const void* buf, size_t num, size_t* written)
 {
-    WaitForSingleObject(SSL_writeexMutex, INFINITE);
+    WaitForSingleObject(SSL_write_exMutex, INFINITE);
     if (DumpSSLPath != NULL)
     {
         HANDLE File = CreateFileA(DumpSSLPath, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -505,12 +572,17 @@ int HookedSSL_write_ex(SSL* s, const void* buf, size_t num, size_t* written)
             std::string Buffer(static_cast<const char*>(buf), num);
             Buffer.append("\n");
             DWORD Written = 0;
-            WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL);
+            if(!WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL))
+                printf("Error: %i", GetLastError());
             CloseHandle(File);
+        }
+        else
+        {
+            printf("Error: %i", GetLastError());
         }
     }
     int value = OriginalSSL_write_ex(s, buf, num, written);
-    ReleaseMutex(SSL_writeexMutex);
+    ReleaseMutex(SSL_write_exMutex);
     return value;
 }
 
@@ -527,8 +599,13 @@ int HookedSSL_read(SSL* ssl, void* buf, size_t num)
             std::string Buffer(static_cast<char*>(buf), num);
             Buffer.append("\n");
             DWORD Written = 0;
-            WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL);
+            if (!WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL))
+                printf("Error: %i", GetLastError());
             CloseHandle(File);
+        }
+        else
+        {
+            printf("Error: %i", GetLastError());
         }
     }
     int value = OriginalSSL_read(ssl, buf, num);
@@ -549,8 +626,13 @@ int HookedSSL_write(SSL* s, const void* buf, size_t num)
             std::string Buffer(static_cast<const char*>(buf), num);
             Buffer.append("\n");
             DWORD Written = 0;
-            WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL);
+            if (!WriteFile(File, Buffer.c_str(), Buffer.size(), &Written, NULL))
+                printf("Error: %i", GetLastError());
             CloseHandle(File);
+        }
+        else
+        {
+            printf("Error: %i", GetLastError());
         }
     }
     int value = OriginalSSL_write(s, buf, num);
@@ -558,8 +640,52 @@ int HookedSSL_write(SSL* s, const void* buf, size_t num)
     return value;
 }
 
+HMODULE GetPythonDll()
+{
+    HANDLE hProcess = GetCurrentProcess();
+    HMODULE hModules[1024];
+    DWORD cbNeeded;
+    HMODULE Python = NULL;
+    if (EnumProcessModules(hProcess, hModules, sizeof(hModules), &cbNeeded))
+    {
+        for (DWORD i = 0; i < (cbNeeded / sizeof(HMODULE)); i++) {
+            char szModule[MAX_PATH];
+            if (GetModuleFileNameExA(hProcess, hModules[i], szModule, sizeof(szModule) / sizeof(char))) {
+                if (strstr(szModule, "python3") != NULL) {
+                    Python = hModules[i];
+                    break;
+                }
+            }
+        }
+    }
+    CloseHandle(hProcess);
+    return Python;
+}
+
+HMODULE GetOpenSSL()
+{
+    HANDLE hProcess = GetCurrentProcess();
+    HMODULE hModules[1024];
+    DWORD cbNeeded;
+    HMODULE Python = NULL;
+    if (EnumProcessModules(hProcess, hModules, sizeof(hModules), &cbNeeded))
+    {
+        for (DWORD i = 0; i < (cbNeeded / sizeof(HMODULE)); i++) {
+            char szModule[MAX_PATH];
+            if (GetModuleFileNameExA(hProcess, hModules[i], szModule, sizeof(szModule) / sizeof(char))) {
+                if (strstr(szModule, "libssl") != NULL) {
+                    Python = hModules[i];
+                    break;
+                }
+            }
+        }
+    }
+    CloseHandle(hProcess);
+    return Python;
+}
+
 BOOL IsDumping = FALSE;
-void DumpSSL(bool Unhook)
+BOOL DumpSSL(bool Unhook)
 {
     if (Unhook)
     {
@@ -574,7 +700,7 @@ void DumpSSL(bool Unhook)
     {
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
-        HMODULE hModule = GetModuleHandle(L"libssl-1_1.dll");
+        HMODULE hModule = GetOpenSSL();
         PBYTE Real = (PBYTE)GetProcAddress(hModule, "SSL_read_ex");
         if (Real[0] == 0xE9) {
             int offset = *(int*)(Real + 1);
@@ -619,9 +745,51 @@ void DumpSSL(bool Unhook)
             OriginalSSL_write = reinterpret_cast<RealSSL_write>(DetourFindFunction("libssl-1_1.dll", "SSL_write"));
         }
         DetourAttach(&(LPVOID&)OriginalSSL_write, HookedSSL_write);
-        DetourTransactionCommit();
+        if (DetourTransactionCommit() != NO_ERROR)
+            return false;
         IsDumping = true;
+        return true;
     }
+}
+
+PyMarshal_WriteObjectToFile WriteObject = NULL;
+RealPyEval_EvalCode OriginalPyEval_EvalCode = nullptr;
+char PyDumpPath[MAX_PATH + 1];
+
+HANDLE EvalMutex = CreateMutex(NULL, FALSE, NULL);
+void* HookedPyEval_EvalCode(void* co, void* globals, void* locals)
+{
+    WaitForSingleObject(EvalMutex, INFINITE);
+    FILE* Stream = NULL;
+    if (fopen_s(&Stream, PyDumpPath, "a") == 0)
+    {
+        WriteObject(co, Stream, 4);
+        fclose(Stream);
+    }
+    ReleaseMutex(EvalMutex);
+    return OriginalPyEval_EvalCode(co, globals, locals);
+}
+
+BOOL IsHookedPy = false;
+void DumpPythonCode(BOOL Unhook)
+{
+    if (Unhook)
+    {
+        DetourTransactionBegin();
+        DetourUpdateThread(GetCurrentThread());
+        DetourDetach(&(LPVOID&)OriginalPyEval_EvalCode, HookedPyEval_EvalCode);
+        DetourTransactionCommit();
+        IsHookedPy = false;
+    }
+    else
+    {
+        DetourTransactionBegin();
+        DetourUpdateThread(GetCurrentThread());
+        OriginalPyEval_EvalCode = (RealPyEval_EvalCode)GetProcAddress(GetPythonDll(), "PyEval_EvalCode");
+        DetourAttach(&(LPVOID&)OriginalPyEval_EvalCode, HookedPyEval_EvalCode);
+    }
+        DetourTransactionCommit();
+        IsHookedPy = true;
 }
 
 //just to make the code look cleaner
@@ -653,7 +821,6 @@ DWORD WINAPI MainThread(HMODULE hModule)
     }
 
     ConnectNamedPipe(pipe, NULL);
-
 
     char buffer[1024] = { 0 };
 
@@ -751,7 +918,7 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         }
                         else
                         {
-                            MonitorProcessesHandles(false);
+                            MonitorGeneralProcessBehavior(false);
                             SendMessageToPipe(pipe, "OK.");
                         }
                     }
@@ -769,7 +936,7 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         }
                         else
                         {
-                            MonitorProcessesHandles(true);
+                            MonitorGeneralProcessBehavior(true);
                             SendMessageToPipe(pipe, "OK.");
                         }
                     }
@@ -947,8 +1114,10 @@ DWORD WINAPI MainThread(HMODULE hModule)
                                 if (GetModuleHandle(L"libssl-1_1.dll") != NULL)
                                 {
                                     strcpy_s(DumpSSLPath, MAX_PATH, Path.c_str());
-                                    DumpSSL(false);
-                                    SendMessageToPipe(pipe, "OK.");
+                                    if(DumpSSL(false))
+                                        SendMessageToPipe(pipe, "OK.");
+                                    else
+                                        SendMessageToPipe(pipe, "Failed to hook OpenSSL.");
                                 }
                                 else
                                 {
@@ -984,6 +1153,51 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         SendMessageToPipe(pipe, "Please do the \"GetAnalyzerHandle\" command before using this.");
                     }
                 }
+                else if (std::string(buffer).rfind("DumpPyc", 0) == 0) {
+                    std::string lol(buffer);
+                    size_t ok = lol.find("||");
+                    if (ok != std::string::npos) {
+                        std::string Path = lol.substr(ok + 2);
+                        DWORD attrib = GetFileAttributesA(Path.c_str());
+                        if (attrib != INVALID_FILE_ATTRIBUTES && (attrib & FILE_ATTRIBUTE_DIRECTORY) == 0)
+                        {
+                            HMODULE PyDll = GetPythonDll();
+                            if (PyDll != NULL)
+                            {
+                                WriteObject = (PyMarshal_WriteObjectToFile)GetProcAddress(PyDll, "PyMarshal_WriteObjectToFile");
+                                if (WriteObject != NULL)
+                                {
+                                    SendMessageToPipe(pipe, "starting...");
+                                    strcpy_s(PyDumpPath, sizeof(Path.c_str()), Path.c_str());
+                                    DumpPythonCode(false);
+                                }
+                                else
+                                {
+                                    SendMessageToPipe(pipe, "couldn't import PyMarshal_WriteObjectToFile...");
+                                }
+                            }
+                            else
+                            {
+                                SendMessageToPipe(pipe, "Python library are not found in the target process.");
+                            }
+                        }
+                        else
+                        {
+                            SendMessageToPipe(pipe, "File not found.");
+                        }
+                    }
+                }
+                else if (IsEqual(buffer, "StopDumpingPyc")) {
+                    if (!IsHookedPy)
+                    {
+                        SendMessageToPipe(pipe, "not dumping in the first place.");
+                    }
+                    else
+                    {
+                        DumpPythonCode(true);
+                        SendMessageToPipe(pipe, "OK.");
+                    }
+                }
                 else {
                     SendMessageToPipe(pipe, "WTF?");
                 }
@@ -992,18 +1206,15 @@ DWORD WINAPI MainThread(HMODULE hModule)
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
     }
+    return 0;
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
-    switch (ul_reason_for_call)
+    if (ul_reason_for_call == DLL_PROCESS_ATTACH)
     {
-    case DLL_PROCESS_ATTACH:
+        DisableThreadLibraryCalls(hModule);
         CloseHandle(CreateThread(0, 0, (LPTHREAD_START_ROUTINE)MainThread, hModule, 0, 0));
-    case DLL_THREAD_ATTACH:
-    case DLL_THREAD_DETACH:
-    case DLL_PROCESS_DETACH:
-        break;
     }
     return TRUE;
 }

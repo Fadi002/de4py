@@ -1,0 +1,36 @@
+#plugins-container {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin: 20px;
+}
+
+.plugin-frame {
+    border: 2px solid #3498db;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 0 10px #0287CF;
+    text-align: center;
+}
+
+.plugin-info {
+    font-size: 20px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #3498db;
+}
+
+.created-by {
+    color: #666;
+    margin-bottom: 20px;
+}
+
+.enter-button {
+    background-color: #3498db;
+    color: #fff;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+}

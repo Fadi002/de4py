@@ -43,5 +43,13 @@
         "changes": [
             "Added CLI mode (use --cli to run it)"
         ]
-    }  
+    },
+    {
+        "version": "1.0.7",
+        "changes": [
+            "Added plugins feature (https://bit.ly/de4pyplugins)",
+            "Improved WinAPI hooking",
+            "Added test feature (use --test to run it) "
+        ]
+    }
 ]

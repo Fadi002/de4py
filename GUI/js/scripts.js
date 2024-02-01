@@ -79,6 +79,17 @@ async function exec_command(command) {
     }
 }
 
+async function loadPlugins() {
+    eel.load_plugins();
+    let pluginsContainer = document.getElementById('plugins-container');
+    let pluginsHtml = await eel.get_plugins()();
+    if (!pluginsHtml) {
+        document.getElementById('plugins').innerHTML = "<h1>No plugins where loaded</h1>";
+    }
+    pluginsContainer.innerHTML = pluginsHtml;
+}
+
+
 function pid_widget(method) {
     if (!method) {
         document.getElementById('IDKWHATSHOULDINAMEIT').style.display = 'none';
@@ -272,10 +283,24 @@ async function analyzer_command(command) {
         return
     }
 }
+eel.expose(applyCSS);
+function applyCSS(cssCode) {
+    const styleElement = document.createElement("style");
+    styleElement.type = "text/css";
+    if (styleElement.styleSheet) {
+        styleElement.styleSheet.cssText = cssCode;
+    } else {
+        styleElement.appendChild(document.createTextNode(cssCode));
+    }
+    document.head.appendChild(styleElement);
+    const bodyElement = document.getElementsByTagName('body')[0];
+    bodyElement.style.cssText += cssCode;
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     loadchangelog();
     load_info();
+    loadPlugins();
     setInterval(updatetime, 1000);
     const navbar = document.getElementById('navbar');
     const menuToggle = document.getElementById('menulol');

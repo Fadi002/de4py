@@ -75,19 +75,15 @@ def align(text: str) -> str:
     """
     credits : https://github.com/SirDank/dankware/blob/main/dankware/__init__.py
     """
-
     width = shutil.get_terminal_size().columns
     aligned = text
-    
     for _ in tuple(vars(Fore).values()) + tuple(vars(Style).values()):
         aligned = aligned.replace(_,'')
     
     text = text.splitlines()
     aligned = aligned.splitlines()
-    
     for _ in range(len(aligned)):
         aligned[_] = aligned[_].center(width).replace(aligned[_],text[_])
-
     return str('\n'.join(aligned) + Style.RESET_ALL)
 
 def draw_line():
@@ -128,13 +124,11 @@ def custom_error(exc_type, exc_value, exc_traceback):
 
 
 class Add:
-
     """
     CREDITS: https://github.com/billythegoat356/pystyle/blob/main/pystyle/__init__.py
     1 function:
         Add()           |           allow you to add a text to another, and even center it
     """
-
     def Add(banner1, banner2, spaces=0, center=False):
         if center:
             split1 = len(banner1.splitlines())
@@ -145,56 +139,39 @@ class Add:
                 spaces = (split2 - split1) // 2
             else:
                 spaces = 0
-
         if spaces > max(len(banner1.splitlines()), len(banner2.splitlines())):
             # raise Banner.MaximumSpaces(spaces)
             spaces = max(len(banner1.splitlines()), len(banner2.splitlines()))
-
         ban1 = banner1.splitlines()
         ban2 = banner2.splitlines()
-
         ban1count = len(ban1)
         ban2count = len(ban2)
-
         size = Add._length(ban1)
-
         ban1 = Add._edit(ban1, size)
-
         ban1line = 0
         ban2line = 0
         text = ''
-
         for _ in range(spaces):
-
             if ban1count >= ban2count:
                 ban1data = ban1[ban1line]
                 ban2data = ''
-
                 ban1line += 1
-
             else:
                 ban1data = " " * size
                 ban2data = ban2[ban2line]
-
                 ban2line += 1
-
             text = text + ban1data + ban2data + '\n'
         while ban1line < ban1count or ban2line < ban2count:
-
             ban1data = ban1[ban1line] if ban1line < ban1count else " " * size
             ban2data = ban2[ban2line] if ban2line < ban2count else ""
             text = text + ban1data + ban2data + '\n'
-
             ban1line += 1
             ban2line += 1
         return text
-
     """ ! developper area ! """
-
     class MaximumSpaces(Exception):
         def __init__(self, spaces: str):
             super().__init__(f"Too much spaces [{spaces}].")
-
     def _length(ban1):
         bigestline = 0
 
