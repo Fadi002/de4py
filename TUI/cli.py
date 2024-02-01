@@ -22,7 +22,6 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 sys.excepthook = custom_error
-tui.clear_console()
 change_log = None
 platform_info = None
 file_path = None
@@ -349,4 +348,5 @@ def start():
         home_tab()
 
 if __name__ == "__main__":
+    tui.clear_console()
     start()
