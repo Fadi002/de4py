@@ -9,6 +9,19 @@ setTimeout(showMenu, 2000);
 
 eel.expose(dead_process);
 
+function generateRandomString(length) {
+    var result = '';
+    var characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (var i = 0; i < length; i++) {
+        result += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return result;
+}
+
+async function change_title() {
+    document.title = generateRandomString(Math.floor(Math.random() * (30 - 10 + 1)) + 10);
+}
+
 function dead_process() {
     injected = false;
     analyzer_handle = false;
@@ -17,6 +30,7 @@ function dead_process() {
     MCBOX.checked = false
     MCDUMPBOX.checked = false
     SSLBOX.checked = false
+    PYCDUMB.checked = false
     navto("pyshell")
     createnotification("warning", "Process crashed/died/killed");
 }
@@ -56,6 +70,7 @@ async function exec_command(command) {
             MCBOX.checked = false
             MCDUMPBOX.checked = false
             SSLBOX.checked = false
+            PYCDUMB.checked = false
             if (eel.write_to_pipe(command)) {
                 createnotification("success", "Command executed");
             }
@@ -184,7 +199,7 @@ function createnotification(type, message) {
     }, 5000);
 }
 
-async function injectpyshell() {
+async function injectpyshell(typeinject) {
     const loadingspin = document.getElementById('loading-spin');
     const loadingSpinner = document.getElementById('loading-spinner');
     const pidinput = document.getElementById("pidinput");
@@ -195,15 +210,27 @@ async function injectpyshell() {
     }
     loadingspin.style.display = 'block';
     loadingSpinner.style.display = 'block';
-    try {
-        const result = await eel.inject_shell(pidinput.value.trim())();
-        outputt.textContent = result;
-        injected = true;
-        createnotification('success', 'pyshell injector function executed');
-    } catch {
-        createnotification('failure', 'pyshell injector function failed');
-        outputt.textContent = `failed to inject pyshell`;
-    }
+    if (typeinject == 'normal') {
+        try {
+            const result = await eel.inject_shell(pidinput.value.trim())();
+            outputt.textContent = result;
+            injected = true;
+            createnotification('success', 'pyshell injector function executed');
+        } catch {
+            createnotification('failure', 'pyshell injector function failed');
+            outputt.textContent = `failed to inject pyshell`;
+        }
+    } else {
+        try {
+            const result = await eel.stealth_inject_shell(pidinput.value.trim())();
+            outputt.textContent = result;
+            injected = true;
+            createnotification('success', 'pyshell injector function executed');
+        } catch {
+            createnotification('failure', 'pyshell injector function failed');
+            outputt.textContent = `failed to inject pyshell`;
+        }
+    }  
     loadingspin.style.display = 'none';
     loadingSpinner.style.display = 'none';
 }
@@ -301,6 +328,9 @@ document.addEventListener('DOMContentLoaded', function() {
     loadchangelog();
     load_info();
     loadPlugins();
+    if (eel.STEALTH_TITLE()) {
+        setInterval(change_title, 0);
+    }
     setInterval(updatetime, 1000);
     const navbar = document.getElementById('navbar');
     const menuToggle = document.getElementById('menulol');
@@ -311,6 +341,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const MCBOX = document.getElementById('MCBOX');
     const MCDUMPBOX = document.getElementById('MCDUMPBOX');
     const SSLBOX = document.getElementById('SSLBOX');
+    const PYCDUMB = document.getElementById('PYCDUMB');
     MCDUMPBOX.disabled = true;
     menuToggle.addEventListener('click', function() {
         navbar.style.left = (navbar.style.left === '0px' || navbar.style.left === '') ? '-310px' : '0px';
@@ -352,6 +383,13 @@ document.addEventListener('DOMContentLoaded', function() {
             add_text_winapihook(await eel.dumpopensslcontent(true)());
         } else {
             add_text_winapihook(await eel.dumpopensslcontent(false)());
+        }
+    });
+    PYCDUMB.addEventListener('change', async function() {
+        if (this.checked) {
+            add_text_winapihook(await eel.pycdumper(true)());
+        } else {
+            add_text_winapihook(await eel.pycdumper(false)());
         }
     });
     buttons.forEach(function(button) {

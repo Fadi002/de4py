@@ -15,6 +15,8 @@
 #include <security.h>
 #include <Sspi.h>
 #include <Psapi.h>
+#include <string>
+#include <random>
 #pragma comment(lib, "Ws2_32.lib")
 //using namespace std;
 HANDLE pipe = NULL;
@@ -756,12 +758,28 @@ PyMarshal_WriteObjectToFile WriteObject = NULL;
 RealPyEval_EvalCode OriginalPyEval_EvalCode = nullptr;
 char PyDumpPath[MAX_PATH + 1];
 
+std::string gen_pyc_file_name() {
+    const std::string alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, alphabet.size() - 1);
+    std::string filename = "pdump-";
+    for (int i = 0; i < 7; ++i) {
+        filename += alphabet[dis(gen)];
+    }
+    filename += ".pyc";
+    return filename;
+}
+
+
 HANDLE EvalMutex = CreateMutex(NULL, FALSE, NULL);
 void* HookedPyEval_EvalCode(void* co, void* globals, void* locals)
 {
     WaitForSingleObject(EvalMutex, INFINITE);
     FILE* Stream = NULL;
-    if (fopen_s(&Stream, PyDumpPath, "a") == 0)
+    std::string pydumpdir = PyDumpPath;
+    std::string filename = pydumpdir + "\\" + gen_pyc_file_name();
+    if (fopen_s(&Stream, filename.c_str(), "wb") == 0)
     {
         WriteObject(co, Stream, 4);
         fclose(Stream);
@@ -1158,18 +1176,22 @@ DWORD WINAPI MainThread(HMODULE hModule)
                     size_t ok = lol.find("||");
                     if (ok != std::string::npos) {
                         std::string Path = lol.substr(ok + 2);
-                        DWORD attrib = GetFileAttributesA(Path.c_str());
-                        if (attrib != INVALID_FILE_ATTRIBUTES && (attrib & FILE_ATTRIBUTE_DIRECTORY) == 0)
-                        {
                             HMODULE PyDll = GetPythonDll();
                             if (PyDll != NULL)
                             {
                                 WriteObject = (PyMarshal_WriteObjectToFile)GetProcAddress(PyDll, "PyMarshal_WriteObjectToFile");
                                 if (WriteObject != NULL)
                                 {
-                                    SendMessageToPipe(pipe, "starting...");
-                                    strcpy_s(PyDumpPath, sizeof(Path.c_str()), Path.c_str());
-                                    DumpPythonCode(false);
+                                    try {
+                                        SendMessageToPipe(pipe, "OK.");
+                                        strcpy_s(PyDumpPath, sizeof(PyDumpPath), Path.c_str());
+                                        DumpPythonCode(false);
+                                    }
+                                    catch (const std::exception& ex) {
+                                        printf("%s", ex.what());
+                                    }
+
+                                    
                                 }
                                 else
                                 {
@@ -1181,11 +1203,6 @@ DWORD WINAPI MainThread(HMODULE hModule)
                                 SendMessageToPipe(pipe, "Python library are not found in the target process.");
                             }
                         }
-                        else
-                        {
-                            SendMessageToPipe(pipe, "File not found.");
-                        }
-                    }
                 }
                 else if (IsEqual(buffer, "StopDumpingPyc")) {
                     if (!IsHookedPy)
