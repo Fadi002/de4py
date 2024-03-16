@@ -58,6 +58,10 @@
           <label for="SSL">Dump OpenSSL Encrypted traffic:</label>
           <input type="checkbox" id="SSLBOX">
         </div>
+        <div class="checkbox-container">
+          <label for="PYCDUMB">PYC dumper:</label>
+          <input type="checkbox" id="PYCDUMB">
+        </div>
         <br>
         <button class="btns" onclick="navto('pyshell')">Back to PyShell menu</button>
       </div>
@@ -104,7 +108,10 @@
         <div class="frame" style="position: absolute; top: 120px; left: 50px; width: 350px; height: 85px;">
           <label for="pidinput">Target pid:</label>
           <input type="text" id="pidinput" class="custom-input">
-          <button style="margin-top: 15px;margin-left:120px;" class="btns" onclick="injectpyshell()">Inject</button>
+          <div style="text-align: center;">
+            <button style="margin-top: 15px; margin-left: 10px;" class="btns" onclick="injectpyshell('normal')">Inject</button>
+            <button style="margin-top: 15px; margin-left: 10px;" class="btns" onclick="injectpyshell('stealth')">Stealth Inject</button>
+        </div>        
         </div>
         <div class="frame" style="position: absolute; top: 270px; left: 50px; width: 890px; height: 240px; padding:0px;">
           <h1 style="margin-left:390px;">Commands</h1>

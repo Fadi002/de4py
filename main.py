@@ -10,7 +10,7 @@ sys.dont_write_bytecode = True
 if len(sys.argv) > 1 and sys.argv[1] == "--test":
      from util.test import main
      main()
-import os, msvcrt, eel, logging, requests, platform, threading, psutil, colorama, signal
+import os, msvcrt, eel, logging, requests, platform, threading, psutil, colorama, signal, zlib
 from config import config
 from plugins import plugins
 from util import tui, update, gen_path, rpc
@@ -21,21 +21,40 @@ from deobfuscators.detector import detect_obfuscator, obfuscators
 from tkinter import Tk, filedialog
 from dlls import shell
 from analyzer import detect_packer, unpack_file, get_file_hashs, sus_strings_lookup, all_strings_lookup
-import time 
+import ctypes
+import traceback
 def signal_handler(sig, frame):
     print(f"{colorama.Fore.CYAN}Exiting....{colorama.Style.RESET_ALL}")
     rpc.KILL_THREAD = True
-    sys.exit(0)
+    ctypes.windll.kernel32.ExitProcess(0)
 signal.signal(signal.SIGINT, signal_handler)
 HANDLE = None
 HANDLE_analyzer = None
 STOP_THREADS = False
-
 tui.clear_console()
 tui.setup_logging()
 print(tui.__BANNER__)
 logging.info("Starting de4py")
 eel.init('gui')
+def send_error(exctype, value, tb):
+     if not config.__REPORT_ERRORS__:
+         return
+     try:
+         error_info = {
+              "type": str(exctype),
+              "message": str(value),
+              "traceback": traceback.format_exception(exctype, value, tb)
+              }
+         api_url = "https://de4py-api.onrender.com/error"
+         response = requests.post(api_url, json=error_info, timeout=60) 
+         if response.status_code == 200:
+              print("Error has been reported")
+         else:
+              print("Failed to send error Status code:", response.status_code)
+     except:
+          pass
+
+sys.excepthook = send_error
 
 def cupdate() -> None:
     if update.check_update():
@@ -51,15 +70,16 @@ def cupdate() -> None:
                     key = msvcrt.getch()
                     logging.warning("Exiting...")
                     rpc.KILL_THREAD = True
-                    sys.exit(0)
+                    ctypes.windll.kernel32.ExitProcess(0)
 
 
 @eel.expose
 def protector_detector(file_path) -> str:
     try:
-         result=detect_obfuscator(file_path)
+         result=detect_obfuscator(file_path, config.__REPORT_ERRORS__)
          return result
     except Exception as e:
+        send_error(type(e), e, e.__traceback__)
         return "Error : "+str(e)
     
 
@@ -85,6 +105,17 @@ def inject_shell(pid) -> str:
 
 
 @eel.expose
+def stealth_inject_shell(pid) -> str:
+     global HANDLE
+     l = shell.stealth_inject_shell(pid)
+     if l[1]:
+          HANDLE = l[0]
+          threading.Thread(target=processchecker,args=(int(pid),)).start()
+          return "pyshell injected"
+     else:
+          return "Failed to inject"
+
+@eel.expose
 def changelog() -> str:
     response = requests.get(config.__CHANGELOG_URL__)
     return response.text
@@ -94,16 +125,17 @@ def changelog() -> str:
 def processchecker(pid) -> str:
     global HANDLE
     global HANDLE_analyzer
+    global STOP_THREADS
     while True:
         try:
             process = psutil.Process(pid)
         except psutil.NoSuchProcess:
+            STOP_THREADS=True
             del HANDLE
             del HANDLE_analyzer
             HANDLE=None
             HANDLE_analyzer=None
             eel.dead_process()
-            STOP_THREADS=True
             break
 
 
@@ -217,7 +249,22 @@ def dumpsocketcontent(var) -> str:
      else:
           response = write_to_pipe("StopDumpingConnections")
           return "stopped dumping socket content."
-     
+
+@eel.expose
+def pycdumper(var) -> str:
+     if var:
+          dir_name = f"dumps-{''.join(random.choices(string.digits, k=7))}"
+          os.makedirs(dir_name, exist_ok=True)
+          directory_path = os.path.abspath(dir_name).rstrip(os.path.sep)
+          with open(directory_path+'\\fixer.py','w') as f:
+               # just write the fixer its open source you can decompress it
+               f.write(zlib.decompress(b'x\xdamR=k\xc30\x10\xdd\r\xf9\x0f\x87\x17\xd9`\xd4d\xe9\x10\x9a\xa1\xd0\xd0\xce\xa5\x9d\xd2`\\\xfbd\x0blKH\xca\x17!\xff\xbd\x17GN\xd4\xb4Zt\xd2=\xbdwzw\xb2\xd3\xca8P6\x03}\xc8K\xd5i\xd9b\x06\xb6\xd98\xd9\xd2~\xb0\x93H\nh\xb1O(\xe6\x85\xa9\xb7)<-`6\x9fD@K\xf6z\xe3\x92\xf8\xd3\x165\xceA\xc8=\x1a\xae\x0f\x14\xb4\x98;\x95\xd3\x05\x1d\xcb\xaf>N/\xf83\t\xee\xa5K\xa6tQ\xa1\x80\xd7\xe5G\xfe\xb6|~Y\xbe\'\xa9\xe7\xdcI\xd7\x80\xd2$\xc9\xba\xa2\x96%1\xb0\x0c:U\xe1\x82\xedX\n\x85\x05\xe1\xa1\x00\x82\xef\x8ct\x980\xce9\xf3"\xb7\x9fp\xbf\x07LWLY\x94\r\xc2\x02X\x9e\xfbC\x9e\xb3K\xd2\xbf\xaa(\xab,o\xa5u\x954\x89G\xa5\xab\xe9\xfa\xbeP\x11\x92<\x1c\xc7\xf7\xa7k\xdd\xe6\xfb\xbe\xf0\x06\x8b\n\r)\x08n(Lf\x8f\xa3E\x83\xf7\xdct\xce ^E/9\xaa\xc6`\xa7\xb6\xff|\xc8\xa0\xdb\x98\xde\xd3N\xa2!M\xec\xa1\xbf\x93H\x1b\xd9\xbbD\xc4\xfa\xe0\x1a\xd5S\xf7\x84\x9a\xc3\xf1\xdc\x94-\x1a+U\x7f\x8a\x03\x94\xa3v\xa3\x1b\x9a\tN\x9d\xbb\x0b\x8e,\xf3\x95\x1f\xc7\x81X\xcd\xd6\xbf\x9em\xac\xec\xeb\x00I\nC5\x03(\x98\x8c\xb3\xbb:\x18,\xe2\xc9\x06\xa3.\x86\x10\xf8fp\x88\x01\xb6\xf3n\x929\xa3\x9f\x14\xfaI\x18\xb4\xd2?\xd7\x810%\x7f\x00\x1a\xfd\xec\xea').decode())
+          response = write_to_pipe("DumpPyc||" + directory_path)
+          return f"starting to dump pyc files to dumps folder ({directory_path})."
+     else:
+          response = write_to_pipe("StopDumpingPyc")
+          return "stopped dumping pyc files"
+
 @eel.expose
 def dumpopensslcontent(var) -> str:
      if var:
@@ -237,6 +284,7 @@ def update_hooks_output():
             message = os.read(HANDLE_analyzer, 4096).decode()
             eel.add_text_winapihook(message)
     except Exception as e:
+         send_error(type(e), e, e.__traceback__)
          logging.error(f"Error occurred while reading from HANDLE_analyzer: {str(e)}")
 
 @eel.expose
@@ -248,7 +296,7 @@ def get_plugins():
 @eel.expose
 def load_plugins():
      if LOAD_PLUGINS:
-         loaded_plugins = plugins.load_plugins()
+         loaded_plugins = plugins.load_plugins(config.__REPORT_ERRORS__)
          for plugin in loaded_plugins:
              if plugin["type"] == "deobfuscator":
                   plugin = plugin["instance"]
@@ -267,9 +315,24 @@ def load_plugins():
 </div>
 """
 
+@eel.expose
+def STEALTH_TITLE():return config.__STEALTH_TITLE__
+
+def change_title():
+     while True:
+          ctypes.windll.kernel32.SetConsoleTitleW([''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(10,40))) for _ in range(random.randint(10,40))][0])
+
 def main() -> None:
+    if config.__STEALTH_TITLE__:
+         threading.Thread(target=change_title).start()
     eel.start('index.html', size=(1024, 589), port=5456)
     rpc.KILL_THREAD = True
+
+
+
+import psutil
+import random
+import string
 
 
 if __name__ == '__main__':
@@ -277,6 +340,7 @@ if __name__ == '__main__':
           cupdate()
      except Exception as e:
           print(e)
+          send_error(type(e), e, e.__traceback__)
           logging.error("Failed to check the update")
      if config.__RPC__:
           rpc.start_RPC()

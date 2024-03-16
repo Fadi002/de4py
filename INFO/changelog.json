@@ -51,5 +51,14 @@
             "Improved WinAPI hooking",
             "Added test feature (use --test to run it) "
         ]
+    },
+    {
+        "version": "1.0.8",
+        "changes": [
+            "Added new deobfuscator (development tools obf)",
+            "Added runtime dumper",
+            "Added stealth features (titles + injecton)",
+            "Added error reports"
+        ]
     }
 ]
