@@ -4,6 +4,7 @@
 *********************************************************************/
 #include <iostream>
 #include <Windows.h>
+#include "injector.h"
 using namespace std;
 bool Inject(DWORD PID, char* DllPath)
 {
@@ -42,12 +43,30 @@ bool Showconsole(int pid) {
 
 }
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
-        return 4;
-    }
-    unsigned int pid = atoi(argv[2]);
-    DWORD dwpid = static_cast<DWORD>(pid);
-    if (strcmp(argv[1], "Showconsole") == 0) {
+    if (strcmp(argv[1], "StealthInjection") == 0) {
+        unsigned int pid = atoi(argv[3]);
+        DWORD dwpid = static_cast<DWORD>(pid);
+        char* dllpath = argv[2];
+        HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+        std::ifstream File(dllpath, std::ios::binary | std::ios::ate);
+        auto FileSize = File.tellg();
+        BYTE* pSrcData = new BYTE[(UINT_PTR)FileSize];
+        File.seekg(0, std::ios::beg);
+        File.read((char*)(pSrcData), FileSize);
+        File.close();
+        if (!ManualMapDll(hProc, pSrcData, FileSize)) {
+            delete[] pSrcData;
+            CloseHandle(hProc);
+            printf("Error while mapping.\n");
+            return -8;
+        } else {
+            printf("OK.");
+            return 0;
+        }
+
+    } else if (strcmp(argv[1], "Showconsole") == 0) {
+        unsigned int pid = atoi(argv[2]);
+        DWORD dwpid = static_cast<DWORD>(pid);
         if (Showconsole(pid)) {
             printf("OK.");
             return 0;
@@ -56,14 +75,18 @@ int main(int argc, char* argv[]) {
             printf("NO.");
             return 4;
         }
-    }
-    char* dllpath = argv[1];
-    if (Inject(pid, dllpath)) {
-        printf("OK.");
-        return 0;
-    }
-    else {
-        printf("NO.");
-        return 4;
+    } else {
+        char* dllpath = argv[1];
+        unsigned int pid = atoi(argv[2]);
+        DWORD dwpid = static_cast<DWORD>(pid);
+        if (Inject(pid, dllpath)) {
+            printf("OK.");
+            return 0;
+        }
+        else {
+            printf("NO.");
+            return 4;
+        }
     }
 }
+ 

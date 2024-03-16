@@ -128,7 +128,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="injector.cpp" />
     <ClCompile Include="NativeInjector.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="injector.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
