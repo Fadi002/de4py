@@ -1,4 +1,4 @@
-import os, importlib.util, inspect, logging
+import os, importlib.util, inspect, logging, traceback, requests
 
 html_result = ''
 def build_html(plugin):
@@ -11,6 +11,22 @@ def build_html(plugin):
 </div>
 '''
     return html_result
+
+def send_error(exctype, value, tb):
+     try:
+         error_info = {
+              "type": str(exctype),
+              "message": str(value),
+              "traceback": traceback.format_exception(exctype, value, tb)
+              }
+         api_url = "https://de4py-api.onrender.com/error"
+         response = requests.post(api_url, json=error_info, timeout=60) 
+         if response.status_code == 200:
+              print("Error has been reported")
+         else:
+              print("Failed to send error Status code:", response.status_code)
+     except:
+          pass
 
 class DeobfuscatorPlugin:
     def __init__(self, plugin_name, creator, link, regex, deobfuscator_function):
@@ -26,20 +42,20 @@ class ThemePlugin:
         self.link = link
         self.css = css
 
-def load_plugins():
+def load_plugins(senderr):
     plugins_folder = 'plugins'
     plugins = []
     for plugin_file in [f for f in os.listdir(plugins_folder) if f.endswith(".py") and not f.startswith("__") and f != "plugins.py"]:
         try:
             plugin_path = os.path.join(plugins_folder, plugin_file)
-            plugin_class = load_plugin(plugin_path)
+            plugin_class = load_plugin(plugin_path, senderr)
             if plugin_class:
                 plugins.append({"type": "deobfuscator" if issubclass(plugin_class, DeobfuscatorPlugin) else "theme", "instance": plugin_class()})
         except Exception as e:
             logging.error(f"Failed to load plugin {plugin_file} ERROR:\n{e}")
     return plugins
 
-def load_plugin(plugin_path):
+def load_plugin(plugin_path, senderr):
     try:
         spec = importlib.util.spec_from_file_location("plugin_module", plugin_path)
         plugin_module = importlib.util.module_from_spec(spec)
@@ -47,6 +63,7 @@ def load_plugin(plugin_path):
         return get_class(plugin_module)
     except Exception as e:
         logging.error(f"Error loading plugin from {plugin_path}: {e}")
+        if senderr:send_error(type(e), e, e.__traceback__)
         return None
 
 def get_class(module, exclude_module='plugins.plugins'):

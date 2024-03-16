@@ -69,7 +69,7 @@ def check_python_version():
         colored_print(GREEN, f"Python version {major}.{minor} is supported.")
         return False
     else:
-        colored_print(RED, f"Python version {major}.{minor} is not supported. Required: 3.11 or lower")
+        colored_print(RED, f"Python version {major}.{minor} is not supported. Required: 3.11-3.8")
         input(f"{RESET}Press enter to continue\n")
         return True
 
