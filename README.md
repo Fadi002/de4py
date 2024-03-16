@@ -68,6 +68,8 @@ All contributions are welcomed.
 ## Social media links
 At this moment we have discord only https://discord.gg/cYxxUHsbRm
 
+## Issues
+Please before open issue read the [FAQ](https://github.com/Fadi002/de4py/blob/main/FAQ.md).
 
 ## Disclaimer
 This tool are for educational purposes only, never try deobfuscating someone's software without permission, ALL developers and contributors are not responsible for any kind of misuse.
