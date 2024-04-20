@@ -3,7 +3,6 @@
          | De4py project : https://github.com/Fadi002/de4py |
 *********************************************************************
 '''
-LOAD_PLUGINS = True # Change that to true if you want to load the plugins
 
 import sys
 sys.dont_write_bytecode = True
@@ -36,25 +35,7 @@ tui.setup_logging()
 print(tui.__BANNER__)
 logging.info("Starting de4py")
 eel.init('gui')
-def send_error(exctype, value, tb):
-     if not config.__REPORT_ERRORS__:
-         return
-     try:
-         error_info = {
-              "type": str(exctype),
-              "message": str(value),
-              "traceback": traceback.format_exception(exctype, value, tb)
-              }
-         api_url = "https://de4py-api.onrender.com/error"
-         response = requests.post(api_url, json=error_info, timeout=60) 
-         if response.status_code == 200:
-              print("Error has been reported")
-         else:
-              print("Failed to send error Status code:", response.status_code)
-     except:
-          pass
 
-sys.excepthook = send_error
 
 def cupdate() -> None:
     if update.check_update():
@@ -76,10 +57,11 @@ def cupdate() -> None:
 @eel.expose
 def protector_detector(file_path) -> str:
     try:
-         result=detect_obfuscator(file_path, config.__REPORT_ERRORS__)
+         logging.info("Trying to deobfuscate a file")
+         result=detect_obfuscator(file_path)
          return result
     except Exception as e:
-        send_error(type(e), e, e.__traceback__)
+        logging.error(f"Error: {traceback.format_exc()}")
         return "Error : "+str(e)
     
 
@@ -250,6 +232,8 @@ def dumpsocketcontent(var) -> str:
           response = write_to_pipe("StopDumpingConnections")
           return "stopped dumping socket content."
 
+
+
 @eel.expose
 def pycdumper(var) -> str:
      if var:
@@ -284,7 +268,6 @@ def update_hooks_output():
             message = os.read(HANDLE_analyzer, 4096).decode()
             eel.add_text_winapihook(message)
     except Exception as e:
-         send_error(type(e), e, e.__traceback__)
          logging.error(f"Error occurred while reading from HANDLE_analyzer: {str(e)}")
 
 @eel.expose
@@ -295,8 +278,8 @@ def get_plugins():
 
 @eel.expose
 def load_plugins():
-     if LOAD_PLUGINS:
-         loaded_plugins = plugins.load_plugins(config.__REPORT_ERRORS__)
+     if config.__LOAD_PLUGINS__:
+         loaded_plugins = plugins.load_plugins()
          for plugin in loaded_plugins:
              if plugin["type"] == "deobfuscator":
                   plugin = plugin["instance"]
@@ -318,16 +301,24 @@ def load_plugins():
 @eel.expose
 def STEALTH_TITLE():return config.__STEALTH_TITLE__
 
-def change_title():
-     while True:
-          ctypes.windll.kernel32.SetConsoleTitleW([''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(10,40))) for _ in range(random.randint(10,40))][0])
 
 def main() -> None:
     if config.__STEALTH_TITLE__:
-         threading.Thread(target=change_title).start()
+         logging.info("Stealth mode is on")
+         ctypes.windll.kernel32.SetConsoleTitleW([''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(10,40))) for _ in range(random.randint(10,40))][0])
+    else:
+         logging.info("Stealth mode is off")
+    logging.info("Starting the ui")
     eel.start('index.html', size=(1024, 589), port=5456)
     rpc.KILL_THREAD = True
 
+@eel.expose
+def update_config(key, value):
+     config.update_json(key, value)
+
+@eel.expose
+def get_config():
+    return config.get_config()
 
 
 import psutil
@@ -339,8 +330,6 @@ if __name__ == '__main__':
      try:
           cupdate()
      except Exception as e:
-          print(e)
-          send_error(type(e), e, e.__traceback__)
           logging.error("Failed to check the update")
      if config.__RPC__:
           rpc.start_RPC()
