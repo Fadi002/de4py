@@ -324,13 +324,31 @@ function applyCSS(cssCode) {
     bodyElement.style.cssText += cssCode;
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+function updateConfig(key, value) {
+    eel.update_config(key, value)();
+    updateCheckboxes();
+}
+
+eel.expose(updateCheckboxes);
+
+async function updateCheckboxes(config) {
+    var config = await eel.get_config()() 
+    document.getElementById('RPC').checked = config.__RPC__;
+    document.getElementById('STEALTH_TITLE').checked = config.__STEALTH_TITLE__;
+    document.getElementById('REPORT_ERRORS').checked = config.__REPORT_ERRORS__;
+    document.getElementById('LOAD_PLUGINS').checked = config.__LOAD_PLUGINS__;
+}
+
+
+document.addEventListener('DOMContentLoaded', async function() {
     loadchangelog();
     load_info();
     loadPlugins();
-    if (eel.STEALTH_TITLE()) {
-        setInterval(change_title, 0);
+    updateCheckboxes();
+    if (await eel.STEALTH_TITLE()()) {
+        change_title()
     }
+    document.getElementById("buildNumber").innerText = (await eel.get_config()()).__BUILD_NUM__;
     setInterval(updatetime, 1000);
     const navbar = document.getElementById('navbar');
     const menuToggle = document.getElementById('menulol');

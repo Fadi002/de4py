@@ -60,5 +60,16 @@
             "Added stealth features (titles + injecton)",
             "Added error reports"
         ]
+    },
+    {
+        "version": "1.1.9",
+        "changes": [
+            "Added settings section",
+            "Fixed some bugs in pyshell",
+            "Removed errors reporting",
+            "Ended support on windows binaries",
+            "Follow versions system",
+            "Better logs"
+        ]
     }
 ]

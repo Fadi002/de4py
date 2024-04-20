@@ -818,8 +818,8 @@ int IsEqual(const char* str1, const char* str2) {
 DWORD WINAPI MainThread(HMODULE hModule)
 {
     std::string ExitHook = "import sys\nimport os\ndef _exit(*var):pass\nsetattr(sys, 'exit', _exit)\nsetattr(__builtins__, 'exit', _exit)\nsetattr(os, '_exit', _exit)\n";
-    std::string DumpStringsHook = "\n[(n, v) for n, v in globals().items() if isinstance(v, (str, dict, list, int))]; open(DE4PYHOOKEEEEE99_ignore, 'w').write('\\n'.join(f'{n} = {v}' for n, v in [(n, v) for n, v in globals().items() if isinstance(v, (str, dict, list, int))]))";
-    std::string GetFunctionsHook = "\nimport inspect as de4pyhook3_ignore; de4pyhook2_ignore = lambda de4pyhook1_ignore: hex(id(de4pyhook1_ignore.__code__.co_code)) if hasattr(de4pyhook1_ignore, '__code__') else None; [open(DE4PYHOOKEEEEE99_ignore, 'a').write(f\"{'function' if de4pyhook3_ignore.isfunction(m) else 'member'} name: {n}, address: {de4pyhook2_ignore(m)}\\n\") for n, m in de4pyhook3_ignore.getmembers(__import__('__main__'))]";
+    std::string DumpStringsHook = "\n[(n, v) for n, v in globals().items() if isinstance(v, (str, dict, list, int))]; open(DE4PYHOOKEEEEE99_ignore, 'w', encoding='utf-8').write('\\n'.join(f'{n} = {v}' for n, v in [(n, v) for n, v in globals().items() if isinstance(v, (str, dict, list, int))]))";
+    std::string GetFunctionsHook = "\nimport inspect as de4pyhook3_ignore; de4pyhook2_ignore = lambda de4pyhook1_ignore: hex(id(de4pyhook1_ignore.__code__.co_code)) if hasattr(de4pyhook1_ignore, '__code__') else None; [open(DE4PYHOOKEEEEE99_ignore, 'a', encoding='utf-8').write(f\"{'function' if de4pyhook3_ignore.isfunction(m) else 'member'} name: {n}, address: {de4pyhook2_ignore(m)}\\n\") for n, m in de4pyhook3_ignore.getmembers(__import__('__main__'))]";
     std::string PYTHON_CODE_EXECUTOR = "\nexec(open(DE4PY_ignore6784878665878698698679067060,'r',encoding='utf8').read())";
     sdk.InitCPython();
     Py_SetProgramName(L"de4pyPyshell");

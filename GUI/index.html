@@ -11,6 +11,7 @@
     <title>de4py</title>
   </head>
   <body>
+    <div class="build-number" id="buildNumber" style="position: fixed;bottom: 10px;right: 10px;color: rgba(255, 255, 255, 0.1); /* Almost invisible color */font-size: 12px;user-select: none;"></div>
     <div id="notification-container" style="position:fixed;pointer-events:none;"></div>
     <div id="loading-spin">
       <div id="loading-spinner"></div>
@@ -27,6 +28,7 @@
       <div onclick="navto('pyshell')" class="btn" style="background-image: url('feather/terminal.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">PyShell</div>
       <div onclick="navto('analyzer')" class="btn" style="background-image: url('feather/file-text.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">Analyzer</div>
       <div onclick="navto('plugins')" class="btn" style="background-image: url('feather/grid.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">Plugins</div>
+      <div onclick="navto('settings')" class="btn" style="background-image: url('feather/settings.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">Settings</div>
       <div onclick="navto('about')" class="btn" style="background-image: url('feather/info.svg');background-size: 24px 24px;background-repeat: no-repeat;background-position: 10px center;">About</div>
     </div>
     <div class="menulol-container" id="menulol" style="left: 20px;">
@@ -173,6 +175,27 @@
       <section id="plugins" class="center hidden">
         <div id="plugins-container">
         </div>      
+      </section>
+      <section id="settings" class="center hidden">
+        <div class="frame" style="top: 50%;left: 50%;width: 30em;height: 18em;transform: translate(-50%, -50%);position: fixed;">
+          <h1>De4py settings</h1>
+          <div class="checkbox-container">
+            <label for="RPC">RPC:</label>
+            <input type="checkbox" id="RPC" onchange="updateConfig('__RPC__', this.checked)">
+        </div>
+        <br>
+        <div class="checkbox-container">
+            <label for="STEALTH_TITLE">Stealth titles:</label>
+            <input type="checkbox" id="STEALTH_TITLE" onchange="updateConfig('__STEALTH_TITLE__', this.checked)">
+        </div>
+        <br>
+        <div class="checkbox-container">
+            <label for="LOAD_PLUGINS">Load plugins:</label>
+            <input type="checkbox" id="LOAD_PLUGINS" onchange="updateConfig('__LOAD_PLUGINS__', this.checked)">
+        </div>
+        <br>
+        <h4>Note: restart the tool to apply the new settings correctly</h4>        
+        </div>
       </section>
       <section id="about" class="center hidden">
         <div class="about-info frame">

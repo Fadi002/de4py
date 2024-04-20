@@ -1,6 +1,8 @@
-import os, logging, time, shutil, sys
-from colorama import Fore, Style, AnsiToWin32
+import os, logging, time, shutil, sys, datetime, platform
+from colorama import Fore, Style, AnsiToWin32, init
 from traceback import extract_tb
+from logging.handlers import TimedRotatingFileHandler
+init()
 __RAW_BANNER__ = '''
 ██████╗ ███████╗██╗  ██╗██████╗ ██╗   ██╗
 ██╔══██╗██╔════╝██║  ██║██╔══██╗╚██╗ ██╔╝
@@ -46,12 +48,22 @@ __BANNER__ = water(__RAW_BANNER__)
 def clear_console():os.system('cls' if os.name == 'nt' else 'clear')
 
 def setup_logging():
+    logs_dir = 'logs'
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir)
     log_level = logging.INFO
     logging_format = "%(levelname)s - %(message)s"
+    file_handler = TimedRotatingFileHandler(filename=os.path.join(logs_dir, f'de4py-logs-{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.log'))
+    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    file_handler.setFormatter(file_formatter)
+    file_logger = logging.getLogger('file_logger')
+    file_logger.setLevel(logging.INFO)
+    file_logger.addHandler(file_handler)
+    file_logger.info(f"System Architecture: {platform.architecture()[0]}, OS: {platform.platform()}, Python Version: {platform.python_version()}")
     logging.basicConfig(
         level=log_level,
         format=logging_format,
-        handlers=[ColorizingStreamHandler()])
+        handlers=[ColorizingStreamHandler(), file_handler])
 
 class ColorizingStreamHandler(logging.StreamHandler):
     def emit(self, record):
@@ -182,3 +194,5 @@ class Add:
 
     def _edit(ban1, size):
         return [line + (size - len(line)) * " " for line in ban1]
+
+sys.excepthook = custom_error
