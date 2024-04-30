@@ -43,6 +43,9 @@ The `Deobfuscator` class is responsible for detecting and deobfuscating obfuscat
 # Create an instance of the Deobfuscator class
 deobfuscator = Deobfuscator()
 
+# Shows a list of supported obfuscators
+print(deobfuscator.supported_obfuscators_list)
+
 # Automatically detect the obfuscator used in a Python file and deobfuscate it
 file_path = "path/to/python/file.py"
 deobfuscated_code = deobfuscator.auto_deobfuscator(file_path)
