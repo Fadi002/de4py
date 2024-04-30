@@ -46,11 +46,11 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
     </tr>
     <tr>
       <td>Plugins system</td>
-      <td>You can add plugins to de4py to customize the theme or add custom deobfuscators [plugins repo and docs here](https://github.com/Fadi002/de4py-plugins-repo)</td>
+      <td>You can add plugins to de4py to customize the theme or add custom deobfuscators <a href="https://github.com/Fadi002/de4py-plugins-repo">plugins repo and docs here</a></td>
     </tr>
     <tr>
       <td>API system</td>
-      <td>You can use de4py features such as deobfusctor engine and pyshell in your own tools [API docs here](https://github.com/Fadi002/de4py/tree/main/api)/td>
+      <td>You can use de4py features such as deobfusctor engine and pyshell in your own tools <a href="https://github.com/Fadi002/de4py/tree/main/api">API docs here</a></td>
     </tr>
   </tbody>
 </table>
