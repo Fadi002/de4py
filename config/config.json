@@ -1,9 +1,9 @@
 {
-    "__VERSION__": "V1.1.9",
+    "__VERSION__": "V1.2.9",
     "__CHANGELOG_URL__": "https://raw.githubusercontent.com/Fadi002/de4py/main/INFO/changelog.json",
     "__VERSION_URL__": "https://raw.githubusercontent.com/Fadi002/de4py/main/INFO/version",
     "__RPC__": true,
     "__STEALTH_TITLE__": true,
     "__LOAD_PLUGINS__": true,
-    "__BUILD_NUM__": "20240421-1.1.9-stable-de4py"
+    "__BUILD_NUM__": "20240501-1.2.9-stable-de4py"
 }
