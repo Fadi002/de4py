@@ -10,7 +10,7 @@ def execute_command(command):
     exit_code = process.wait()
     return exit_code
 
-def inject_shell(pid, bp:None):
+def inject_shell(pid, bp=None):
     if bp == None:
         exit_code = execute_command(['dlls\\NativeInjector.exe', os.path.abspath("dlls\\pyshell.dll"), pid])
     else:
@@ -22,7 +22,7 @@ def inject_shell(pid, bp:None):
     else:
         return (None, False)
 
-def stealth_inject_shell(pid, bp:None):
+def stealth_inject_shell(pid, bp=None):
     file_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(random.randint(5,20)))
     if bp == None:
         shutil.copy2('dlls\\NativeInjector.exe', f'dlls\\{file_name}.exe')
