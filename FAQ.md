@@ -4,7 +4,7 @@
 A: At this moment, no.
 
 **Q: I'm encountering an error "No module named 'bottle.ext.websocket'."**
-A: This issue can arise when using Python 3.12. To resolve it, it's recommended to use Python versions between 3.8 and 3.11. You can find fixes for this problem [here](https://bit.ly/47S6xTn).
+A: This issue can arise when using Python 3.12. To resolve it, it's recommended to use Python versions between 3.9 and 3.11. You can find fixes for this problem [here](https://bit.ly/47S6xTn).
 
 **Q: I'm getting an error "No module named 'X'."**
 A: Ensure that you have installed all the packages listed in the requirements.txt file.
