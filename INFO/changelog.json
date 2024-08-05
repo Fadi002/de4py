@@ -77,5 +77,11 @@
         "changes": [
             "Added API support"
         ]
+    }, 
+    {
+        "version": "final version",
+        "changes": [
+            "end support on the project + archived"
+        ]
     }
 ]
