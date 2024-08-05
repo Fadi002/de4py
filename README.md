@@ -1,3 +1,8 @@
+> [!IMPORTANT]  
+> this project has been officially archived. It has been a rewarding experience to develop and share this project with the community. However, I’ve noticed that many users lack the necessary coding or reverse engineering experience to fully benefit from the project. This has led to an increase in basic questions and issues that detract from the project's original intent.
+
+---
+
 <a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/de4py.jpg?raw=true"></img></a>
 # de4py
 <p align="center"><b>important note: IF YOU ARE A SKID AND DON'T KNOW HOW TO CODE OR USE AI TO CODE AND HAVE NO EXPERIENCE AT ALL THEN THIS TOOL IS NOT FOR YOU !!!</b></p>
