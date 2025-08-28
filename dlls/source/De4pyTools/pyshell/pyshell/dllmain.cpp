@@ -686,6 +686,27 @@ HMODULE GetOpenSSL()
     return Python;
 }
 
+char* GetOpenSSLLibName()
+{
+    HANDLE hProcess = GetCurrentProcess();
+    HMODULE hModules[1024];
+    DWORD cbNeeded;
+    HMODULE Python = NULL;
+    if (EnumProcessModules(hProcess, hModules, sizeof(hModules), &cbNeeded))
+    {
+        for (DWORD i = 0; i < (cbNeeded / sizeof(HMODULE)); i++) {
+            char szModule[MAX_PATH];
+            if (GetModuleFileNameExA(hProcess, hModules[i], szModule, sizeof(szModule) / sizeof(char))) {
+                if (strstr(szModule, "libssl") != NULL) {
+                    return szModule;
+                }
+            }
+        }
+    }
+    CloseHandle(hProcess);
+    return NULL;
+}
+
 BOOL IsDumping = FALSE;
 BOOL DumpSSL(bool Unhook)
 {
@@ -697,12 +718,14 @@ BOOL DumpSSL(bool Unhook)
         DetourDetach(&(LPVOID&)OriginalSSL_write_ex, HookedSSL_write_ex);
         DetourTransactionCommit();
         IsDumping = false;
+
     }
     else
     {
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
         HMODULE hModule = GetOpenSSL();
+        char* OpenSSLName = GetOpenSSLLibName();
         PBYTE Real = (PBYTE)GetProcAddress(hModule, "SSL_read_ex");
         if (Real[0] == 0xE9) {
             int offset = *(int*)(Real + 1);
@@ -711,7 +734,7 @@ BOOL DumpSSL(bool Unhook)
         }
         else
         {
-            OriginalSSL_read_ex = reinterpret_cast<RealSSL_read_ex>(DetourFindFunction("libssl-1_1.dll", "SSL_read_ex"));
+            OriginalSSL_read_ex = reinterpret_cast<RealSSL_read_ex>(DetourFindFunction(OpenSSLName, "SSL_read_ex"));
         }
         DetourAttach(&(LPVOID&)OriginalSSL_read_ex, HookedSSL_read_ex);
         PBYTE Real2 = (PBYTE)GetProcAddress(hModule, "SSL_write_ex");
@@ -722,7 +745,7 @@ BOOL DumpSSL(bool Unhook)
         }
         else
         {
-            OriginalSSL_write_ex = reinterpret_cast<RealSSL_write_ex>(DetourFindFunction("libssl-1_1.dll", "SSL_write_ex"));
+            OriginalSSL_write_ex = reinterpret_cast<RealSSL_write_ex>(DetourFindFunction(OpenSSLName, "SSL_write_ex"));
         }
         DetourAttach(&(LPVOID&)OriginalSSL_write_ex, HookedSSL_write_ex);
         PBYTE Real3 = (PBYTE)GetProcAddress(hModule, "SSL_read");
@@ -733,7 +756,7 @@ BOOL DumpSSL(bool Unhook)
         }
         else
         {
-            OriginalSSL_read = reinterpret_cast<RealSSL_read>(DetourFindFunction("libssl-1_1.dll", "SSL_read"));
+            OriginalSSL_read = reinterpret_cast<RealSSL_read>(DetourFindFunction(OpenSSLName, "SSL_read"));
         }
         DetourAttach(&(LPVOID&)OriginalSSL_read, HookedSSL_read);
         PBYTE Real4 = (PBYTE)GetProcAddress(hModule, "SSL_write");
@@ -744,7 +767,7 @@ BOOL DumpSSL(bool Unhook)
         }
         else
         {
-            OriginalSSL_write = reinterpret_cast<RealSSL_write>(DetourFindFunction("libssl-1_1.dll", "SSL_write"));
+            OriginalSSL_write = reinterpret_cast<RealSSL_write>(DetourFindFunction(OpenSSLName, "SSL_write"));
         }
         DetourAttach(&(LPVOID&)OriginalSSL_write, HookedSSL_write);
         if (DetourTransactionCommit() != NO_ERROR)
@@ -789,15 +812,17 @@ void* HookedPyEval_EvalCode(void* co, void* globals, void* locals)
 }
 
 BOOL IsHookedPy = false;
-void DumpPythonCode(BOOL Unhook)
+BOOL DumpPythonCode(BOOL Unhook)
 {
     if (Unhook)
     {
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
         DetourDetach(&(LPVOID&)OriginalPyEval_EvalCode, HookedPyEval_EvalCode);
-        DetourTransactionCommit();
+        if (DetourTransactionCommit() != NO_ERROR)
+            return false;
         IsHookedPy = false;
+        return true;
     }
     else
     {
@@ -806,8 +831,36 @@ void DumpPythonCode(BOOL Unhook)
         OriginalPyEval_EvalCode = (RealPyEval_EvalCode)GetProcAddress(GetPythonDll(), "PyEval_EvalCode");
         DetourAttach(&(LPVOID&)OriginalPyEval_EvalCode, HookedPyEval_EvalCode);
     }
-        DetourTransactionCommit();
-        IsHookedPy = true;
+    if (DetourTransactionCommit() != NO_ERROR)
+        return false;
+    IsHookedPy = true;
+    return true;
+}
+
+BOOL IsHookedEnc = false;
+BOOL DumpEncryptionData(BOOL Unhook)
+{
+    if (Unhook)
+    {
+        DetourTransactionBegin();
+        DetourUpdateThread(GetCurrentThread());
+        DetourDetach(&(LPVOID&)OriginalPyEval_EvalCode, HookedPyEval_EvalCode);
+        if (DetourTransactionCommit() != NO_ERROR)
+            return false;
+        IsHookedEnc = false;
+        return true;
+    }
+    else
+    {
+        DetourTransactionBegin();
+        DetourUpdateThread(GetCurrentThread());
+        OriginalPyEval_EvalCode = (RealPyEval_EvalCode)GetProcAddress(GetPythonDll(), "PyEval_EvalCode");
+        DetourAttach(&(LPVOID&)OriginalPyEval_EvalCode, HookedPyEval_EvalCode);
+    }
+    if (DetourTransactionCommit() != NO_ERROR)
+        return false;
+    IsHookedEnc = true;
+    return true;
 }
 
 //just to make the code look cleaner
@@ -817,7 +870,7 @@ int IsEqual(const char* str1, const char* str2) {
 
 DWORD WINAPI MainThread(HMODULE hModule)
 {
-    std::string ExitHook = "import sys\nimport os\ndef _exit(*var):pass\nsetattr(sys, 'exit', _exit)\nsetattr(__builtins__, 'exit', _exit)\nsetattr(os, '_exit', _exit)\n";
+    std::string ExitHook = "import sys\nimport os\ndef _exit(*var):pass\nsetattr(sys, 'exit', _exit)\nsetattr(__builtins__, 'exit', _exit)\nsetattr(os, '_exit', _exit)\nsetattr(__builtins__, 'quit', _exit)\nsetattr(os, 'abort', _exit)";
     std::string DumpStringsHook = "\n[(n, v) for n, v in globals().items() if isinstance(v, (str, dict, list, int))]; open(DE4PYHOOKEEEEE99_ignore, 'w', encoding='utf-8').write('\\n'.join(f'{n} = {v}' for n, v in [(n, v) for n, v in globals().items() if isinstance(v, (str, dict, list, int))]))";
     std::string GetFunctionsHook = "\nimport inspect as de4pyhook3_ignore; de4pyhook2_ignore = lambda de4pyhook1_ignore: hex(id(de4pyhook1_ignore.__code__.co_code)) if hasattr(de4pyhook1_ignore, '__code__') else None; [open(DE4PYHOOKEEEEE99_ignore, 'a', encoding='utf-8').write(f\"{'function' if de4pyhook3_ignore.isfunction(m) else 'member'} name: {n}, address: {de4pyhook2_ignore(m)}\\n\") for n, m in de4pyhook3_ignore.getmembers(__import__('__main__'))]";
     std::string PYTHON_CODE_EXECUTOR = "\nexec(open(DE4PY_ignore6784878665878698698679067060,'r',encoding='utf8').read())";
@@ -1006,6 +1059,28 @@ DWORD WINAPI MainThread(HMODULE hModule)
                     unload_dll(hModule);
                 }
                 else if (IsEqual(buffer, "delExit")) {
+                    FARPROC ExitProcessPtr = GetProcAddress(GetModuleHandle(L"kernel32.dll"), "ExitProcess");
+                    if (ExitProcessPtr)
+                    {
+                        DWORD OldProtect;
+                        if (VirtualProtect(ExitProcessPtr, 1, PAGE_EXECUTE_READWRITE, &OldProtect))
+                        {
+                            *(BYTE*)ExitProcessPtr = 0xC3;
+                            VirtualProtect(ExitProcessPtr, 1, OldProtect, &OldProtect);
+                        }
+                    }
+
+                    FARPROC RtlExitUserProcessPtr = GetProcAddress(GetModuleHandle(L"ntdll.dll"), "RtlExitUserProcess");
+                    if (RtlExitUserProcessPtr)
+                    {
+                        DWORD OldProtect;
+                        if (VirtualProtect(RtlExitUserProcessPtr, 1, PAGE_EXECUTE_READWRITE, &OldProtect))
+                        {
+                            *(BYTE*)RtlExitUserProcessPtr = 0xC3;
+                            VirtualProtect(RtlExitUserProcessPtr, 1, OldProtect, &OldProtect);
+                        }
+                    }
+
                     if (exec(const_cast<char*>(ExitHook.c_str()))) {
                         SendMessageToPipe(pipe, "OK.");
                     }
@@ -1129,7 +1204,7 @@ DWORD WINAPI MainThread(HMODULE hModule)
                         {
                             if (pipe_analyzer != NULL)
                             {
-                                if (GetModuleHandle(L"libssl-1_1.dll") != NULL)
+                                if (GetOpenSSL() != NULL)
                                 {
                                     strcpy_s(DumpSSLPath, MAX_PATH, Path.c_str());
                                     if(DumpSSL(false))
@@ -1190,8 +1265,6 @@ DWORD WINAPI MainThread(HMODULE hModule)
                                     catch (const std::exception& ex) {
                                         printf("%s", ex.what());
                                     }
-
-                                    
                                 }
                                 else
                                 {
