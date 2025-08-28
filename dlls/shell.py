@@ -13,14 +13,12 @@ def execute_command(command):
 def inject_shell(pid, bp=None):
     try:
         pid = int(pid)
-        if(pid > 6):
-            return
     except:
         return
     if bp == None:
-        exit_code = execute_command(['dlls\\NativeInjector.exe', os.path.abspath("dlls\\pyshell.dll"), pid])
+        exit_code = execute_command(['dlls\\NativeInjector.exe', os.path.abspath("dlls\\pyshell.dll"), str(pid)])
     else:
-        exit_code = execute_command([f'{bp}\\NativeInjector.exe', os.path.abspath(f"{bp}\\pyshell.dll"), pid])
+        exit_code = execute_command([f'{bp}\\NativeInjector.exe', os.path.abspath(f"{bp}\\pyshell.dll"), str(pid)])
     if exit_code == 0:
         time.sleep(1)
         handle = os.open('\\\\.\\pipe\\de4py', os.O_RDWR)
@@ -31,18 +29,16 @@ def inject_shell(pid, bp=None):
 def stealth_inject_shell(pid, bp=None):
     try:
         pid = int(pid)
-        if(pid > 6):
-            return
     except:
         return
     file_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(random.randint(5,20)))
     if bp == None:
         shutil.copy2('dlls\\NativeInjector.exe', f'dlls\\{file_name}.exe')
-        exit_code = execute_command([f'dlls\\{file_name}.exe', 'StealthInjection', os.path.abspath("dlls\\pyshell.dll"), pid])
+        exit_code = execute_command([f'dlls\\{file_name}.exe', 'StealthInjection', os.path.abspath("dlls\\pyshell.dll"), str(pid)])
         os.remove(f'dlls\\{file_name}.exe')
     else:
         shutil.copy2(f'{bp}\\NativeInjector.exe', f'{bp}\\{file_name}.exe')
-        exit_code = execute_command([f'{bp}\\{file_name}.exe', 'StealthInjection', os.path.abspath(f"{bp}\\pyshell.dll"), pid])
+        exit_code = execute_command([f'{bp}\\{file_name}.exe', 'StealthInjection', os.path.abspath(f"{bp}\\pyshell.dll"), str(pid)])
         os.remove(f'{bp}\\{file_name}.exe')
     if exit_code == 0:
         time.sleep(1)
@@ -50,14 +46,10 @@ def stealth_inject_shell(pid, bp=None):
         return (handle, True)
     else:
         return (None, False)
-    
-
 
 def show_console(pid):
     try:
         pid = int(pid)
-        if(pid > 6):
-            return
     except:
         return
     exit_code = execute_command('dlls\\NativeInjector.exe Showconsole '+str(pid))
