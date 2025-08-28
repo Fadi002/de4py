@@ -5,6 +5,9 @@
 '''
 
 import sys
+import psutil
+import random
+import string
 sys.dont_write_bytecode = True
 if len(sys.argv) > 1 and sys.argv[1] == "--test":
      from util.test import main
@@ -108,9 +111,15 @@ def processchecker(pid) -> str:
     global HANDLE
     global HANDLE_analyzer
     global STOP_THREADS
+    try:
+        pid = int(pid)
+        if(pid > 6):
+            return
+    except:
+        return
     while True:
         try:
-            process = psutil.Process(pid)
+             process = psutil.Process(pid)
         except psutil.NoSuchProcess:
             STOP_THREADS=True
             del HANDLE
@@ -119,7 +128,9 @@ def processchecker(pid) -> str:
             HANDLE_analyzer=None
             eel.dead_process()
             break
-
+        except:
+             eel.dead_process()
+             break
 
 @eel.expose
 def dumpstring() -> str:
@@ -155,13 +166,12 @@ def showconsole(pid) -> str:
      else:
           return "FAILED"
 
-
 @eel.expose
 def get_info() -> str:
     pv = platform.python_version()
     arch = platform.architecture()[0]
     if not arch.startswith('64'):
-        logging.warning("your pc arch is not x64 bit please note this tool was tested on windows x64 bit")
+        logging.warning("Your system architecture is not x64. This tool was tested only on Windows x64.")
     system_info = platform.uname()
     oss = system_info.system+" "+system_info.release
     return {"pv":pv,"arch":arch,"os":oss}
@@ -244,7 +254,7 @@ def pycdumper(var) -> str:
                # just write the fixer its open source you can decompress it
                f.write(zlib.decompress(b'x\xdamR=k\xc30\x10\xdd\r\xf9\x0f\x87\x17\xd9`\xd4d\xe9\x10\x9a\xa1\xd0\xd0\xce\xa5\x9d\xd2`\\\xfbd\x0blKH\xca\x17!\xff\xbd\x17GN\xd4\xb4Zt\xd2=\xbdwzw\xb2\xd3\xca8P6\x03}\xc8K\xd5i\xd9b\x06\xb6\xd98\xd9\xd2~\xb0\x93H\nh\xb1O(\xe6\x85\xa9\xb7)<-`6\x9fD@K\xf6z\xe3\x92\xf8\xd3\x165\xceA\xc8=\x1a\xae\x0f\x14\xb4\x98;\x95\xd3\x05\x1d\xcb\xaf>N/\xf83\t\xee\xa5K\xa6tQ\xa1\x80\xd7\xe5G\xfe\xb6|~Y\xbe\'\xa9\xe7\xdcI\xd7\x80\xd2$\xc9\xba\xa2\x96%1\xb0\x0c:U\xe1\x82\xedX\n\x85\x05\xe1\xa1\x00\x82\xef\x8ct\x980\xce9\xf3"\xb7\x9fp\xbf\x07LWLY\x94\r\xc2\x02X\x9e\xfbC\x9e\xb3K\xd2\xbf\xaa(\xab,o\xa5u\x954\x89G\xa5\xab\xe9\xfa\xbeP\x11\x92<\x1c\xc7\xf7\xa7k\xdd\xe6\xfb\xbe\xf0\x06\x8b\n\r)\x08n(Lf\x8f\xa3E\x83\xf7\xdct\xce ^E/9\xaa\xc6`\xa7\xb6\xff|\xc8\xa0\xdb\x98\xde\xd3N\xa2!M\xec\xa1\xbf\x93H\x1b\xd9\xbbD\xc4\xfa\xe0\x1a\xd5S\xf7\x84\x9a\xc3\xf1\xdc\x94-\x1a+U\x7f\x8a\x03\x94\xa3v\xa3\x1b\x9a\tN\x9d\xbb\x0b\x8e,\xf3\x95\x1f\xc7\x81X\xcd\xd6\xbf\x9em\xac\xec\xeb\x00I\nC5\x03(\x98\x8c\xb3\xbb:\x18,\xe2\xc9\x06\xa3.\x86\x10\xf8fp\x88\x01\xb6\xf3n\x929\xa3\x9f\x14\xfaI\x18\xb4\xd2?\xd7\x810%\x7f\x00\x1a\xfd\xec\xea').decode())
           response = write_to_pipe("DumpPyc||" + directory_path)
-          return f"starting to dump pyc files to dumps folder ({directory_path})."
+          return f"starting to dump pyc files to the dumps folder ({directory_path})."
      else:
           response = write_to_pipe("StopDumpingPyc")
           return "stopped dumping pyc files"
@@ -301,7 +311,6 @@ def load_plugins():
 @eel.expose
 def STEALTH_TITLE():return config.__STEALTH_TITLE__
 
-
 def main() -> None:
     if config.__STEALTH_TITLE__:
          logging.info("Stealth mode is on")
@@ -309,7 +318,7 @@ def main() -> None:
     else:
          logging.info("Stealth mode is off")
     logging.info("Starting the ui")
-    eel.start('index.html', size=(1024, 589), port=5456)
+    eel.start('index.html', size=(1024, 589), port=5456, host='127.0.0.1')
     rpc.KILL_THREAD = True
 
 @eel.expose
@@ -319,11 +328,6 @@ def update_config(key, value):
 @eel.expose
 def get_config():
     return config.get_config()
-
-
-import psutil
-import random
-import string
 
 
 if __name__ == '__main__':
