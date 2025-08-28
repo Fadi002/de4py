@@ -11,6 +11,12 @@ def execute_command(command):
     return exit_code
 
 def inject_shell(pid, bp=None):
+    try:
+        pid = int(pid)
+        if(pid > 6):
+            return
+    except:
+        return
     if bp == None:
         exit_code = execute_command(['dlls\\NativeInjector.exe', os.path.abspath("dlls\\pyshell.dll"), pid])
     else:
@@ -23,6 +29,12 @@ def inject_shell(pid, bp=None):
         return (None, False)
 
 def stealth_inject_shell(pid, bp=None):
+    try:
+        pid = int(pid)
+        if(pid > 6):
+            return
+    except:
+        return
     file_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(random.randint(5,20)))
     if bp == None:
         shutil.copy2('dlls\\NativeInjector.exe', f'dlls\\{file_name}.exe')
@@ -42,6 +54,12 @@ def stealth_inject_shell(pid, bp=None):
 
 
 def show_console(pid):
+    try:
+        pid = int(pid)
+        if(pid > 6):
+            return
+    except:
+        return
     exit_code = execute_command('dlls\\NativeInjector.exe Showconsole '+str(pid))
     if exit_code == 0:
         time.sleep(1)
