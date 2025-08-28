@@ -837,6 +837,7 @@ BOOL DumpPythonCode(BOOL Unhook)
     return true;
 }
 
+// not implemented yet
 BOOL IsHookedEnc = false;
 BOOL DumpEncryptionData(BOOL Unhook)
 {
