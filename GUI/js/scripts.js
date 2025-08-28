@@ -54,7 +54,7 @@ async function exec_command(command) {
         return;
     }
     if (!injected) {
-        createnotification("failure", "Please injected a process first")
+        createnotification("failure", "Please inject the dll into a process first")
     } else {
         if (command == 'DumpStrings') {
             document.getElementById('outputPYSHELL').textContent = await eel.dumpstring()();
@@ -293,7 +293,7 @@ async function analyzer_command(command) {
             createnotification("success", "Command executed");
             return
         } else {
-            createnotification("failure", "only exe files are supported")
+            createnotification("failure", "only executable files are supported")
             return
         }
     } else if (command == "sus_strings_lookup") {
