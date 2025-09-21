@@ -25,6 +25,8 @@ from dlls import shell
 from analyzer import detect_packer, unpack_file, get_file_hashs, sus_strings_lookup, all_strings_lookup
 import ctypes
 import traceback
+import bottle
+app = bottle.Bottle()
 def signal_handler(sig, frame):
     print(f"{colorama.Fore.CYAN}Exiting....{colorama.Style.RESET_ALL}")
     rpc.KILL_THREAD = True
@@ -311,6 +313,19 @@ def load_plugins():
 @eel.expose
 def STEALTH_TITLE():return config.__STEALTH_TITLE__
 
+ALLOWED_ORIGINS = {
+    "http://127.0.0.1:5456",
+    "http://localhost:5456",
+    "https://127.0.0.1:5456",
+    "https://localhost:5456",
+}
+
+@app.hook('before_request')
+def log_headers():
+    origin = bottle.request.headers.get("Origin")
+    if origin and origin not in ALLOWED_ORIGINS:
+        bottle.abort(403, "Forbidden")
+
 def main() -> None:
     if config.__STEALTH_TITLE__:
          logging.info("Stealth mode is on")
@@ -318,7 +333,7 @@ def main() -> None:
     else:
          logging.info("Stealth mode is off")
     logging.info("Starting the ui")
-    eel.start('index.html', size=(1024, 589), port=5456, host='127.0.0.1')
+    eel.start('index.html', size=(1024, 589), port=5456, host='127.0.0.1', app=app)
     rpc.KILL_THREAD = True
 
 @eel.expose
