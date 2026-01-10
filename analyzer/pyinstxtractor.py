@@ -249,84 +249,88 @@ class PyInstArchive:
         if not os.path.exists(extractionDir):
             os.mkdir(extractionDir)
 
-        os.chdir(extractionDir)
+        cwd = os.getcwd()
+        try:
+            os.chdir(extractionDir)
 
-        for entry in self.tocList:
-            self.fPtr.seek(entry.position, os.SEEK_SET)
-            data = self.fPtr.read(entry.cmprsdDataSize)
+            for entry in self.tocList:
+                self.fPtr.seek(entry.position, os.SEEK_SET)
+                data = self.fPtr.read(entry.cmprsdDataSize)
 
-            if entry.cmprsFlag == 1:
-                data = zlib.decompress(data)
-                # Malware may tamper with the uncompressed size
-                # Comment out the assertion in such a case
-                assert len(data) == entry.uncmprsdDataSize  # Sanity Check
+                if entry.cmprsFlag == 1:
+                    data = zlib.decompress(data)
+                    # Malware may tamper with the uncompressed size
+                    # Comment out the assertion in such a case
+                    assert len(data) == entry.uncmprsdDataSize  # Sanity Check
 
-            if entry.typeCmprsData == b"d" or entry.typeCmprsData == b"o":
-                # d -> ARCHIVE_ITEM_DEPENDENCY
-                # o -> ARCHIVE_ITEM_RUNTIME_OPTION
-                # These are runtime options, not files
-                continue
+                if entry.typeCmprsData == b"d" or entry.typeCmprsData == b"o":
+                    # d -> ARCHIVE_ITEM_DEPENDENCY
+                    # o -> ARCHIVE_ITEM_RUNTIME_OPTION
+                    # These are runtime options, not files
+                    continue
 
-            basePath = os.path.dirname(entry.name)
-            if basePath != "":
-                # Check if path exists, create if not
-                if not os.path.exists(basePath):
-                    os.makedirs(basePath)
+                basePath = os.path.dirname(entry.name)
+                if basePath != "":
+                    # Check if path exists, create if not
+                    if not os.path.exists(basePath):
+                        os.makedirs(basePath)
 
-            if entry.typeCmprsData == b"s":
-                # s -> ARCHIVE_ITEM_PYSOURCE
-                # Entry point are expected to be python scripts
-                print("[+] Possible entry point: {0}.pyc".format(entry.name))
+                if entry.typeCmprsData == b"s":
+                    # s -> ARCHIVE_ITEM_PYSOURCE
+                    # Entry point are expected to be python scripts
+                    print("[+] Possible entry point: {0}.pyc".format(entry.name))
 
-                if self.pycMagic == b"\0" * 4:
-                    # if we don't have the pyc header yet, fix them in a later pass
-                    self.barePycList.append(entry.name + ".pyc")
-                self._writePyc(entry.name + ".pyc", data)
-
-            elif entry.typeCmprsData == b"M" or entry.typeCmprsData == b"m":
-                # M -> ARCHIVE_ITEM_PYPACKAGE
-                # m -> ARCHIVE_ITEM_PYMODULE
-                # packages and modules are pyc files with their header intact
-
-                # From PyInstaller 5.3 and above pyc headers are no longer stored
-                # https://github.com/pyinstaller/pyinstaller/commit/a97fdf
-                if data[2:4] == b"\r\n":
-                    # < pyinstaller 5.3
-                    if self.pycMagic == b"\0" * 4:
-                        self.pycMagic = data[0:4]
-                    self._writeRawData(entry.name + ".pyc", data)
-
-                    if entry.name.endswith("_crypto_key"):
-                        print(
-                            "[+] Detected _crypto_key file, saving key for automatic decryption"
-                        )
-                        # This is a pyc file with a header (8,12, or 16 bytes)
-                        # Extract the code object after the header
-                        self.cryptoKeyFileData = self._extractCryptoKeyObject(data)
-
-                else:
-                    # >= pyinstaller 5.3
                     if self.pycMagic == b"\0" * 4:
                         # if we don't have the pyc header yet, fix them in a later pass
                         self.barePycList.append(entry.name + ".pyc")
-
                     self._writePyc(entry.name + ".pyc", data)
 
-                    if entry.name.endswith("_crypto_key"):
-                        print(
-                            "[+] Detected _crypto_key file, saving key for automatic decryption"
-                        )
-                        # This is a plain code object without a header
-                        self.cryptoKeyFileData = data
+                elif entry.typeCmprsData == b"M" or entry.typeCmprsData == b"m":
+                    # M -> ARCHIVE_ITEM_PYPACKAGE
+                    # m -> ARCHIVE_ITEM_PYMODULE
+                    # packages and modules are pyc files with their header intact
 
-            else:
-                self._writeRawData(entry.name, data)
+                    # From PyInstaller 5.3 and above pyc headers are no longer stored
+                    # https://github.com/pyinstaller/pyinstaller/commit/a97fdf
+                    if data[2:4] == b"\r\n":
+                        # < pyinstaller 5.3
+                        if self.pycMagic == b"\0" * 4:
+                            self.pycMagic = data[0:4]
+                        self._writeRawData(entry.name + ".pyc", data)
 
-                if entry.typeCmprsData == b"z" or entry.typeCmprsData == b"Z":
-                    self._extractPyz(entry.name, one_dir)
+                        if entry.name.endswith("_crypto_key"):
+                            print(
+                                "[+] Detected _crypto_key file, saving key for automatic decryption"
+                            )
+                            # This is a pyc file with a header (8,12, or 16 bytes)
+                            # Extract the code object after the header
+                            self.cryptoKeyFileData = self._extractCryptoKeyObject(data)
 
-        # Fix bare pyc's if any
-        self._fixBarePycs()
+                    else:
+                        # >= pyinstaller 5.3
+                        if self.pycMagic == b"\0" * 4:
+                            # if we don't have the pyc header yet, fix them in a later pass
+                            self.barePycList.append(entry.name + ".pyc")
+
+                        self._writePyc(entry.name + ".pyc", data)
+
+                        if entry.name.endswith("_crypto_key"):
+                            print(
+                                "[+] Detected _crypto_key file, saving key for automatic decryption"
+                            )
+                            # This is a plain code object without a header
+                            self.cryptoKeyFileData = data
+
+                else:
+                    self._writeRawData(entry.name, data)
+
+                    if entry.typeCmprsData == b"z" or entry.typeCmprsData == b"Z":
+                        self._extractPyz(entry.name, one_dir)
+
+            # Fix bare pyc's if any
+            self._fixBarePycs()
+        finally:
+            os.chdir(cwd)
 
     def _fixBarePycs(self):
         for pycFile in self.barePycList:

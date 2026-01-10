@@ -1,0 +1,335 @@
+/* Main window and background */
+QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
+    background-color: #121926;
+}
+
+/* Global widget defaults */
+QWidget {
+	background-color: transparent;
+	color: #e1e1e1;
+	outline: none;
+	font-family: "Segoe UI", "Inter", sans-serif;
+}
+
+/* Standard containers and cards */
+QFrame#StyledFrame, QFrame#PluginCard {
+	background-color: rgba(24, 28, 36, 0.85);
+	border: 1.5px solid #0287CF;
+	border-radius: 14px;
+	padding: 20px;
+}
+
+/* Specialized clock frame */
+QFrame#ClockFrame {
+	background-color: rgba(24, 28, 36, 0.85);
+	border: 1px solid rgba(2, 135, 207, 0.5);
+	border-radius: 14px;
+	padding: 20px;
+}
+
+/* Sidebar structure */
+QWidget#Sidebar {
+	background-color: rgba(13,17,23,0.95);
+	border: none;
+}
+
+/* Vertical glowing right border line */
+QFrame#SidebarRightLine {
+    background-color: rgba(88, 166, 255, 0.8);
+    border: none;
+}
+
+/* Branded sidebar title */
+QLabel#SidebarTitle {
+    color: #58a6ff;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+}
+
+/* Sidebar separator line */
+QFrame#SidebarLine {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+        stop:0 transparent, 
+        stop:0.5 rgba(88, 166, 255, 0.8), 
+        stop:1 transparent);
+    max-height: 2px;
+    margin-bottom: 10px;
+}
+
+/* Overlay backgrounds */
+QWidget#LoadingOverlay, QWidget#ModalOverlay {
+	background-color: rgba(0, 0, 0, 160);
+}
+
+/* Custom notification style */
+QFrame#NotificationFrame {
+	qproperty-borderColor: #0287CF;
+	qproperty-borderWidth: 1.5;
+	border-radius: 14px;
+	background: transparent;
+}
+
+/* Action buttons */
+QPushButton {
+	background-color: rgba(2,135,207,0.85);
+	color: #ffffff;
+	border: none;
+	border-radius: 8px;
+	padding: 6px 12px;
+	font-size: 14px;
+	font-weight: 500;
+}
+
+QPushButton:hover {
+	background-color: rgba(75,163,226,0.85);
+	color: #ffffff;
+}
+
+QPushButton:pressed {
+	background-color: rgba(2,108,166,0.85);
+}
+
+QPushButton:disabled {
+	background-color: rgba(51,51,51,0.7);
+	color: #777777;
+}
+
+/* Navigation-specific buttons */
+QPushButton#NavButton {
+	background-color: transparent;
+	color: #8b949e;
+	text-align: left;
+	padding: 12px 20px;
+	border-radius: 8px;
+	margin: 4px 10px;
+	font-size: 14px;
+	font-weight: 500;
+	qproperty-shadow_active_color: transparent; /* Remove active glow from buttons */
+}
+
+QPushButton#NavButton:hover {
+	background-color: rgba(255,255,255,0.05);
+	color: #ffffff;
+}
+
+QPushButton#NavButton[active="true"] {
+	background-color: rgba(2,135,207,0.15);
+	color: #58a6ff;
+	border-left: 3px solid #0287CF;
+	border-radius: 0px 8px 8px 0px;
+}
+
+/* Menu toggle button */
+QPushButton#HamburgerButton {
+	background-color: rgba(100,100,100,0.1);
+	color: #0287CF;
+	border-radius: 25px;
+	font-size: 24px;
+	padding: 0;
+	min-width: 50px;
+	min-height: 50px;
+}
+
+QPushButton#HamburgerButton:hover {
+	background-color: rgba(120,120,120,0.2);
+}
+
+/* Single-line text inputs */
+QLineEdit {
+	background-color: rgba(24, 28, 36, 0.9);
+	color: #ffffff;
+	border: 1px solid rgba(2, 135, 207, 0.3);
+	border-radius: 8px;
+	padding: 8px 12px;
+	selection-background-color: #0287CF;
+	min-height: 28px;
+}
+
+QLineEdit:hover {
+	background-color: rgba(30, 36, 46, 0.9);
+    border: 1px solid rgba(2, 135, 207, 0.5);
+}
+
+QLineEdit:focus {
+	background-color: rgba(30, 36, 46, 1.0);
+	border: 1px solid #0287CF;
+}
+
+/* Multiline monospaced editors - Themed for better contrast */
+QTextEdit, QPlainTextEdit {
+	background-color: rgba(18, 25, 38, 0.8);
+	color: #e1e1e1;
+	border: 1px solid rgba(88, 166, 255, 0.2);
+	border-radius: 8px;
+	padding: 12px;
+	font-family: "Share Tech Mono", "Consolas", "Courier New", monospace;
+	font-size: 13px;
+	selection-background-color: #0287CF;
+    selection-color: #ffffff;
+}
+
+QTextEdit:focus, QPlainTextEdit:focus {
+    border: 1px solid rgba(88, 166, 255, 0.5);
+    background-color: rgba(18, 25, 38, 0.95);
+}
+
+/* Output section title */
+QLabel#OutputTitle {
+	font-size: 20px;
+	color: #58a6ff;
+	letter-spacing: 1.2px;
+	margin-bottom: 4px;
+	text-transform: uppercase;
+}
+
+/* Environment info labels */
+QLabel#EnvTitleLabel {
+	font-size: 20px;
+	color: #58a6ff;
+	letter-spacing: 0.8px;
+	margin-bottom: 6px;
+}
+
+QLabel#EnvLabel {
+	font-size: 14px;
+	color: #e1e1e1;
+	padding: 2px 0;
+}
+
+/* Custom scrollbar styling - Elegant and thin */
+QScrollBar:vertical {
+	background: transparent;
+	width: 6px; /* Reduced width */
+	margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+	background: rgba(88, 166, 255, 0.4);
+	min-height: 20px;
+	border-radius: 3px;
+}
+
+QScrollBar::handle:vertical:hover {
+	background: rgba(88, 166, 255, 0.8);
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+	height: 0px;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+	background: none;
+}
+
+QScrollArea {
+	background-color: transparent;
+	border: none;
+}
+
+/* Changelog specific scrollbar (even thinner/subtle) */
+QScrollArea#ChangelogArea QScrollBar:vertical {
+    width: 4px;
+}
+
+/* Checkbox inputs and indicators */
+QCheckBox {
+	spacing: 8px;
+	color: #ffffff;
+	background-color: transparent;
+}
+
+QCheckBox::indicator {
+	width: 18px;
+	height: 18px;
+	border-radius: 4px;
+	border: 2px solid #0287CF;
+	background-color: rgba(34,34,34,0.85);
+}
+
+QCheckBox::indicator:checked {
+	background-color: #0287CF;
+}
+
+/* General labels and text */
+QLabel {
+	background-color: transparent;
+	color: #ffffff;
+}
+
+/* Primary section headers */
+QLabel#TitleLabel {
+	font-size: 26px;
+	font-weight: 800;
+	color: #ffffff;
+	letter-spacing: 0.5px;
+}
+
+/* Secondary headers */
+QLabel#SubtitleLabel {
+	font-size: 18px;
+	font-weight: 600;
+}
+
+/* Dynamic clock display */
+QLabel#ClockLabel {
+	font-family: "JetBrains Mono", "Cascadia Code", monospace;
+	font-size: 50px;
+	font-weight: 400;
+	color: #58a6ff;
+}
+
+/* Interactive links */
+QLabel#LinkLabel {
+	color: #0287CF;
+	text-decoration: underline;
+}
+
+/* Scrollable changelog view */
+QScrollArea#ChangelogArea {
+	background-color: rgba(13,17,23,0.85);
+	border: 1px solid rgba(48,54,61,0.6);
+	border-radius: 10px;
+}
+
+/* Changelog content text */
+QTextBrowser#ChangelogContent {
+	background-color: rgba(13, 17, 23, 0.9);
+	color: #e0e0e0;
+	font-size: 14px;
+	line-height: 1.6em;
+	padding: 12px;
+	border-radius: 8px;
+}
+
+/* Changelog section title */
+QLabel#ChangelogTitleLabel {
+	font-size: 26px;
+	color: #58a6ff;
+	margin-bottom: 12px;
+	letter-spacing: 1.2px;
+    text-transform: uppercase;
+}
+
+/* Visual path preview box */
+QLabel#FilePathLabel {
+	color: #8b949e;
+	border: 1px solid rgba(48,54,61,0.5);
+	border-radius: 10px;
+	padding: 8px;
+	font-family: "Consolas", monospace;
+}
+
+/* Notification progress bars */
+QProgressBar {
+	border: none;
+	background-color: rgba(255,255,255,0.08);
+	border-radius: 2px;
+}
+
+QProgressBar::chunk {
+	background-color: #0287CF;
+	border-radius: 2px;
+}

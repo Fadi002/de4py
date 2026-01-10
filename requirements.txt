@@ -1,10 +1,8 @@
+PySide6
 requests
-eel
-eel[jinja2]
 psutil
-pyinstaller
-py2exe
-pycryptodome
 colorama
-xdis
+pycryptodome
 pypresence
+xdis
+pyinstaller

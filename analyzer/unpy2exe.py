@@ -172,12 +172,11 @@ def unpy2exe(filename, python_version=None, output_dir=None):
     elif not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    pe = pefile.PE(filename)
+    with pefile.PE(filename) as pe:
+        is_py2exe = check_py2exe_file(pe)
+        if not is_py2exe:
+            raise ValueError('Not a py2exe executable.')
 
-    is_py2exe = check_py2exe_file(pe)
-    if not is_py2exe:
-        raise ValueError('Not a py2exe executable.')
-
-    code_objects = extract_code_objects(pe)
-    for co in code_objects:
-        dump_to_pyc(co, python_version, output_dir)
+        code_objects = extract_code_objects(pe)
+        for co in code_objects:
+            dump_to_pyc(co, python_version, output_dir)

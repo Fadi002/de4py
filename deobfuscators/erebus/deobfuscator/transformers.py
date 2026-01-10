@@ -7,11 +7,6 @@ from typing import Any, Dict, List
 CONSTANTS = (
     ast.Name,
     ast.Constant,
-    ast.Str,
-    ast.Num,
-    ast.Bytes,
-    ast.Ellipsis,
-    ast.NameConstant,
     ast.Attribute,
     ast.Subscript,
     ast.Tuple,
@@ -42,12 +37,11 @@ class StringSubscriptSimple(ast.NodeTransformer):
     """Transforms Hyperion specific string slicing into a string literal"""
 
     def visit_Subscript(self, node: ast.Subscript):
-        if isinstance(node.value, ast.Str) and isinstance(node.slice, ast.Slice):
+        if (isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)) and isinstance(node.slice, ast.Slice):
             code = unparse(node.slice.step)
             if all(s not in code for s in string.ascii_letters):
-
-                s = node.value.s[:: eval(unparse(node.slice.step))]
-                return ast.Str(s=s)
+                s = node.value.value[:: eval(unparse(node.slice.step))]
+                return ast.Constant(value=s)
         return super().generic_visit(node)
 
 
@@ -93,7 +87,9 @@ class DunderImportRemover(ast.NodeTransformer):
 
     def visit_Call(self, node: ast.Call) -> Any:
         if isinstance(node.func, ast.Name) and node.func.id == "__import__":
-            return ast.Name(id=node.args[0].s, ctx=ast.Load())
+            # node.args[0] should be a Constant(value=str)
+            module_name = node.args[0].value if isinstance(node.args[0], ast.Constant) else getattr(node.args[0], 's', '')
+            return ast.Name(id=module_name, ctx=ast.Load())
         return super().generic_visit(node)
 
 
@@ -101,9 +97,10 @@ class GetattrConstructRemover(ast.NodeTransformer):
     """Hyperion has an interesting way of accessing module attributes."""
 
     def visit_Call(self, node: ast.Call) -> Any:
-
         if isinstance(node.func, ast.Name) and node.func.id == "getattr":
-            return ast.Attribute(value=node.args[0], attr=node.args[1].slice.args[0].s)
+            # node.args[1].slice.args[0] should be a Constant
+            attr_name = node.args[1].slice.args[0].value if isinstance(node.args[1].slice.args[0], ast.Constant) else node.args[1].slice.args[0].s
+            return ast.Attribute(value=node.args[0], attr=attr_name)
 
         return super().generic_visit(node)
 
@@ -130,8 +127,9 @@ class Dehexlify(ast.NodeTransformer):
                 and node.func.value.func.attr == "unhexlify"
             )
         ):
-            return ast.Str(
-                s=bytes.fromhex(node.func.value.args[0].s.decode()).decode("utf8")
+            hex_val = node.func.value.args[0].value if isinstance(node.func.value.args[0], ast.Constant) else node.func.value.args[0].s
+            return ast.Constant(
+                value=bytes.fromhex(hex_val.decode()).decode("utf8")
             )
         return super().generic_visit(node)
 
@@ -143,9 +141,9 @@ class UselessEval(ast.NodeTransformer):
         if (
             isinstance(node.func, ast.Name)
             and node.func.id == "eval"
-            and isinstance(node.args[0], ast.Str)
+            and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)
         ):
-            return ast.parse(node.args[0].s).body[0].value
+            return ast.parse(node.args[0].value).body[0].value
         return super().generic_visit(node)
 
 
@@ -156,7 +154,7 @@ class UselessCompile(ast.NodeTransformer):
         if (
             isinstance(node.func, ast.Name)
             and node.func.id == "compile"
-            and isinstance(node.args[0], ast.Str)
+            and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)
         ):
             return node.args[0]
         return super().generic_visit(node)
@@ -169,10 +167,10 @@ class ExecTransformer(ast.NodeTransformer):
         if (
             isinstance(node.func, ast.Name)
             and node.func.id == "exec"
-            and isinstance(node.args[0], ast.Str)
+            and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)
         ):
             try:
-                if result := ast.parse(node.args[0].s).body:
+                if result := ast.parse(node.args[0].value).body:
                     return result[0]
             except SyntaxError:
                 pass
