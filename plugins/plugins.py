@@ -1,16 +1,6 @@
 import os, importlib.util, inspect, logging, requests
 
-html_result = ''
-def build_html(plugin):
-    global html_result
-    html_result += f'''
-<div class="plugin-frame">
-    <div class="plugin-info"><a href="{plugin['link']}" target="_blank">{plugin['name']}</a></div>
-    <div class="created-by">Made by: {plugin['creator']}</div>
-    
-</div>
-'''
-    return html_result
+# Plugin System Core
 
 
 class DeobfuscatorPlugin:
@@ -21,11 +11,14 @@ class DeobfuscatorPlugin:
         self.regex = regex
         self.deobfuscator_function = deobfuscator_function
 class ThemePlugin:
-    def __init__(self, plugin_name, creator, link, css):
+    """
+    Plugin for customizing the UI appearance using QSS (Qt Style Sheet).
+    """
+    def __init__(self, plugin_name, creator, link, qss):
         self.plugin_name = plugin_name
         self.creator = creator
         self.link = link
-        self.css = css
+        self.qss = qss
 
 def load_plugins():
     plugins_folder = 'plugins'
