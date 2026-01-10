@@ -77,11 +77,15 @@
         "changes": [
             "Added API support"
         ]
-    }, 
+    },
     {
-        "version": "final",
+        "version": "2.0.0",
         "changes": [
-            "archived + ended support on the project"
+            "Complete UI overhaul: Transitioned from Eel/WebUI to native PySide6 for better performance and stability",
+            "Animation Engine: Added smooth screen transitions, hover effects, and animated overlays",
+            "Professional Diagnostics: Overhauled util/test.py with detailed dependency checks and integrity mapping",
+            "Compatibility: Fixed AST handling to support Python 3.8 through 3.14+",
+            "Theme Improvements: Enhanced QSS styling and added dynamic theme plugin support"
         ]
     }
 ]

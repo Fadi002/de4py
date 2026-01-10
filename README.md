@@ -34,7 +34,11 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
     </tr>
     <tr>
       <td>GUI and Console Support</td>
-      <td>De4py supports both console and GUI, but why use console when you can have a nice-on-the-eyes GUI, am i right? ;)</td>
+      <td>De4py supports both console and a native PySide6 GUI. The new V2 interface is built for speed, stability, and aesthetics.</td>
+    </tr>
+    <tr>
+      <td>Diagnostic Suite</td>
+      <td>Comes with `util/test.py`, a professional environment and integrity tester to ensure your installation is healthy and dependencies are correct.</td>
     </tr>
     <tr>
       <td>File Analyzer</td>
@@ -69,8 +73,13 @@ De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advan
 ## Contributions
 All contributions are welcomed.
 
-## Social media links
-At this moment we have discord only https://discord.gg/cYxxUHsbRm
+## Join Our Community
+
+Connect with us and join the conversation on your favorite platform:
+
+- **Matrix:** [Join our Matrix room](https://matrix.to/#/#de4py:matrix.org) 🔒 (recommended)
+- **Discord:** [Join here](https://discord.gg/cYxxUHsbRm) 💬 (not active)
+
 
 ## Issues
 Please before open issue read the [FAQ](https://github.com/Fadi002/de4py/blob/main/FAQ.md).
