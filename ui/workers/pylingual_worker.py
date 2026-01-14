@@ -102,6 +102,7 @@ class PyLingualWorker(QThread):
                         self._report_telemetry(
                             Exception(progress.message),
                             "decompile"
+                        )
                         return
                     
                     # Wait before next poll
