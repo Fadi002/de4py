@@ -119,7 +119,7 @@ QPushButton#NavButton[active="true"] {
 	background-color: rgba(2,135,207,0.15);
 	color: #58a6ff;
 	border-left: 3px solid #0287CF;
-	border-radius: 0px 8px 8px 0px;
+	border-radius: 8px;
 }
 
 /* Menu toggle button */
@@ -332,4 +332,30 @@ QProgressBar {
 QProgressBar::chunk {
 	background-color: #0287CF;
 	border-radius: 2px;
+}
+
+/* Mode Selection Bar (PyLingual) */
+QFrame#ModeSelectorFrame {
+    background-color: rgba(24, 28, 36, 0.85);
+    border: 1.5px solid #0287CF;
+    border-radius: 12px;
+    padding: 0px;
+    margin: 0px;
+}
+
+QLabel#ModeLabel {
+    font-size: 14px;
+    background: transparent;
+    padding: 0px;
+    margin: 0px;
+}
+
+QLabel#ModeLabel[active="true"] {
+    color: #58a6ff;
+    font-weight: bold;
+}
+
+QLabel#ModeLabel[active="false"] {
+    color: #777777;
+    font-weight: normal;
 }

@@ -22,7 +22,6 @@ from util import rpc, tui, update, setup_logging
 # Initialize colorama for terminal support
 colorama.init(autoreset=True)
 
-setup_logging()
 
 def load_stylesheet(app: QApplication):
     """Loads the dark theme QSS stylesheet."""
