@@ -77,7 +77,7 @@ class De4pyTester:
         dependencies = [
             'PySide6', 'requests', 'psutil', 'colorama', 'Crypto', 
             'logging', 'platform', 'threading', 'signal', 'json',
-            'importlib.util', 'inspect'
+            'importlib.util', 'inspect', 'requests'
         ]
         
         for dep in dependencies:

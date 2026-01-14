@@ -1,6 +1,6 @@
 import os
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QSpacerItem, QSizePolicy, QLabel, QFrame, QGraphicsDropShadowEffect
-from PySide6.QtCore import Signal, QSize, Qt
+from PySide6.QtCore import Signal, QSize, Qt, Property
 from PySide6.QtGui import QIcon, QColor
 
 from ui.constants import NAV_ITEMS, SIDEBAR_WIDTH, SPACING_SM
@@ -29,7 +29,22 @@ class Sidebar(QWidget):
         self.line_shadow.setColor(QColor(88, 166, 255, 120)) # Stronger, focused glow
         self.right_line.setGraphicsEffect(self.line_shadow)
 
+        # Title shadow (stored as attribute for dynamic updates)
+        self.title_shadow = QGraphicsDropShadowEffect(self)
+        self.title_shadow.setBlurRadius(15)
+        self.title_shadow.setOffset(0, 0)
+        self.title_shadow.setColor(QColor(88, 166, 255, 200)) # Stronger blue glow for text
+
         self._setup_ui()
+
+    def get_glow_color(self):
+        return self.line_shadow.color()
+
+    def set_glow_color(self, color: QColor):
+        self.line_shadow.setColor(QColor(color.red(), color.green(), color.blue(), 120))
+        self.title_shadow.setColor(QColor(color.red(), color.green(), color.blue(), 200))
+
+    glow_color = Property(QColor, get_glow_color, set_glow_color)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -47,11 +62,7 @@ class Sidebar(QWidget):
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Add glow specifically to the title text
-        title_shadow = QGraphicsDropShadowEffect(self)
-        title_shadow.setBlurRadius(15)
-        title_shadow.setOffset(0, 0)
-        title_shadow.setColor(QColor(88, 166, 255, 200)) # Stronger blue glow for text
-        self.title_label.setGraphicsEffect(title_shadow)
+        self.title_label.setGraphicsEffect(self.title_shadow)
         
         layout.addWidget(self.title_label)
 

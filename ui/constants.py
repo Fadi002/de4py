@@ -65,6 +65,7 @@ SCREEN_ANALYZER = 4
 SCREEN_PLUGINS = 5
 SCREEN_SETTINGS = 6
 SCREEN_ABOUT = 7
+SCREEN_PYLINGUAL = 8
 
 # Navigation items (id, label, icon)
 NAV_ITEMS = [
@@ -73,6 +74,7 @@ NAV_ITEMS = [
     ("pyshell", "PyShell", "terminal.svg"),
     ("analyzer", "Analyzer", "file-text.svg"),
     ("plugins", "Plugins", "grid.svg"),
+    ("pylingual", "PyLingual", "file.svg"),
     ("settings", "Settings", "settings.svg"),
     ("about", "About", "info.svg"),
 ]
