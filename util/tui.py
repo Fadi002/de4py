@@ -1,6 +1,6 @@
 import os, logging, time, shutil, sys, datetime, platform
 from colorama import Fore, Style, AnsiToWin32, init
-from traceback import extract_tb
+from traceback import extract_tb, format_exc
 from logging.handlers import TimedRotatingFileHandler
 init()
 __RAW_BANNER__ = '''
@@ -47,23 +47,38 @@ __BANNER__ = water(__RAW_BANNER__)
 
 def clear_console():os.system('cls' if os.name == 'nt' else 'clear')
 
+_logging_initialized = False
+
 def setup_logging():
+    global _logging_initialized
+    if _logging_initialized:
+        return
+    
     logs_dir = 'logs'
     if not os.path.exists(logs_dir):
         os.makedirs(logs_dir)
+    
     log_level = logging.INFO
     logging_format = "%(levelname)s - %(message)s"
-    file_handler = TimedRotatingFileHandler(filename=os.path.join(logs_dir, f'de4py-logs-{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.log'))
+    
+    log_filename = os.path.join(logs_dir, f'de4py-logs-{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.log')
+    file_handler = TimedRotatingFileHandler(filename=log_filename)
     file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     file_handler.setFormatter(file_formatter)
-    file_logger = logging.getLogger('file_logger')
-    file_logger.setLevel(logging.INFO)
-    file_logger.addHandler(file_handler)
-    file_logger.info(f"System Architecture: {platform.architecture()[0]}, OS: {platform.platform()}, Python Version: {platform.python_version()}")
-    logging.basicConfig(
-        level=log_level,
-        format=logging_format,
-        handlers=[ColorizingStreamHandler(), file_handler])
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    
+    # Remove existing handlers to avoid duplicates if called multiple times despite guard
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+        
+    root_logger.addHandler(ColorizingStreamHandler())
+    root_logger.addHandler(file_handler)
+    
+    logging.info(f"System Architecture: {platform.architecture()[0]}, OS: {platform.platform()}, Python Version: {platform.python_version()}")
+    _logging_initialized = True
 
 class ColorizingStreamHandler(logging.StreamHandler):
     def emit(self, record):
@@ -122,7 +137,7 @@ def linux_prompt(tab="~"):
 
 
 
-def custom_error(exc_type, exc_value, exc_traceback):
+def custom_error(exc_type, exc_value, exc_traceback):   
     print(f"{Fore.RED}=== Start Traceback ==={Style.RESET_ALL}")
     print(f"{Fore.RED}Error Type:{Style.RESET_ALL} {exc_type.__name__}")
     print(f"{Fore.RED}Error Message:{Style.RESET_ALL} {exc_value}")
@@ -132,6 +147,18 @@ def custom_error(exc_type, exc_value, exc_traceback):
         traceback_lines.append(f"  File '{filename}', line {line_num}, in {func_name}\n    {line_code}")
     print("\n".join(traceback_lines))
     print(f"{Fore.RED}=== End of Traceback ==={Style.RESET_ALL}")
+    try:
+        from api.telemetry import report_error
+        report_error(
+            source="core",
+            source_name="global_exception",
+            severity="critical",
+            error_type=exc_type.__name__,
+            error_message=str(exc_value),
+            traceback_str="\n".join(traceback_lines)
+        )
+    except Exception as e:
+        logging.debug(f"Failed to send telemetry: {e}")
 
 
 

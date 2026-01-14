@@ -13,7 +13,24 @@ class LoadingOverlay(QWidget):
         self._timer.timeout.connect(self._rotate)
         self._blurred_bg = None
         self._lock_events = False
-        self.setAttribute(Qt.WA_TranslucentBackground, True)  # Important for glass effect
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        
+        # Setup Status Label
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Spacer for spinner (handled in paintEvent)
+        layout.addSpacing(100)
+        
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("SubtitleLabel") # Use existing style
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("color: white; font-weight: bold; font-size: 18px;")
+        layout.addWidget(self.status_label)
+
+    def set_status(self, text: str):
+        self.status_label.setText(text)
+        self.update()
 
     def showEvent(self, event):
         super().showEvent(event)
