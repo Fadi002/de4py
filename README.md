@@ -77,7 +77,7 @@ All contributions are welcomed.
 
 Connect with us and join the conversation on your favorite platform:
 
-- **Matrix:** [Join our Matrix room](https://matrix.to/#/#de4py:matrix.org) 🔒 (recommended)
+- **Matrix:** [Join our Matrix room](https://matrix.to/#/#de4py_commiunty:matrix.org) 🔒 (recommended)
 - **Discord:** [Join here](https://discord.gg/cYxxUHsbRm) 💬 (not active)
 
 
