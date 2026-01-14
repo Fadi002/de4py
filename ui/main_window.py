@@ -10,7 +10,8 @@ from ui.constants import (
     WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE,
     SIDEBAR_WIDTH, HAMBURGER_SIZE, SPACING_MD, ANIM_DURATION_NORMAL,
     SCREEN_HOME, SCREEN_DEOBFUSCATOR, SCREEN_PYSHELL, SCREEN_BEHAVIOR_MONITOR,
-    SCREEN_ANALYZER, SCREEN_PLUGINS, SCREEN_SETTINGS, SCREEN_ABOUT
+    SCREEN_ANALYZER, SCREEN_PLUGINS, SCREEN_SETTINGS, SCREEN_ABOUT,
+    SCREEN_PYLINGUAL
 )
 from ui.navigation.sidebar import Sidebar
 from ui.screens.home_screen import HomeScreen
@@ -21,6 +22,7 @@ from ui.screens.analyzer_screen import AnalyzerScreen
 from ui.screens.plugins_screen import PluginsScreen
 from ui.screens.settings_screen import SettingsScreen
 from ui.screens.about_screen import AboutScreen
+from ui.screens.pylingual_screen import PyLingualScreen
 from ui.widgets.notification_widget import NotificationManager
 from ui.widgets.loading_overlay import LoadingOverlay
 
@@ -81,6 +83,7 @@ class MainWindow(QMainWindow):
         self.plugins_screen = PluginsScreen(self)
         self.settings_screen = SettingsScreen(self)
         self.about_screen = AboutScreen(self)
+        self.pylingual_screen = PyLingualScreen(self)
         
         self.screen_stack.addWidget(self.home_screen)
         self.screen_stack.addWidget(self.deobfuscator_screen)
@@ -90,6 +93,7 @@ class MainWindow(QMainWindow):
         self.screen_stack.addWidget(self.plugins_screen)
         self.screen_stack.addWidget(self.settings_screen)
         self.screen_stack.addWidget(self.about_screen)
+        self.screen_stack.addWidget(self.pylingual_screen)
         
         self.screen_stack.setCurrentIndex(SCREEN_HOME)
 
@@ -134,10 +138,15 @@ class MainWindow(QMainWindow):
             "plugins": SCREEN_PLUGINS,
             "settings": SCREEN_SETTINGS,
             "about": SCREEN_ABOUT,
+            "pylingual": SCREEN_PYLINGUAL,
         }
         if screen_id in screen_map:
             self.screen_stack.fade_to_index(screen_map[screen_id])
             self.sidebar.set_active(screen_id)
+            
+            # Auto-close sidebar after selection
+            if self._sidebar_visible:
+                self._toggle_sidebar()
 
     def navigate_to_behavior_monitor(self):
         self.screen_stack.fade_to_index(SCREEN_BEHAVIOR_MONITOR)

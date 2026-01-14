@@ -87,5 +87,13 @@
             "Compatibility: Fixed AST handling to support Python 3.8 through 3.14+",
             "Theme Improvements: Enhanced QSS styling and added dynamic theme plugin support"
         ]
+    },
+    {
+        "version": "2.1.1",
+        "changes": [
+            "Added pylingual (pyc decompiler)",
+            "Added error reporting api",
+            "Fixed some bugs"
+        ]
     }
 ]
