@@ -1,15 +1,15 @@
 # screenshot:
 # https://prnt.sc/-gQk1pG6AIDl
 
-from plugins.plugins import ThemePlugin
+from plugins import ThemePlugin
 
-class Hacker_Theme(ThemePlugin):
+class HackerTheme(ThemePlugin):
     def __init__(self):
-        super().__init__(
-            plugin_name="hacker theme",
-            creator="Fadi002",
-            link="https://github.com/Fadi002/de4py-plugins-repo/blob/main/themes/hackertheme.py",
-            qss="""
+        super().__init__()
+        self.name = "hacker theme"
+        self.creator = "Fadi002"
+        self.link = "https://github.com/Fadi002/de4py-plugins-repo/blob/main/themes/hackertheme.py"
+        self.qss = """
 QMainWindow,QWidget#CentralWidget,QWidget#MainContent {
 background-color:#000000
 }
@@ -66,8 +66,8 @@ background-color:rgba(0,0,0,160)
 }
 
 QFrame#NotificationFrame {
-qproperty-bordercolor:#00ff22;
-qproperty-borderwidth:2;
+qproperty-borderColor:#00ff22;
+qproperty-borderWidth:2;
 border-radius:14px;
 background:transparent
 }
@@ -338,4 +338,8 @@ QLabel#ModeLabel[active="false"] {
 color:#777777;
 font-weight:normal
 }
-""")
+
+"""
+
+def register():
+    return HackerTheme()

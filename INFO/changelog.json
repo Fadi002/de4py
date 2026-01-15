@@ -95,5 +95,12 @@
             "Added error reporting api",
             "Fixed some bugs"
         ]
+    },
+    {
+        "version": "2.1.2",
+        "changes": [
+            "Fixed some bugs & Improved stability",
+            "Restructured code"
+        ]
     }
 ]
