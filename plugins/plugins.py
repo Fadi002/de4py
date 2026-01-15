@@ -1,50 +1,65 @@
-import os, importlib.util, inspect, logging, requests
+from pathlib import Path
+import importlib.util
+import logging
+from typing import List, Dict, Any
 
-# Plugin System Core
+try:
+    from . import DeobfuscatorPlugin, ThemePlugin, REGISTER_FUNCTION
+except ImportError:
+    # Fallback for direct execution or if package structure isn't recognized yet
+    from plugins import DeobfuscatorPlugin, ThemePlugin, REGISTER_FUNCTION
 
+logger = logging.getLogger(__name__)
 
-class DeobfuscatorPlugin:
-    def __init__(self, plugin_name, creator, link, regex, deobfuscator_function):
-        self.plugin_name = plugin_name
-        self.creator = creator
-        self.link = link
-        self.regex = regex
-        self.deobfuscator_function = deobfuscator_function
-class ThemePlugin:
+def load_plugins() -> List[Dict[str, Any]]:
     """
-    Plugin for customizing the UI appearance using QSS (Qt Style Sheet).
+    Loads all plugins from the plugins directory.
+    Isolates failures per plugin to ensure application startup is not affected.
     """
-    def __init__(self, plugin_name, creator, link, qss):
-        self.plugin_name = plugin_name
-        self.creator = creator
-        self.link = link
-        self.qss = qss
+    plugins_dir = Path(__file__).parent
+    loaded_plugins = []
 
-def load_plugins():
-    plugins_folder = 'plugins'
-    plugins = []
-    for plugin_file in [f for f in os.listdir(plugins_folder) if f.endswith(".py") and not f.startswith("__") and f != "plugins.py"]:
+    # Iterate through all .py files in the plugins folder
+    for plugin_file in plugins_dir.glob("*.py"):
+        if plugin_file.name in ("__init__.py", "plugins.py"):
+            continue
+
         try:
-            plugin_path = os.path.join(plugins_folder, plugin_file)
-            plugin_class = load_plugin(plugin_path)
-            if plugin_class:
-                plugins.append({"type": "deobfuscator" if issubclass(plugin_class, DeobfuscatorPlugin) else "theme", "instance": plugin_class()})
+            plugin_instance = _load_single_plugin(plugin_file)
+            if plugin_instance:
+                plugin_type = "deobfuscator" if isinstance(plugin_instance, DeobfuscatorPlugin) else "theme"
+                loaded_plugins.append({
+                    "type": plugin_type,
+                    "instance": plugin_instance
+                })
+                logger.debug(f"Successfully loaded plugin: {getattr(plugin_instance, 'name', plugin_file.stem)}")
         except Exception as e:
-            logging.error(f"Failed to load plugin {plugin_file} ERROR:\n{e}")
-    return plugins
+            logger.error(f"Failed to load plugin {plugin_file.name}: {e}")
 
-def load_plugin(plugin_path):
+    return loaded_plugins
+
+def _load_single_plugin(file_path: Path):
+    """Loads a single plugin from a file path using the register contract."""
     try:
-        spec = importlib.util.spec_from_file_location("plugin_module", plugin_path)
-        plugin_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(plugin_module)
-        return get_class(plugin_module)
-    except Exception as e:
-        logging.error(f"Error loading plugin from {plugin_path}: {e}")
-        return None
+        spec = importlib.util.spec_from_file_location(file_path.stem, str(file_path))
+        if spec is None or spec.loader is None:
+            return None
+            
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
 
-def get_class(module, exclude_module='plugins.plugins'):
-    for obj in module.__dict__.values():
-        if inspect.isclass(obj) and not (exclude_module and obj.__module__.startswith(exclude_module)):
-            return obj
-    return None
+        # Check for the register() function (the new contract)
+        if hasattr(module, REGISTER_FUNCTION):
+            register_fn = getattr(module, REGISTER_FUNCTION)
+            return register_fn()
+            
+        # Fallback to old class-based detection for backward compatibility
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if isinstance(attr, type) and issubclass(attr, (DeobfuscatorPlugin, ThemePlugin)) and attr not in (DeobfuscatorPlugin, ThemePlugin):
+                return attr()
+                
+        return None
+    except Exception as e:
+        logger.error(f"Error executing plugin {file_path.name}: {e}")
+        return None

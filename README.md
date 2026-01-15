@@ -1,91 +1,83 @@
 <a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/de4py.jpg?raw=true"></img></a>
 # de4py
-<p align="center"><b>what is de4py?</b></p>
-De4py are an Advanced python deobfuscator with a beautiful UI and a set of Advanced features that enables malware analysts and reverse engineers to deobfuscate python files and more. this project is maintained by me (<a href="https://github.com/Fadi002">Fadi002</a>) and my friend <a href="https://github.com/AdvDebug">AdvDebug</a>.
 
-## Features
-<table>
-  <th align="left">Feature</th>
-  <th align="left">Function</th>
-  <tbody>
-    <tr>
-     <td>Deobfuscation</td>
-     <td>De4py support some popular obfuscators, like: Jawbreaker, BlankOBF, PlusOBF, Wodx, Hyperion, pyobfuscate.com obfuscator</td>
-    </tr>
-    <tr>
-      <td>Pycode Execution</td>
-      <td>Executing your python code inside the process which can be useful in many cases to make the program do something you want to make it do, for example if the program have licensing and it calls the real "main" only if you bought the program you can call it directly.</td>
-    </tr>
-    <tr>
-      <td>Strings Dump</td>
-      <td>Dumping Strings in the python process and saving it as a file which can be pretty useful to extract data from memory such as webhooks.</td>
-    </tr>
-    <tr>
-      <td>Removing Exit Function</td>
-      <td>Removing the exit function which can be extremely useful if the python program tried to exit itself if it found a debugger or a VM</td>
-    </tr>
-    <tr>
-      <td>Getting All Functions</td>
-      <td>Getting all functions inside the python process which can be really useful when trying to modify a python function in memory</td>
-    </tr>
-    <tr>
-      <td>Pyshell GUI</td>
-      <td>Custom GUI to make it easy to execute python code inside the desired process.</td>
-    </tr>
-    <tr>
-      <td>GUI and Console Support</td>
-      <td>De4py supports both console and a native PySide6 GUI. The new V2 interface is built for speed, stability, and aesthetics.</td>
-    </tr>
-    <tr>
-      <td>Diagnostic Suite</td>
-      <td>Comes with `util/test.py`, a professional environment and integrity tester to ensure your installation is healthy and dependencies are correct.</td>
-    </tr>
-    <tr>
-      <td>File Analyzer</td>
-      <td>an analyzer that have many features like detecting if the python program is packed and tries to unpack it if it was using pyinstaller for example, it also got a feature that shows either all strings or suspicious strings (suspicious strings like: IPs, websites, and "token" "discord" "leveldb" strings and other suspicious strings in the file) and shows them in a nice output window.</td>
-    </tr>
-    <tr>
-      <td>Behavior Monitoring</td>
-      <td>De4py can monitor python processes and see if they opened any files handles, opened a process, wrote/readed the memory of other processes and also monitoring if the process terminated other processes, in addition to sockets monitoring (including the size of data that is being sent and the ip that is being sent/recieved from) along with dumping socket content to a file and dumping OpenSSL encrypted content decrypted into a file, and PYC dumping.</td>
-    </tr>
-    <tr>
-      <td>Plugins system</td>
-      <td>You can add plugins to de4py to customize the theme or add custom deobfuscators <a href="https://github.com/Fadi002/de4py-plugins-repo">plugins repo and docs here</a></td>
-    </tr>
-    <tr>
-      <td>API system</td>
-      <td>You can use de4py features such as deobfusctor engine and pyshell in your own tools <a href="https://github.com/Fadi002/de4py/tree/main/api">API docs here</a></td>
-    </tr>
-  </tbody>
-</table>
+**Advanced Python Deobfuscator & Reverse Engineering Toolkit**
 
-## Screenshots
-<p float="left">
-  <a href="#Screenshots"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Home.png?raw=true" width="400"></img></a>
-  <a href="#Screenshots"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Deobfuscator.png?raw=true" width="400"></img></a>
-  <a href="#Screenshots"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Shell.png?raw=true" width="400"></img></a>
-  <a href="#Screenshots"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/WinAPIHooking.png?raw=true" width="400"></img></a>
-  <a href="#Screenshots"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/Analyzer.png?raw=true" width="400"></img></a>
-  <a href="#Screenshots"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/About.png?raw=true" width="400"></img></a>
-  <a href="#Screenshots"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/CLI.png?raw=true" width="400"></img></a>
-</p>
+De4py is an advanced Python deobfuscator with a beautiful UI (PySide6) and a robust set of features for malware analysts and reverse engineers. It supports both automatic deobfuscation of common packers and manual analysis tools.
 
-## Contributions
-All contributions are welcomed.
+Maintained by [Fadi002](https://github.com/Fadi002) and [AdvDebug](https://github.com/AdvDebug).
 
-## Join Our Community
+## 🚀 Features
 
-Connect with us and join the conversation on your favorite platform:
+| Feature | Function |
+| :--- | :--- |
+| **Deobfuscation** | Support for popular obfuscators: **Jawbreaker, BlankOBF, PlusOBF, Wodx, Hyperion, pyobfuscate**. |
+| **File Analyzer** | Detection of packers (PyInstaller), hash calculation, suspicious string lookup, and metadata extraction. |
+| **PyCode Execution** | Execute Python code inside the target process (useful for bypassing licensing checks). |
+| **Pyshell GUI** | Custom GUI to easily inject and execute Python code in valid processes. |
+| **Behavior Monitor** | Monitor process handles, memory access, sockets, and dumped content (including decrypted OpenSSL traffic). |
+| **Modern UI** | Built with **PySide6** and a custom dark theme for a premium look and feel. CLI mode also supported. |
+| **API System** | Use de4py as a library in your own tools. |
+
+## 📦 Installation & Usage
+
+### Prerequisites
+- Python 3.8+
+- Windows (recommended for full feature support)
+
+### Installation
+You can install de4py as a package:
+
+```bash
+git clone https://github.com/Fadi002/de4py.git
+cd de4py
+pip install .
+```
+
+### Running
+
+**GUI Mode:**
+```bash
+python -m de4py
+# OR
+python main.py
+```
+
+**CLI Mode:**
+```bash
+python -m de4py --cli
+```
+
+## 🛠 Project Structure
+
+The project has been refactored for clarity:
+
+```
+de4py/
+├── de4py/               # Main Package
+│   ├── core/            # Core logic (EngineManager, Interfaces)
+│   ├── engines/         # Deobfuscators and Analyzers
+│   ├── ui/              # PySide6 User Interface
+│   ├── config/          # Configuration management
+│   └── utils/           # Utilities (RPC, TUI, etc.)
+├── plugins/             # External Plugins folder (Root)
+├── main.py              # Entry point
+└── pyproject.toml       # Project configuration
+```
+
+## 🤝 Contributions
+
+All contributions are welcome!
+
+## 🔗 Community
 
 - **Matrix:** [Join our Matrix room](https://matrix.to/#/#de4py_commiunty:matrix.org) 🔒 (recommended)
-- **Discord:** [Join here](https://discord.gg/cYxxUHsbRm) 💬 (not active)
+- **Discord:** [Join here](https://discord.gg/cYxxUHsbRm) 💬
 
+## ⚠️ Disclaimer
 
-## Issues
-Please before open issue read the [FAQ](https://github.com/Fadi002/de4py/blob/main/FAQ.md).
+This tool is for **educational purposes only**. Never deobfuscate software without permission. The developers are not responsible for misuse.
 
-## Disclaimer
-This tool are for educational purposes only, never try deobfuscating someone's software without permission, ALL developers and contributors are not responsible for any kind of misuse.
+## 📄 License
 
-## License Notice
-this tool are licensed under GNU General Public License v3.0.
+Licensed under **GNU General Public License v3.0**.
