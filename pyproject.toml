@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "de4py"
+version = "2.1.1"
+dependencies = [
+    "PySide6",
+    "requests",
+    "psutil",
+    "colorama",
+    "pypresence"
+]
+description = "Python Deobfuscator & Analyzer"
+authors = [
+  {name = "Fadi002"},
+]
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+
+[project.scripts]
+de4py = "de4py.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
