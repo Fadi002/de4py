@@ -7,7 +7,7 @@
     "load_plugins": true,
     "build_num": "2.1.2.260115685-stable-de4py",
     "api_base_url": "https://de4py-api.vercel.app",
-    "api_timeout": 30,
+    "api_timeout": 400,
     "poll_interval": 2.0,
     "active_theme": null
 }
