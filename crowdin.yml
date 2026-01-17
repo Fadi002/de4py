@@ -1,22 +1,16 @@
 project_id: de4py
-
-base_path: .
-
-preserve_hierarchy: true
-
 placeholders:
   - '{count}'
   - '{name}'
-
 ignore:
   - '**/*.py'
-
 github:
   auto_push: 1
   branch_mapping:
     main: main
   commit_message: Update translations from Crowdin
-
+base_path: .
+preserve_hierarchy: 1
 files:
   - source: /de4py/lang/locales/en.json
     translation: /de4py/lang/locales/%two_letters_code%.json
