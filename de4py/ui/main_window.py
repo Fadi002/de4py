@@ -6,9 +6,13 @@ from de4py.ui.widgets.core_animations import AnimatedStackedWidget
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QSize
 from PySide6.QtGui import QIcon
 
+from de4py.config.config import settings
+from de4py.lang import translation_manager
+from de4py.ui.motion.manager import MotionManager
+from de4py.ui.widgets.hamburger_button import HamburgerButton
 from de4py.ui.constants import (
     WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE,
-    SIDEBAR_WIDTH, HAMBURGER_SIZE, SPACING_MD, ANIM_DURATION_NORMAL,
+    SIDEBAR_WIDTH, HAMBURGER_SIZE, SPACING_MD,
     SCREEN_HOME, SCREEN_DEOBFUSCATOR, SCREEN_PYSHELL, SCREEN_BEHAVIOR_MONITOR,
     SCREEN_ANALYZER, SCREEN_PLUGINS, SCREEN_SETTINGS, SCREEN_ABOUT,
     SCREEN_PYLINGUAL
@@ -35,11 +39,20 @@ class MainWindow(QMainWindow):
     """
     def __init__(self, title=None):
         super().__init__()
-        self.setWindowTitle(title if title else WINDOW_TITLE)
+        from de4py.lang import tr, keys
+        self.setWindowTitle(title if title else tr(keys.APP_NAME))
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+
         self._sidebar_visible = False
+        
+        # Initialize localization system with saved language preference
+        translation_manager.load_language(settings.language)
+        
         self._setup_ui()
         self._connect_signals()
+        
+        # Connect language change signal for runtime updates
+        translation_manager.language_changed.connect(self._on_language_changed)
 
     def _setup_ui(self):
         central_widget = QWidget()
@@ -66,13 +79,21 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.sidebar)
         main_layout.addWidget(content_widget, 1)
         
-        self._create_hamburger_button(content_widget)
         self._setup_notification_manager()
         self._setup_loading_overlay()
         
-        self._sidebar_anim = QPropertyAnimation(self.sidebar, b"minimumWidth")
-        self._sidebar_anim.setDuration(ANIM_DURATION_NORMAL)
-        self._sidebar_anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        # Determine icon path safely
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        icon_path = os.path.join(base_path, "resources", "menu.svg")
+        
+        self.hamburger_btn = HamburgerButton(content_widget)
+        self.hamburger_btn.setObjectName("HamburgerButton")
+        self.hamburger_btn.move(SPACING_MD, SPACING_MD)
+        if os.path.exists(icon_path):
+             self.hamburger_btn.setIcon(QIcon(icon_path))
+        self.hamburger_btn.raise_()
+
+        self.sidebar.setFixedWidth(0) # Ensure start state
 
     def _create_screens(self):
         self.home_screen = HomeScreen(self)
@@ -97,20 +118,6 @@ class MainWindow(QMainWindow):
         
         self.screen_stack.setCurrentIndex(SCREEN_HOME)
 
-    def _create_hamburger_button(self, parent):
-        self.hamburger_btn = QPushButton("☰", parent)
-        self.hamburger_btn.setObjectName("HamburgerButton")
-        self.hamburger_btn.setFixedSize(HAMBURGER_SIZE, HAMBURGER_SIZE)
-        self.hamburger_btn.move(SPACING_MD, SPACING_MD)
-        self.hamburger_btn.raise_()
-        
-        base_path = os.path.dirname(os.path.abspath(__file__))
-        icon_path = os.path.join(base_path, "resources", "menu.svg")
-        if os.path.exists(icon_path):
-            self.hamburger_btn.setIcon(QIcon(icon_path))
-            self.hamburger_btn.setIconSize(QSize(24, 24))
-            self.hamburger_btn.setText("")
-
     def _setup_notification_manager(self):
         self.notification_manager = NotificationManager(self)
 
@@ -126,10 +133,18 @@ class MainWindow(QMainWindow):
         self.pyshell_screen.process_died.connect(self.behavior_monitor_screen.handle_process_death)
 
     def _toggle_sidebar(self):
+        start_width = self.sidebar.width()
         target_width = SIDEBAR_WIDTH if not self._sidebar_visible else 0
-        self._sidebar_anim.setStartValue(self.sidebar.width())
-        self._sidebar_anim.setEndValue(target_width)
-        self._sidebar_anim.start()
+        
+        # Use MotionManager's specialized helper for "fixedWidth" animation inertia
+        MotionManager.animate_sidebar_width(
+            target=self.sidebar,
+            start=start_width,
+            end=target_width,
+            duration=MotionManager.DURATION_SLIDE,
+            easing=MotionManager.EASE_HEAVY
+        )
+
         self._sidebar_visible = not self._sidebar_visible
 
     def _navigate_to(self, screen_id: str):
@@ -171,3 +186,28 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.loading_overlay.setGeometry(self.rect())
+
+    def _on_language_changed(self, lang_code: str):
+        """
+        Handle runtime language changes.
+        Propagates the change to all screens and widgets that support retranslation.
+        """
+        from de4py.lang import tr, keys
+        self.setWindowTitle(tr(keys.APP_NAME))
+        
+        # Retranslate sidebar
+        if hasattr(self.sidebar, 'retranslate_ui'):
+            self.sidebar.retranslate_ui()
+
+        
+        # Retranslate all screens in the stack
+        for i in range(self.screen_stack.count()):
+            widget = self.screen_stack.widget(i)
+            if hasattr(widget, 'retranslate_ui'):
+                widget.retranslate_ui()
+        
+        # Show notification about language change
+        from de4py.lang import tr, keys
+        available = translation_manager.get_available_languages()
+        lang_name = available.get(lang_code, lang_code)
+        self.show_notification("info", tr(keys.NOTIF_LANGUAGE_CHANGED, language=lang_name))

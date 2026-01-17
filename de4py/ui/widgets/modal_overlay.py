@@ -5,6 +5,10 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QRectF, QPropertyAnimation
 from PySide6.QtGui import QPainter, QColor, QPixmap
 
+from de4py.lang import tr
+from de4py.lang.keys import DIALOG_VALUE_PLACEHOLDER
+
+
 
 class ModalOverlay(QWidget):
     submitted = Signal(str)
@@ -56,7 +60,8 @@ class ModalOverlay(QWidget):
         input_label_widget = QLabel(input_label)
         input_layout.addWidget(input_label_widget)
         self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("Enter value...")
+        self.input_field.setPlaceholderText(tr(DIALOG_VALUE_PLACEHOLDER))
+
         self.input_field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         input_layout.addWidget(self.input_field)
         frame_layout.addLayout(input_layout)

@@ -1,6 +1,11 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame
 from PySide6.QtCore import Qt
 
+from de4py.lang import tr
+from de4py.lang.keys import (
+    SCREEN_TITLE_ABOUT, ABOUT_GITHUB, ABOUT_DISCORD
+)
+
 
 class AboutScreen(QWidget):
     def __init__(self, parent=None):
@@ -21,10 +26,10 @@ class AboutScreen(QWidget):
         frame_layout.setSpacing(12)
         frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        title = QLabel("ABOUT")
-        title.setObjectName("TitleLabel")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        frame_layout.addWidget(title)
+        self.title_label = QLabel(tr(SCREEN_TITLE_ABOUT))
+        self.title_label.setObjectName("TitleLabel")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(self.title_label)
         
         github1 = QLabel('GitHub: <a href="https://github.com/fadi002" style="color: #0287CF;">fadi002</a>')
         github1.setOpenExternalLinks(True)
@@ -46,3 +51,7 @@ class AboutScreen(QWidget):
         frame_layout.addWidget(discord)
         
         layout.addWidget(frame)
+
+    def retranslate_ui(self):
+        """Update UI texts when language changes."""
+        self.title_label.setText(tr(SCREEN_TITLE_ABOUT))
