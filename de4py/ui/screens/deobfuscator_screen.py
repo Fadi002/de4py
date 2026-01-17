@@ -3,6 +3,13 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from de4py.lang import tr
+from de4py.lang.keys import (
+    SCREEN_TITLE_DEOBFUSCATOR, DEOBF_SELECT_FILE, DEOBF_DEOBFUSCATE,
+    MSG_NO_FILE_SELECTED, MSG_OPERATION_COMPLETE, MSG_OPERATION_FAILED,
+    MSG_WARNING, MSG_SUCCESS, MSG_ERROR
+)
+
 from de4py.ui.widgets.output_textarea import OutputTextArea
 from de4py.ui.workers.deobfuscator_worker import DeobfuscatorWorker
 
@@ -19,10 +26,10 @@ class DeobfuscatorScreen(QWidget):
         layout.setContentsMargins(40, 20, 40, 20)
         layout.setSpacing(20)
         
-        title = QLabel("DEOBFUSCATOR")
-        title.setObjectName("TitleLabel")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        self.title_label = QLabel(tr(SCREEN_TITLE_DEOBFUSCATOR))
+        self.title_label.setObjectName("TitleLabel")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.title_label)
         
         content_layout = QHBoxLayout()
         content_layout.setSpacing(40)
@@ -46,7 +53,7 @@ class DeobfuscatorScreen(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter) 
         layout.setContentsMargins(20, 20, 20, 20)
     
-        self.select_btn = QPushButton("Select a file")
+        self.select_btn = QPushButton(tr(DEOBF_SELECT_FILE))
         self.select_btn.clicked.connect(self._on_select_file)
         self.select_btn.setFixedHeight(35)
         layout.addWidget(self.select_btn)
@@ -61,7 +68,7 @@ class DeobfuscatorScreen(QWidget):
     
         layout.addStretch()
     
-        self.deobf_btn = QPushButton("Deobfuscate")
+        self.deobf_btn = QPushButton(tr(DEOBF_DEOBFUSCATE))
         self.deobf_btn.setMinimumWidth(120)
         self.deobf_btn.clicked.connect(self._on_deobfuscate)
         layout.addWidget(self.deobf_btn, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -94,7 +101,7 @@ class DeobfuscatorScreen(QWidget):
 
     def _on_deobfuscate(self):
         if not self._file_path:
-            self.window().show_notification("warning", "Select a file first")
+            self.window().show_notification("warning", tr(MSG_NO_FILE_SELECTED))
             return
         
         self.window().show_loading()
@@ -107,9 +114,16 @@ class DeobfuscatorScreen(QWidget):
     def _on_deobf_finished(self, result: str):
         self.window().hide_loading()
         self.output.set_text(result)
-        self.window().show_notification("success", "Deobfuscation function executed")
+        self.output.set_text(result)
+        self.window().show_notification("success", tr(MSG_OPERATION_COMPLETE))
 
     def _on_deobf_error(self, error: str):
         self.window().hide_loading()
         self.output.set_text(error)
-        self.window().show_notification("failure", "Deobfuscation function failed")
+        self.window().show_notification("failure", tr(MSG_OPERATION_FAILED))
+
+    def retranslate_ui(self):
+        """Update UI texts when language changes."""
+        self.title_label.setText(tr(SCREEN_TITLE_DEOBFUSCATOR))
+        self.select_btn.setText(tr(DEOBF_SELECT_FILE))
+        self.deobf_btn.setText(tr(DEOBF_DEOBFUSCATE))

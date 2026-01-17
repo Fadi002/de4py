@@ -1,5 +1,6 @@
 import logging
 import requests
+from requests.exceptions import RequestException, ConnectionError, Timeout
 from typing import Optional, Dict, Any, Tuple
 
 from de4py.config.config import settings
@@ -96,7 +97,7 @@ class De4pyApiClient:
                 message = response.text or f"HTTP {status_code} error"
             
             raise ApiError(status_code=status_code, message=message)
-    
+
     def get(self, endpoint: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Perform GET request.
@@ -111,8 +112,27 @@ class De4pyApiClient:
         url = self._build_url(endpoint)
         logger.debug(f"GET {url} params={params}")
         
-        response = self._session.get(url, params=params, timeout=self.timeout)
-        return self._handle_response(response)
+        try:
+            response = self._session.get(url, params=params, timeout=self.timeout)
+            return self._handle_response(response)
+        except ConnectionError:
+            raise ApiError(
+                status_code=0, 
+                message="No internet connection available.", 
+                action="Check your network settings and try again."
+            )
+        except Timeout:
+            raise ApiError(
+                status_code=408, 
+                message="The server took too long to respond.", 
+                action="Please try again later."
+            )
+        except RequestException as e:
+            raise ApiError(
+                status_code=999,
+                message=f"Network Error: {str(e)}",
+                action="Check your connection."
+            )
     
     def post(
         self,
@@ -136,14 +156,33 @@ class De4pyApiClient:
         url = self._build_url(endpoint)
         logger.debug(f"POST {url}")
         
-        response = self._session.post(
-            url,
-            json=json,
-            data=data,
-            files=files,
-            timeout=self.timeout,
-        )
-        return self._handle_response(response)
+        try:
+            response = self._session.post(
+                url,
+                json=json,
+                data=data,
+                files=files,
+                timeout=self.timeout,
+            )
+            return self._handle_response(response)
+        except ConnectionError:
+            raise ApiError(
+                status_code=0, 
+                message="No internet connection available.", 
+                action="Check your network settings and try again."
+            )
+        except Timeout:
+            raise ApiError(
+                status_code=408, 
+                message="The server took too long to respond.", 
+                action="Please try again later."
+            )
+        except RequestException as e:
+            raise ApiError(
+                status_code=999,
+                message=f"Network Error: {str(e)}",
+                action="Check your connection."
+            )
     
     def close(self):
         """Close the session and release resources."""

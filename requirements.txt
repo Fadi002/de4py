@@ -6,4 +6,3 @@ pycryptodome
 pypresence
 xdis
 pyinstaller
-requests

@@ -10,6 +10,12 @@ from PySide6.QtCore import Qt
 from de4py.ui.widgets.output_textarea import OutputTextArea
 from de4py.ui.workers.behavior_monitor_worker import BehaviorMonitorWorker
 from de4py.ui.controllers import pyshell_controller
+from de4py.lang import tr
+from de4py.lang.keys import (
+    SCREEN_TITLE_BEHAVIOR, BM_MONITOR_OPTIONS, BM_MONITOR_FILES,
+    BM_MONITOR_PROCESSES, BM_MONITOR_CONNECTIONS, BM_DUMP_SOCKET,
+    BM_DUMP_SSL, BM_PYC_DUMPER, BM_BACK_TO_MENU
+)
 
 
 class BehaviorMonitorScreen(QWidget):
@@ -24,10 +30,10 @@ class BehaviorMonitorScreen(QWidget):
         layout.setContentsMargins(40, 20, 40, 20)
         layout.setSpacing(20)
         
-        title = QLabel("BEHAVIOR MONITORING")
-        title.setObjectName("TitleLabel")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        self.title_label = QLabel(tr(SCREEN_TITLE_BEHAVIOR))
+        self.title_label.setObjectName("TitleLabel")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.title_label)
         
         content_layout = QHBoxLayout()
         content_layout.setSpacing(40)
@@ -49,34 +55,34 @@ class BehaviorMonitorScreen(QWidget):
         layout.setSpacing(15)
         layout.setContentsMargins(20, 20, 20, 20)
         
-        title_label = QLabel("MONITOR OPTIONS")
-        title_label.setObjectName("ChangelogTitleLabel")
-        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title_label)
+        self.options_title = QLabel(tr(BM_MONITOR_OPTIONS))
+        self.options_title.setObjectName("ChangelogTitleLabel")
+        self.options_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.options_title)
         
-        self.mf_checkbox = QCheckBox("Monitor Files")
+        self.mf_checkbox = QCheckBox(tr(BM_MONITOR_FILES))
         layout.addWidget(self.mf_checkbox)
         
-        self.mp_checkbox = QCheckBox("Monitor Processes")
+        self.mp_checkbox = QCheckBox(tr(BM_MONITOR_PROCESSES))
         layout.addWidget(self.mp_checkbox)
         
         mc_layout = QHBoxLayout()
-        self.mc_checkbox = QCheckBox("Monitor Connections")
+        self.mc_checkbox = QCheckBox(tr(BM_MONITOR_CONNECTIONS))
         mc_layout.addWidget(self.mc_checkbox)
-        self.dump_socket_checkbox = QCheckBox("Dump Socket")
+        self.dump_socket_checkbox = QCheckBox(tr(BM_DUMP_SOCKET))
         self.dump_socket_checkbox.setEnabled(False)
         mc_layout.addWidget(self.dump_socket_checkbox)
         layout.addLayout(mc_layout)
         
-        self.ssl_checkbox = QCheckBox("Dump OpenSSL Encrypted traffic")
+        self.ssl_checkbox = QCheckBox(tr(BM_DUMP_SSL))
         layout.addWidget(self.ssl_checkbox)
         
-        self.pyc_checkbox = QCheckBox("PYC dumper")
+        self.pyc_checkbox = QCheckBox(tr(BM_PYC_DUMPER))
         layout.addWidget(self.pyc_checkbox)
         
         layout.addStretch()
         
-        self.back_btn = QPushButton("Back to PyShell menu")
+        self.back_btn = QPushButton(tr(BM_BACK_TO_MENU))
         self.back_btn.setFixedHeight(35)
         self.back_btn.clicked.connect(self._go_back)
         layout.addWidget(self.back_btn)
@@ -217,3 +223,15 @@ class BehaviorMonitorScreen(QWidget):
         self.dump_socket_checkbox.setChecked(False)
         self.ssl_checkbox.setChecked(False)
         self.pyc_checkbox.setChecked(False)
+
+    def retranslate_ui(self):
+        """Update UI texts when language changes."""
+        self.title_label.setText(tr(SCREEN_TITLE_BEHAVIOR))
+        self.options_title.setText(tr(BM_MONITOR_OPTIONS))
+        self.mf_checkbox.setText(tr(BM_MONITOR_FILES))
+        self.mp_checkbox.setText(tr(BM_MONITOR_PROCESSES))
+        self.mc_checkbox.setText(tr(BM_MONITOR_CONNECTIONS))
+        self.dump_socket_checkbox.setText(tr(BM_DUMP_SOCKET))
+        self.ssl_checkbox.setText(tr(BM_DUMP_SSL))
+        self.pyc_checkbox.setText(tr(BM_PYC_DUMPER))
+        self.back_btn.setText(tr(BM_BACK_TO_MENU))

@@ -1,6 +1,10 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QLabel, QApplication
 from PySide6.QtCore import Qt
 
+from de4py.lang import tr
+from de4py.lang.keys import MSG_COPIED
+
+
 
 class OutputTextArea(QWidget):
     def __init__(self, title: str = "Output:", show_copy: bool = True, parent=None):
@@ -35,7 +39,8 @@ class OutputTextArea(QWidget):
         clipboard.setText(self.text_edit.toPlainText())
         main_window = self.window()
         if hasattr(main_window, 'show_notification'):
-            main_window.show_notification("success", "Copied")
+            main_window.show_notification("success", tr(MSG_COPIED))
+
 
     def set_text(self, text: str):
         self.text_edit.setPlainText(text)

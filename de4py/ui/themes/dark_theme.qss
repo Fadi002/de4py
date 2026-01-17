@@ -8,7 +8,7 @@ QWidget {
 	background-color: transparent;
 	color: #e1e1e1;
 	outline: none;
-	font-family: "Segoe UI", "Inter", sans-serif;
+	font-family: "Segoe UI", "Inter", "Tahoma", "Arial", "Microsoft YaHei", "Malgun Gothic", "SimSun", sans-serif;
 }
 
 /* Standard containers and cards */
@@ -65,9 +65,12 @@ QWidget#LoadingOverlay, QWidget#ModalOverlay {
 }
 
 /* Custom notification style */
+/* Custom notification style */
+/* Custom notification style */
 QFrame#NotificationFrame {
 	qproperty-borderColor: #0287CF;
 	qproperty-borderWidth: 1.5;
+	qproperty-overlayColorName: "#D2191919";
 	border-radius: 14px;
 	background: transparent;
 }
@@ -107,7 +110,7 @@ QPushButton#NavButton {
 	margin: 4px 10px;
 	font-size: 14px;
 	font-weight: 500;
-	qproperty-shadow_active_color: transparent; /* Remove active glow from buttons */
+	qproperty-shadow_active_color: transparent;
 }
 
 QPushButton#NavButton:hover {
@@ -131,6 +134,7 @@ QPushButton#HamburgerButton {
 	padding: 0;
 	min-width: 50px;
 	min-height: 50px;
+	qproperty-iconColorName: "#0287CF";
 }
 
 QPushButton#HamburgerButton:hover {
@@ -358,4 +362,54 @@ QLabel#ModeLabel[active="true"] {
 QLabel#ModeLabel[active="false"] {
     color: #777777;
     font-weight: normal;
+}
+
+/* Dropdown Selection (QComboBox) */
+QComboBox {
+    background-color: rgba(24, 28, 36, 0.9);
+    color: #ffffff;
+    border: 1px solid rgba(2, 135, 207, 0.3);
+    border-radius: 8px;
+    padding: 6px 12px;
+    min-height: 30px;
+}
+
+QComboBox:hover {
+    background-color: rgba(30, 36, 46, 0.9);
+    border: 1px solid rgba(2, 135, 207, 0.5);
+}
+
+QComboBox:focus {
+    border: 1px solid #0287CF;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 30px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #1a1f2b;
+    border: 1.5px solid #0287CF;
+    border-radius: 8px;
+    selection-background-color: #0287CF;
+    selection-color: #ffffff;
+    outline: none;
+    padding: 4px;
+}
+
+QComboBox QAbstractItemView::item {
+    padding: 10px;
+    border-radius: 4px;
+    color: #e1e1e1;
+}
+
+QComboBox QAbstractItemView::item:selected {
+    background-color: #0287CF;
+    color: #ffffff;
+}
+
+/* Specific styling for the language selector if needed */
+QComboBox#LanguageSelector {
+    min-width: 150px;
 }

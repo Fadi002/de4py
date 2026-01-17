@@ -11,8 +11,11 @@ import msvcrt
 # Prevent creation of __pycache__
 sys.dont_write_bytecode = True
 
+# Suppress harmless font compatibility warnings on Windows
+os.environ["QT_LOGGING_RULES"] = "qt.text.font.db=false"
+
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QFile, QTextStream
+from PySide6.QtCore import QFile, QTextStream, Qt
 from PySide6.QtGui import QIcon
 
 from de4py.ui.main_window import MainWindow
@@ -24,6 +27,8 @@ colorama.init(autoreset=True)
 
 DEFAULT_QSS = ""
 
+QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
 def load_stylesheet(app: QApplication):
     """Loads the dark theme QSS stylesheet."""
@@ -66,21 +71,23 @@ def main():
     logging.info("Starting de4py")
 
     # Check for updates
-    if update.check_update():
-            logging.info("You are using the latest version")
-    else:
-        logging.warning("There's a new version. Are you sure you want to use this version?")
-        tui.fade_type('Answer [y/n]\n')
-        if not input(">>> ").lower() == 'y':
-             logging.warning("Download it from here : https://github.com/Fadi002/de4py")
-             logging.warning("Press any key to exit...")
-             while True:
-                if msvcrt.kbhit():
-                    key = msvcrt.getch()
-                    logging.warning("Exiting...")
-                    rpc.KILL_THREAD = True
-                    ctypes.windll.kernel32.ExitProcess(0)
-
+    try:
+        if update.check_update():
+                logging.info("You are using the latest version")
+        else:
+            logging.warning("There's a new version. Are you sure you want to use this version?")
+            tui.fade_type('Answer [y/n]\n')
+            if not input(">>> ").lower() == 'y':
+                 logging.warning("Download it from here : https://github.com/Fadi002/de4py")
+                 logging.warning("Press any key to exit...")
+                 while True:
+                    if msvcrt.kbhit():
+                        key = msvcrt.getch()
+                        logging.warning("Exiting...")
+                        rpc.KILL_THREAD = True
+                        ctypes.windll.kernel32.ExitProcess(0)
+    except:
+        logging.error("Failed to check for updates")
     # Handle Modes
     if args.test:
         logging.info("Starting in Test mode...")

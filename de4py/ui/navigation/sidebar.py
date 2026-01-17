@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QSpacerItem, QSizePolicy, QL
 from PySide6.QtCore import Signal, QSize, Qt, Property
 from PySide6.QtGui import QIcon, QColor
 
+from de4py.lang import tr
 from de4py.ui.constants import NAV_ITEMS, SIDEBAR_WIDTH, SPACING_SM
 from de4py.ui.widgets.core_animations import AnimatedButton
 
@@ -57,8 +58,10 @@ class Sidebar(QWidget):
         layout.setSpacing(0)
 
         # Branded Header
-        self.title_label = QLabel("De4py")
+        from de4py.lang import keys
+        self.title_label = QLabel(tr(keys.APP_NAME))
         self.title_label.setObjectName("SidebarTitle")
+
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Add glow specifically to the title text
@@ -79,8 +82,9 @@ class Sidebar(QWidget):
         base_path = os.path.dirname(os.path.abspath(__file__))
         resources_path = os.path.join(base_path, "..", "resources")
         
-        for nav_id, label, icon_file in NAV_ITEMS:
-            btn = AnimatedButton(label)
+        for nav_id, label_key, icon_file in NAV_ITEMS:
+            # Use translation key to get localized label
+            btn = AnimatedButton(tr(label_key))
             btn.setObjectName("NavButton")
             btn.setProperty("nav_id", nav_id)
             btn.setMinimumHeight(45)
@@ -109,4 +113,13 @@ class Sidebar(QWidget):
             btn.setProperty("active", nid == nav_id)
             btn.style().unpolish(btn)
             btn.style().polish(btn)
+
+    def retranslate_ui(self):
+        """
+        Update all navigation button labels with current translations.
+        Called when language changes at runtime.
+        """
+        for nav_id, label_key, icon_file in NAV_ITEMS:
+            if nav_id in self._buttons:
+                self._buttons[nav_id].setText(tr(label_key))
 

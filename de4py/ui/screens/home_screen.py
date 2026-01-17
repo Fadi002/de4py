@@ -7,6 +7,11 @@ from PySide6.QtCore import Qt, QTimer
 
 from de4py.ui.widgets.output_textarea import OutputTextArea
 from de4py.ui.workers.changelog_worker import ChangelogWorker
+from de4py.lang import tr
+from de4py.lang.keys import (
+    SCREEN_TITLE_HOME, HOME_CHANGELOG_TITLE, HOME_ENV_INFO,
+    HOME_PYTHON_VERSION, HOME_ARCH, HOME_OS
+)
 
 
 
@@ -23,10 +28,11 @@ class HomeScreen(QWidget):
         layout.setSpacing(20)
 
         
-        title = QLabel("HOME")
-        title.setObjectName("TitleLabel")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        
+        self.title_label = QLabel(tr(SCREEN_TITLE_HOME))
+        self.title_label.setObjectName("TitleLabel")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.title_label)
         
         content_layout = QHBoxLayout()
         content_layout.setSpacing(40)
@@ -61,9 +67,9 @@ class HomeScreen(QWidget):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
 
-        title_label = QLabel("CHANGE LOG")
-        title_label.setObjectName("ChangelogTitleLabel")
-        layout.addWidget(title_label)
+        self.changelog_title = QLabel(tr(HOME_CHANGELOG_TITLE))
+        self.changelog_title.setObjectName("ChangelogTitleLabel")
+        layout.addWidget(self.changelog_title)
 
         self.changelog_area = QScrollArea()
         self.changelog_area.setWidgetResizable(True)
@@ -90,25 +96,40 @@ class HomeScreen(QWidget):
         layout.setSpacing(8)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        title_label = QLabel("Environment info")
-        title_label.setObjectName("EnvTitleLabel")
-        layout.addWidget(title_label)
+        self.env_title = QLabel(tr(HOME_ENV_INFO))
+        self.env_title.setObjectName("EnvTitleLabel")
+        layout.addWidget(self.env_title)
 
-        self.pv_label = QLabel(f"<b>Python version:</b> {platform.python_version()}")
+        self.pv_label = QLabel()
         self.pv_label.setObjectName("EnvLabel")
         layout.addWidget(self.pv_label)
 
-        self.arch_label = QLabel(f"<b>Arch:</b> {platform.architecture()[0]}")
+        self.arch_label = QLabel()
         self.arch_label.setObjectName("EnvLabel")
         layout.addWidget(self.arch_label)
 
         system_info = platform.uname()
-        self.os_label = QLabel(f"<b>OS:</b> {system_info.system} {system_info.release}")
+        self.os_label = QLabel()
         self.os_label.setObjectName("EnvLabel")
         layout.addWidget(self.os_label)
+        
+        self._update_env_info()
 
         layout.addStretch()
         return self.env_frame
+
+    def _update_env_info(self):
+        self.pv_label.setText(f"<b>{tr(HOME_PYTHON_VERSION)}:</b> {platform.python_version()}")
+        self.arch_label.setText(f"<b>{tr(HOME_ARCH)}:</b> {platform.architecture()[0]}")
+        system_info = platform.uname()
+        self.os_label.setText(f"<b>{tr(HOME_OS)}:</b> {system_info.system} {system_info.release}")
+
+    def retranslate_ui(self):
+        """Update UI texts when language changes."""
+        self.title_label.setText(tr(SCREEN_TITLE_HOME))
+        self.changelog_title.setText(tr(HOME_CHANGELOG_TITLE))
+        self.env_title.setText(tr(HOME_ENV_INFO))
+        self._update_env_info()
 
     def _create_clock_frame(self):
         frame = QFrame()

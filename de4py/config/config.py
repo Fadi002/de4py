@@ -14,17 +14,18 @@ class Settings:
     Application configuration.
     Changes here are reflected in `config.json`.
     """
-    version: str = "V2.1.2"
+    version: str = "V2.1.3"
     changelog_url: str = "https://raw.githubusercontent.com/Fadi002/de4py/main/INFO/changelog.json"
     version_url: str = "https://raw.githubusercontent.com/Fadi002/de4py/main/INFO/version"
     rpc: bool = True
     stealth_title: bool = True
     load_plugins: bool = True
-    build_num: str = "2.1.2.260115685-stable-de4py"
+    build_num: str = "2.1.3.260117440-stable-de4py"
     api_base_url: str = "https://de4py-api.vercel.app"
-    api_timeout: int = 30
+    api_timeout: int = 400
     poll_interval: float = 2.0
     active_theme: Optional[str] = None
+    language: str = "en" 
     
     _path: str = field(default=os.path.join(os.path.dirname(__file__), 'config.json'), repr=False, init=False)
 

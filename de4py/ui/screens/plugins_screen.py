@@ -8,6 +8,13 @@ from PySide6.QtCore import QUrl
 from de4py.config.config import settings
 import plugins
 from plugins import ThemePlugin
+from de4py.lang import tr
+from de4py.lang.keys import (
+    SCREEN_TITLE_PLUGINS, PLUGINS_DISABLED, PLUGINS_NONE_LOADED,
+    PLUGINS_FAILED_LOAD, PLUGINS_MADE_BY, PLUGINS_TYPE,
+    PLUGINS_APPLY, PLUGINS_RESET, PLUGINS_THEME_APPLIED, PLUGINS_THEME_FAILED, PLUGINS_THEME_RESET,
+    MSG_SUCCESS, MSG_ERROR, MSG_INFO, MSG_WARNING
+)
 
 
 
@@ -21,10 +28,10 @@ class PluginsScreen(QWidget):
         layout.setContentsMargins(40, 20, 40, 20)
         layout.setSpacing(20)
         
-        title = QLabel("PLUGINS")
-        title.setObjectName("TitleLabel")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        self.title_label = QLabel(tr(SCREEN_TITLE_PLUGINS))
+        self.title_label.setObjectName("TitleLabel")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.title_label)
         
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -49,7 +56,7 @@ class PluginsScreen(QWidget):
                 child.widget().deleteLater()
         
         if not settings.load_plugins:
-            no_plugins_label = QLabel("Plugins are disabled")
+            no_plugins_label = QLabel(tr(PLUGINS_DISABLED))
             no_plugins_label.setObjectName("TitleLabel")
             no_plugins_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.plugins_layout.addWidget(no_plugins_label)
@@ -59,7 +66,7 @@ class PluginsScreen(QWidget):
             loaded_plugins = plugins.load_plugins()
             
             if not loaded_plugins:
-                no_plugins_label = QLabel("No plugins were loaded")
+                no_plugins_label = QLabel(tr(PLUGINS_NONE_LOADED))
                 no_plugins_label.setObjectName("TitleLabel")
                 no_plugins_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.plugins_layout.addWidget(no_plugins_label)
@@ -73,7 +80,7 @@ class PluginsScreen(QWidget):
                     card = self._create_plugin_card(plugin_instance, plugin_type)
                     self.plugins_layout.addWidget(card)
         except Exception as e:
-            error_label = QLabel(f"Failed to load plugins: {str(e)}")
+            error_label = QLabel(f"{tr(PLUGINS_FAILED_LOAD)}: {str(e)}")
             self.plugins_layout.addWidget(error_label)
 
     def _create_plugin_card(self, plugin, plugin_type):
@@ -87,16 +94,16 @@ class PluginsScreen(QWidget):
         name_label.setObjectName("SubtitleLabel")
         layout.addWidget(name_label)
         
-        creator_label = QLabel(f"Made by: {plugin.creator}")
+        creator_label = QLabel(f"{tr(PLUGINS_MADE_BY)} {plugin.creator}")
         layout.addWidget(creator_label)
         
-        type_label = QLabel(f"Type: {plugin_type.capitalize()}")
+        type_label = QLabel(f"{tr(PLUGINS_TYPE)} {plugin_type.capitalize()}")
         type_label.setStyleSheet("color: #888;")
         layout.addWidget(type_label)
         
         if plugin_type == "theme" and isinstance(plugin, ThemePlugin):
             is_active = (settings.active_theme == plugin.name)
-            btn_text = "Reset Theme" if is_active else "Apply Theme"
+            btn_text = tr(PLUGINS_RESET) if is_active else tr(PLUGINS_APPLY)
             apply_btn = QPushButton(btn_text)
             apply_btn.clicked.connect(lambda: self._apply_theme(plugin))
             layout.addWidget(apply_btn)
@@ -113,8 +120,8 @@ class PluginsScreen(QWidget):
                 QApplication.instance().setStyleSheet(plugin.qss)
                 settings.active_theme = plugin.name
                 settings.save()
-                self.window().show_notification("success", f"Applied theme: {plugin.name}")
-                self._load_plugins() # Refresh UI to update buttons
+                self.window().show_notification("success", tr(PLUGINS_THEME_APPLIED, theme=plugin.name))
+                self._load_plugins() 
             else:
                 raise ValueError("Plugin missing QSS data")
         except Exception as e:
@@ -122,7 +129,7 @@ class PluginsScreen(QWidget):
             QApplication.instance().setStyleSheet(main.DEFAULT_QSS)
             settings.active_theme = None
             settings.save()
-            self.window().show_notification("failure", f"Failed to apply theme: {plugin.name}")
+            self.window().show_notification("failure", tr(PLUGINS_THEME_FAILED, theme=plugin.name))
             self._load_plugins()
 
     def _reset_theme(self):
@@ -130,5 +137,11 @@ class PluginsScreen(QWidget):
         QApplication.instance().setStyleSheet(main.DEFAULT_QSS)
         settings.active_theme = None
         settings.save()
-        self.window().show_notification("success", "Theme reset to default")
+        self.window().show_notification("success", tr(PLUGINS_THEME_RESET))
+        self._load_plugins()
+
+    def retranslate_ui(self):
+        """Update UI texts when language changes."""
+        self.title_label.setText(tr(SCREEN_TITLE_PLUGINS))
+        # Plugin cards are dynamic, so we just reload everything
         self._load_plugins()

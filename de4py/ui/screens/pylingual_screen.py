@@ -16,21 +16,28 @@ from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QSize, Signal, 
 from PySide6.QtGui import QColor, QPainter, QPixmap
 
 from de4py.ui.workers.pylingual_worker import PyLingualWorker
+from de4py.lang import tr
+from de4py.lang.keys import (
+    SCREEN_TITLE_PYLINGUAL, PYLINGUAL_OFFLINE, PYLINGUAL_ONLINE,
+    PYLINGUAL_SELECT_FILE, PYLINGUAL_EXECUTE, PYLINGUAL_COPY,
+    PYLINGUAL_RESULT, PYLINGUAL_TOS_TITLE, PYLINGUAL_TOS_ACCEPTANCE,
+    PYLINGUAL_TOS_CONTENT, PYLINGUAL_CANCEL, PYLINGUAL_I_ACCEPT,
+    PYLINGUAL_TOOLTIP_SELECT, PYLINGUAL_TOOLTIP_EXECUTE, PYLINGUAL_TOOLTIP_COPY,
+    PYLINGUAL_PLACEHOLDER_RESULT, PYLINGUAL_PLACEHOLDER_SELECTED,
+    PYLINGUAL_MSG_OFFLINE_LIMIT, PYLINGUAL_MSG_COMPLETE, PYLINGUAL_MSG_CACHED,
+    PYLINGUAL_MSG_INITIALIZING, MSG_COPIED,
+    MSG_SUCCESS, MSG_ERROR, MSG_INFO, MSG_WARNING
+)
+
+
 
 
 @dataclass
 class TOSConfig:
-    title: str = "PyLingual Terms of Service"
+    title: str = "PyLingual Terms of Service"  # Dynamic, set in __init__ or use property
     acceptance_text: str = "I have read and accept the PyLingual privacy TOS"
-    tos_content: str = (
-        "By using this service, you accept the PyLingual privacy TOS:\n\n"
-        "Files and patches submitted to the PyLingual web service are retained to support "
-        "future research and development.\n\n"
-        "By using this service, you warrant that you are not violating export control laws, "
-        "intellectual property rights, licenses, or other legal or contractual obligations, "
-        "and that you are not using this service for improper, unauthorized, or malicious purposes. "
-        "Proprietary files uploaded to PyLingual may be disclosed to relevant third parties."
-    )
+    tos_content: str = "" # Will be loaded from keys
+
 
 
 class TOSDialog(QWidget):
@@ -86,11 +93,13 @@ class TOSDialog(QWidget):
         btn_layout.setSpacing(10)
         btn_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn = QPushButton(tr(PYLINGUAL_CANCEL))
+
         self.cancel_btn.setMinimumHeight(35)
         self.cancel_btn.clicked.connect(self._on_reject)
         
-        self.accept_btn = QPushButton("I Accept")
+        self.accept_btn = QPushButton(tr(PYLINGUAL_I_ACCEPT))
+
         self.accept_btn.setMinimumHeight(35)
         self.accept_btn.setEnabled(False)
         self.accept_btn.clicked.connect(self._on_accept)
@@ -272,10 +281,10 @@ class PyLingualScreen(QWidget):
         root_layout.setSpacing(20)
 
         # Title Header
-        title = QLabel("PYLINGUAL")
-        title.setObjectName("TitleLabel")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        root_layout.addWidget(title)
+        self.title_label = QLabel(tr(SCREEN_TITLE_PYLINGUAL))
+        self.title_label.setObjectName("TitleLabel")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        root_layout.addWidget(self.title_label)
 
         # Mode Selection with Toggle
         mode_frame = QFrame()
@@ -286,7 +295,7 @@ class PyLingualScreen(QWidget):
         mode_layout.setContentsMargins(0, 0, 0, 0)
         mode_layout.setSpacing(15)
         
-        self.offline_label = QLabel("Offline (Local)")
+        self.offline_label = QLabel(tr(PYLINGUAL_OFFLINE))
         self.offline_label.setObjectName("ModeLabel")
         self.offline_label.setProperty("active", True)
         self.offline_label.setFixedHeight(26)
@@ -295,7 +304,7 @@ class PyLingualScreen(QWidget):
         self.mode_toggle = ModernToggle()
         self.mode_toggle.toggled.connect(self._on_mode_toggled)
         
-        self.online_label = QLabel("Online (Server)")
+        self.online_label = QLabel(tr(PYLINGUAL_ONLINE))
         self.online_label.setObjectName("ModeLabel")
         self.online_label.setProperty("active", False)
         self.online_label.setFixedHeight(26)
@@ -323,21 +332,24 @@ class PyLingualScreen(QWidget):
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setSpacing(15)
         
-        self.select_btn = QPushButton("Select File")
-        self.select_btn.setToolTip("Select a Python file for processing.")
+        self.select_btn = QPushButton(tr(PYLINGUAL_SELECT_FILE))
+        self.select_btn.setToolTip(tr(PYLINGUAL_TOOLTIP_SELECT))
+
         self.select_btn.setFixedHeight(45)
         self.select_btn.clicked.connect(self._on_select_file_clicked)
         actions_layout.addWidget(self.select_btn, 1)
 
-        self.execute_btn = QPushButton("Execute")
-        self.execute_btn.setToolTip("Start the decompilation process.")
+        self.execute_btn = QPushButton(tr(PYLINGUAL_EXECUTE))
+        self.execute_btn.setToolTip(tr(PYLINGUAL_TOOLTIP_EXECUTE))
+
         self.execute_btn.setFixedHeight(45)
         self.execute_btn.setEnabled(False)  # Wait for file selection
         self.execute_btn.clicked.connect(self._on_execute_clicked)
         actions_layout.addWidget(self.execute_btn, 1)
         
-        self.copy_btn = QPushButton("Copy Result")
-        self.copy_btn.setToolTip("Copy decompiled output to clipboard.")
+        self.copy_btn = QPushButton(tr(PYLINGUAL_COPY))
+        self.copy_btn.setToolTip(tr(PYLINGUAL_TOOLTIP_COPY))
+
         self.copy_btn.setFixedHeight(45)
         self.copy_btn.setFixedWidth(140)
         self.copy_btn.clicked.connect(self._copy_to_clipboard)
@@ -386,12 +398,13 @@ class PyLingualScreen(QWidget):
         content_layout.addWidget(self.progress_frame)
 
         # Result Area
-        result_title = QLabel("Decompiled Result")
-        result_title.setObjectName("SubtitleLabel")
-        content_layout.addWidget(result_title)
+        self.result_title = QLabel(tr(PYLINGUAL_RESULT))
+        self.result_title.setObjectName("SubtitleLabel")
+        content_layout.addWidget(self.result_title)
         
         self.result_area = QTextEdit()
-        self.result_area.setPlaceholderText("Decompiled result will appear here...")
+        self.result_area.setPlaceholderText(tr(PYLINGUAL_PLACEHOLDER_RESULT))
+
         self.result_area.setReadOnly(True)
         content_layout.addWidget(self.result_area)
 
@@ -426,10 +439,12 @@ class PyLingualScreen(QWidget):
             
             # Show only the basename for a cleaner look
             basename = os.path.basename(filename)
-            self.result_area.setPlaceholderText(f"File '{basename}' selected. Click Execute to start.")
+            self.result_area.setPlaceholderText(tr(PYLINGUAL_PLACEHOLDER_SELECTED, filename=basename))
+
             
             if hasattr(self.window(), "show_notification"):
-                self.window().show_notification("success", f"Selected: {basename}")
+                self.window().show_notification("success", tr(MSG_SUCCESS)) # Or a specific key for selection
+
 
     def _on_execute_clicked(self):
         if not self._file_selected:
@@ -464,7 +479,8 @@ class PyLingualScreen(QWidget):
         """Execute local decompilation (placeholder for future implementation)."""
         main_win = self.window()
         if hasattr(main_win, "show_notification"):
-            main_win.show_notification("info", "Offline mode is not yet implemented")
+            main_win.show_notification("info", tr(PYLINGUAL_MSG_OFFLINE_LIMIT))
+
 
     def _on_worker_progress(self, stage: str, percentage: float, message: str):
         """Handle progress updates from the worker."""
@@ -485,7 +501,8 @@ class PyLingualScreen(QWidget):
         
         main_win = self.window()
         if hasattr(main_win, "show_notification"):
-            main_win.show_notification("success", "Decompilation complete!")
+            main_win.show_notification("success", tr(PYLINGUAL_MSG_COMPLETE))
+
 
     def _on_worker_error(self, error_message: str):
         """Handle decompilation error."""
@@ -501,14 +518,16 @@ class PyLingualScreen(QWidget):
         """Handle cached result notification."""
         main_win = self.window()
         if hasattr(main_win, "show_notification"):
-            main_win.show_notification("info", "Result retrieved from cache")
+            main_win.show_notification("info", tr(PYLINGUAL_MSG_CACHED))
+
 
     def _show_progress(self, show: bool):
         """Show or hide progress indicators."""
         self.progress_frame.setVisible(show)
         if show:
             self.progress_bar.setValue(0)
-            self.progress_label.setText("Initializing...")
+            self.progress_label.setText(tr(PYLINGUAL_MSG_INITIALIZING))
+
 
     def _set_controls_enabled(self, enabled: bool):
         """Enable or disable controls during processing."""
@@ -522,16 +541,38 @@ class PyLingualScreen(QWidget):
             QApplication.clipboard().setText(data)
             main_win = self.window()
             if hasattr(main_win, "show_notification"):
-                main_win.show_notification("info", "Result copied to clipboard.")
+                main_win.show_notification("info", tr(MSG_COPIED))
+
 
     def showEvent(self, event):
         super().showEvent(event)
 
     def _check_consent(self):
-        self.tos_overlay = TOSDialog(parent=self.window())
+        # Dynamically load TOS config
+        config = TOSConfig(
+            title=tr(PYLINGUAL_TOS_TITLE),
+            acceptance_text=tr(PYLINGUAL_TOS_ACCEPTANCE),
+            tos_content=tr(PYLINGUAL_TOS_CONTENT)
+        )
+        self.tos_overlay = TOSDialog(config=config, parent=self.window())
+        
+        # Update buttons text manually for now as TOSDialog might not be fully integrated
+        self.tos_overlay.cancel_btn.setText(tr(PYLINGUAL_CANCEL))
+        self.tos_overlay.accept_btn.setText(tr(PYLINGUAL_I_ACCEPT))
+        
         self.tos_overlay.accepted.connect(self._on_consent_accepted)
         self.tos_overlay.rejected.connect(self._on_consent_rejected)
         self.tos_overlay.fade_in()
+
+    def retranslate_ui(self):
+        """Update UI texts when language changes."""
+        self.title_label.setText(tr(SCREEN_TITLE_PYLINGUAL))
+        self.offline_label.setText(tr(PYLINGUAL_OFFLINE))
+        self.online_label.setText(tr(PYLINGUAL_ONLINE))
+        self.select_btn.setText(tr(PYLINGUAL_SELECT_FILE))
+        self.execute_btn.setText(tr(PYLINGUAL_EXECUTE))
+        self.copy_btn.setText(tr(PYLINGUAL_COPY))
+        self.result_title.setText(tr(PYLINGUAL_RESULT))
 
     def _on_consent_accepted(self):
         self._consent_accepted = True
