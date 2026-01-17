@@ -11,7 +11,7 @@ github:
   commit_message: Update translations from Crowdin
 base_path: .
 files:
-  - source: de4py/lang/locales/en.json
-    translation: de4py/lang/locales/%two_letters_code%.json
+  - source: /de4py/lang/locales/en.json
+    translation: /de4py/lang/locales/%two_letters_code%.json
     type: json
     update_option: update_as_unapproved
