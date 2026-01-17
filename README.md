@@ -72,6 +72,7 @@ All contributions are welcome!
 ## 🔗 Community
 
 - **Matrix:** [Join our Matrix room](https://matrix.to/#/#de4py_commiunty:matrix.org) 🔒 (recommended)
+- **Signal:** [Join our Signal room](https://signal.group/#CjQKIGl8b9tJIMoMpwnrzUIDSqJY5UMJOzpixJklsEgYSrjJEhCw2rBAUFVOWkwIZ-gM3mqS)
 - **Discord:** [Join here](https://discord.gg/cYxxUHsbRm) 💬
 
 ## 🌐 Help Translate de4py

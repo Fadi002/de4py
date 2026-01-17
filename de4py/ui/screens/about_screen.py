@@ -45,6 +45,11 @@ class AboutScreen(QWidget):
         matrix.setOpenExternalLinks(True)
         matrix.setAlignment(Qt.AlignmentFlag.AlignCenter)
         frame_layout.addWidget(matrix)
+
+        signal = QLabel('<a href="https://signal.group/#CjQKIGl8b9tJIMoMpwnrzUIDSqJY5UMJOzpixJklsEgYSrjJEhCw2rBAUFVOWkwIZ-gM3mqS" style="color: #0287CF;">Signal Community</a>')
+        signal.setOpenExternalLinks(True)
+        signal.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(signal)
         
         discord = QLabel("Made by 0xmrpepe & advdebug with <3")
         discord.setAlignment(Qt.AlignmentFlag.AlignCenter)
