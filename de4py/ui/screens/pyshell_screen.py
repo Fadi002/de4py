@@ -14,6 +14,21 @@ from de4py.ui.workers.pyshell_worker import (
 from de4py.ui.constants import SPACING_MD
 from de4py.ui.controllers import pyshell_controller
 from de4py.utils import gen_path
+from de4py.lang import tr
+from de4py.lang.keys import (
+    SCREEN_TITLE_PYSHELL, PYSHELL_ATTACH, PYSHELL_DETACH, PYSHELL_EXECUTE, PYSHELL_CLEAR,
+    PYSHELL_INPUT_PLACEHOLDER, PYSHELL_PID_LABEL, PYSHELL_COMMANDS_TITLE,
+    PYSHELL_CMD_EXEC_PY, PYSHELL_CMD_CRASH, PYSHELL_CMD_FUNCTIONS,
+    PYSHELL_CMD_SHOW_CONSOLE, PYSHELL_CMD_GUI, PYSHELL_CMD_DUMP_STRINGS,
+    PYSHELL_CMD_DEL_EXIT, PYSHELL_CMD_DETACH, PYSHELL_CMD_BEHAVIOR,
+    PYSHELL_INJECTED, PYSHELL_INJECT_FAIL, PYSHELL_PROCESS_DIED,
+    PYSHELL_NEED_INJECT, PYSHELL_ENTER_PID, PYSHELL_INJECTOR_FAILED,
+    PYSHELL_CMD_EXECUTED, PYSHELL_CMD_SAVED_AS, PYSHELL_CMD_EXECUTED_MSG,
+    PYSHELL_CMD_DLL_DETACHED, PYSHELL_CMD_DONE, PYSHELL_CMD_FAILED,
+    PYSHELL_CMD_BEHAVIOR_HINT,
+    MSG_SUCCESS, MSG_WARNING, MSG_ERROR
+)
+    
 
 
 class PyShellScreen(QWidget):
@@ -34,10 +49,10 @@ class PyShellScreen(QWidget):
         layout.setContentsMargins(40, 20, 40, 20)
         layout.setSpacing(20)
 
-        title = QLabel("PYSHELL")
-        title.setObjectName("TitleLabel")
-        title.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title)
+        self.title_label = QLabel(tr(SCREEN_TITLE_PYSHELL))
+        self.title_label.setObjectName("TitleLabel")
+        self.title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.title_label)
 
         content_layout = QHBoxLayout()
         content_layout.setSpacing(20)
@@ -77,22 +92,23 @@ class PyShellScreen(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
 
         pid_layout = QHBoxLayout()
-        pid_label = QLabel("Target pid:")
+        self.pid_label = QLabel(tr(PYSHELL_PID_LABEL))
         self.pid_input = QLineEdit()
-        self.pid_input.setPlaceholderText("Enter PID")
+        self.pid_input.setPlaceholderText(tr(PYSHELL_INPUT_PLACEHOLDER))
 
-        pid_layout.addWidget(pid_label)
+        pid_layout.addWidget(self.pid_label)
         pid_layout.addWidget(self.pid_input)
         layout.addLayout(pid_layout)
 
+
         btn_layout = QHBoxLayout()
 
-        self.inject_btn = QPushButton("Inject")
+        self.inject_btn = QPushButton(tr(PYSHELL_ATTACH))
         self.inject_btn.setFixedHeight(35)
         self.inject_btn.clicked.connect(lambda: self._inject("normal"))
         btn_layout.addWidget(self.inject_btn)
 
-        self.stealth_btn = QPushButton("Stealth Inject")
+        self.stealth_btn = QPushButton(f"{tr(PYSHELL_ATTACH)} (Stealth)")
         self.stealth_btn.setFixedHeight(35)
         self.stealth_btn.clicked.connect(lambda: self._inject("stealth"))
         btn_layout.addWidget(self.stealth_btn)
@@ -130,10 +146,11 @@ class PyShellScreen(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
 
-        title_label = QLabel("COMMANDS")
-        title_label.setObjectName("ChangelogTitleLabel")
-        title_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title_label)
+        self.commands_title = QLabel(tr(PYSHELL_COMMANDS_TITLE))
+        self.commands_title.setObjectName("ChangelogTitleLabel")
+        self.commands_title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.commands_title)
+
 
         grid = QGridLayout()
         grid.setSpacing(10)
@@ -141,16 +158,23 @@ class PyShellScreen(QWidget):
         for i in range(4):
             grid.setColumnStretch(i, 1)
 
+        self.commands_grid = grid
+        self._add_pyshell_buttons()
+
+        layout.addLayout(self.commands_grid)
+        return frame
+
+    def _add_pyshell_buttons(self):
         commands = [
-            ("exec py code", "ExecPY"),
-            ("crash process", "ForceCrash"),
-            ("get all functions", "GetFunctions"),
-            ("force show console", "ShowConsole"),
-            ("Pyshell (tkinter GUI)", "PyshellGUI"),
-            ("Dump strings", "DumpStrings"),
-            ("Remove exit function", "delExit"),
-            ("Deattach DLL", "DeattachDLL"),
-            ("Behavior Monitoring", "GetAnalyzerHandle"),
+            (tr(PYSHELL_CMD_EXEC_PY), "ExecPY"),
+            (tr(PYSHELL_CMD_CRASH), "ForceCrash"),
+            (tr(PYSHELL_CMD_FUNCTIONS), "GetFunctions"),
+            (tr(PYSHELL_CMD_SHOW_CONSOLE), "ShowConsole"),
+            (tr(PYSHELL_CMD_GUI), "PyshellGUI"),
+            (tr(PYSHELL_CMD_DUMP_STRINGS), "DumpStrings"),
+            (tr(PYSHELL_CMD_DEL_EXIT), "delExit"),
+            (tr(PYSHELL_CMD_DETACH), "DeattachDLL"),
+            (tr(PYSHELL_CMD_BEHAVIOR), "GetAnalyzerHandle"),
         ]
 
         row = col = 0
@@ -160,14 +184,12 @@ class PyShellScreen(QWidget):
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             btn.clicked.connect(lambda _, c=cmd: self._exec_command(c))
 
-            grid.addWidget(btn, row, col)
+            self.commands_grid.addWidget(btn, row, col)
             col += 1
             if col >= 4:
                 col = 0
                 row += 1
 
-        layout.addLayout(grid)
-        return frame
 
     # ------------------------------------------------------------------
 
@@ -188,7 +210,7 @@ class PyShellScreen(QWidget):
     def _inject(self, inject_type: str):
         pid = self.pid_input.text().strip()
         if not pid:
-            self.window().show_notification("warning", "Type process id first")
+            self.window().show_notification("warning", tr(PYSHELL_ENTER_PID))
             return
 
         self.window().show_loading()
@@ -204,8 +226,8 @@ class PyShellScreen(QWidget):
         self.window().hide_loading()
         if success:
             self._injected = True
-            self.output.set_text("pyshell injected")
-            self.window().show_notification("success", "pyshell injector function executed")
+            self.output.set_text(tr(PYSHELL_INJECTED))
+            self.window().show_notification("success", tr(PYSHELL_INJECTED))
 
             try:
                 pid = int(self.pid_input.text().strip())
@@ -215,20 +237,22 @@ class PyShellScreen(QWidget):
             except ValueError:
                 pass
         else:
-            self.output.set_text("Failed to inject")
-            self.window().show_notification("failure", "pyshell injector function failed")
+            self.output.set_text(tr(PYSHELL_INJECT_FAIL))
+            self.window().show_notification("failure", tr(PYSHELL_INJECT_FAIL))
+
 
     def _on_inject_error(self, error: str):
         self.window().hide_loading()
         self.output.set_text(f"failed to inject pyshell: {error}")
-        self.window().show_notification("failure", "pyshell injector function failed")
+        self.window().show_notification("failure", tr(PYSHELL_INJECTOR_FAILED))
 
     def _on_process_died(self):
         self._injected = False
         self._analyzer_handle = False
         pyshell_controller.clear_handles()
-        self.window().show_notification("warning", "Process crashed/died/killed")
+        self.window().show_notification("warning", tr(PYSHELL_PROCESS_DIED))
         self.process_died.emit()
+
 
     def _exec_command(self, command: str):
         if command == "ShowConsole":
@@ -238,13 +262,14 @@ class PyShellScreen(QWidget):
             return
 
         if not self._injected:
-            self.window().show_notification("failure", "Please inject the dll into a process first")
+            self.window().show_notification("failure", tr(PYSHELL_NEED_INJECT))
             return
+
 
         if command in ("DumpStrings", "GetFunctions"):
             path, filename = gen_path()
             worker = PipeCommandWorker(f"{command}||{path}", self)
-            worker.finished.connect(lambda _: self._on_command_result(f"saved as {filename}"))
+            worker.finished.connect(lambda _: self._on_command_result(tr(PYSHELL_CMD_SAVED_AS).format(filename=filename)))
             worker.start()
             self._workers.append(worker)
 
@@ -254,7 +279,7 @@ class PyShellScreen(QWidget):
             )
             if file_path:
                 worker = PipeCommandWorker(f"ExecPY||{file_path}", self)
-                worker.finished.connect(lambda _: self._on_command_result("Executed"))
+                worker.finished.connect(lambda _: self._on_command_result(tr(PYSHELL_CMD_EXECUTED_MSG)))
                 worker.start()
                 self._workers.append(worker)
 
@@ -263,8 +288,8 @@ class PyShellScreen(QWidget):
                 pyshell_controller.write_to_pipe("GetAnalyzerHandle")
                 pyshell_controller.open_analyzer_handle()
                 self._analyzer_handle = True
-                self.output.set_text("Executed | click the button again to open the menu")
-                self.window().show_notification("success", "Command executed")
+                self.output.set_text(tr(PYSHELL_CMD_EXECUTED_MSG) + " | " + tr(PYSHELL_CMD_BEHAVIOR_HINT))
+                self.window().show_notification("success", tr(PYSHELL_CMD_EXECUTED))
             else:
                 self.window().navigate_to_behavior_monitor()
 
@@ -272,19 +297,19 @@ class PyShellScreen(QWidget):
             self._injected = False
             self._analyzer_handle = False
             worker = PipeCommandWorker(command, self)
-            worker.finished.connect(lambda _: self._on_command_result("DLL detached"))
+            worker.finished.connect(lambda _: self._on_command_result(tr(PYSHELL_CMD_DLL_DETACHED)))
             worker.start()
             self._workers.append(worker)
 
         else:
             worker = PipeCommandWorker(command, self)
-            worker.finished.connect(lambda _: self._on_command_result("Command executed"))
+            worker.finished.connect(lambda _: self._on_command_result(tr(PYSHELL_CMD_EXECUTED_MSG)))
             worker.start()
             self._workers.append(worker)
 
     def _on_command_result(self, message: str):
         self.output.set_text(message)
-        self.window().show_notification("success", "Command executed")
+        self.window().show_notification("success", tr(PYSHELL_CMD_EXECUTED))
 
     def _on_show_console(self, pid: str):
         worker = ShowConsoleWorker(pid, self)
@@ -297,3 +322,21 @@ class PyShellScreen(QWidget):
         self.window().show_notification(
             "success" if success else "failure", "Command executed"
         )
+
+    def retranslate_ui(self):
+        """Update UI texts when language changes."""
+        self.title_label.setText(tr(SCREEN_TITLE_PYSHELL))
+        self.pid_label.setText(tr(PYSHELL_PID_LABEL))
+        self.inject_btn.setText(tr(PYSHELL_ATTACH))
+        self.stealth_btn.setText(f"{tr(PYSHELL_ATTACH)} (Stealth)")
+        self.pid_input.setPlaceholderText(tr(PYSHELL_INPUT_PLACEHOLDER))
+        self.commands_title.setText(tr(PYSHELL_COMMANDS_TITLE))
+        
+        # Clear and rebuild command buttons
+        while self.commands_grid.count():
+             item = self.commands_grid.takeAt(0)
+             if item.widget():
+                 item.widget().deleteLater()
+        
+        self._add_pyshell_buttons()
+
