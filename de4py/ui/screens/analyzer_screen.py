@@ -6,6 +6,16 @@ from PySide6.QtCore import Qt
 
 from de4py.ui.widgets.output_textarea import OutputTextArea
 from de4py.ui.workers.analyzer_worker import AnalyzerWorker
+from de4py.lang import tr
+from de4py.lang.keys import (
+    SCREEN_TITLE_ANALYZER, ANALYZER_SELECT_FILE, ANALYZER_ANALYZE,
+    ANALYZER_RESULTS, MSG_NO_FILE_SELECTED, MSG_OPERATION_COMPLETE,
+    MSG_OPERATION_FAILED, MSG_WARNING, MSG_SUCCESS, MSG_ERROR, ANALYZER_OPTIONS_TITLE,
+    ANALYZER_ONLY_EXE, ANALYZER_EXECUTED, ANALYZER_CMD_PACKER,
+    ANALYZER_CMD_UNPACK, ANALYZER_CMD_SUS_STRINGS, ANALYZER_CMD_ALL_STRINGS,
+    ANALYZER_CMD_HASHES
+)
+
 
 
 class AnalyzerScreen(QWidget):
@@ -25,10 +35,10 @@ class AnalyzerScreen(QWidget):
         layout.setContentsMargins(40, 20, 40, 20)
         layout.setSpacing(20)
         
-        title = QLabel("ANALYZER")
-        title.setObjectName("TitleLabel")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        self.title_label = QLabel(tr(SCREEN_TITLE_ANALYZER))
+        self.title_label.setObjectName("TitleLabel")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.title_label)
         
         content_layout = QHBoxLayout()
         content_layout.setSpacing(20)
@@ -60,7 +70,7 @@ class AnalyzerScreen(QWidget):
         layout.setSpacing(10)
         layout.setContentsMargins(20, 20, 20, 20)
         
-        self.select_btn = QPushButton("Select a file")
+        self.select_btn = QPushButton(tr(ANALYZER_SELECT_FILE))
         self.select_btn.setFixedHeight(35)
         self.select_btn.clicked.connect(self._on_select_file)
         layout.addWidget(self.select_btn)
@@ -80,32 +90,22 @@ class AnalyzerScreen(QWidget):
         frame.setMinimumWidth(390)
         frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        layout = QVBoxLayout(frame)
-        layout.setSpacing(10)
-        layout.setContentsMargins(20, 20, 20, 20)
-        
-        title_label = QLabel("ANALYSIS OPTIONS")
-        title_label.setObjectName("ChangelogTitleLabel")
-        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.options_layout = QVBoxLayout(frame)
+        self.options_layout.setSpacing(10)
+        self.options_layout.setContentsMargins(20, 20, 20, 20)
 
-        layout.addWidget(title_label)
         
-        commands = [
-            ("exe packer detector", "detect_packer"),
-            ("unpack exe", "unpack_exe"),
-            ("sus strings lookup", "sus_strings_lookup"),
-            ("all strings lookup", "all_strings_lookup"),
-            ("get file hashs", "get_file_hashs"),
-        ]
-        
-        for label, cmd in commands:
-            btn = QPushButton(label)
-            btn.setFixedHeight(35)
-            btn.clicked.connect(lambda checked, c=cmd: self._run_command(c))
-            layout.addWidget(btn)
+        self.options_title = QLabel(tr(ANALYZER_OPTIONS_TITLE))
+        self.options_title.setObjectName("ChangelogTitleLabel")
+        self.options_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.options_title.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+        self.options_layout.addWidget(self.options_title)
+
+        self._add_command_buttons(self.options_layout)
         
         return frame
+
 
     def _create_output_frame(self):
         frame = QFrame()
@@ -132,12 +132,13 @@ class AnalyzerScreen(QWidget):
 
     def _run_command(self, command: str):
         if not self._file_path:
-            self.window().show_notification("warning", "Select a file first")
+            self.window().show_notification("warning", tr(MSG_NO_FILE_SELECTED))
             return
         
         if command in ["detect_packer", "unpack_exe"] and not self._file_path.endswith(".exe"):
-            self.window().show_notification("failure", "only exe files are supported")
+            self.window().show_notification("failure", tr(ANALYZER_ONLY_EXE))
             return
+
         
         self.window().show_loading()
         
@@ -157,9 +158,37 @@ class AnalyzerScreen(QWidget):
                 pass
         
         self.output.set_text(result)
-        self.window().show_notification("success", "Command executed")
+        self.window().show_notification("success", tr(ANALYZER_EXECUTED))
+
 
     def _on_command_error(self, error: str):
         self.window().hide_loading()
         self.output.set_text(error)
-        self.window().show_notification("failure", "Command failed")
+        self.window().show_notification("failure", tr(MSG_OPERATION_FAILED))
+
+    def retranslate_ui(self):
+        """Update UI texts when language changes."""
+        self.title_label.setText(tr(SCREEN_TITLE_ANALYZER))
+        self.select_btn.setText(tr(ANALYZER_SELECT_FILE))
+        self.options_title.setText(tr(ANALYZER_OPTIONS_TITLE))
+        # We need to refresh the options frame to update command button texts
+        while self.options_layout.count() > 1: # Keep the title
+             item = self.options_layout.takeAt(1)
+             if item.widget():
+                 item.widget().deleteLater()
+        
+        self._add_command_buttons(self.options_layout)
+
+    def _add_command_buttons(self, layout):
+        commands = [
+            (tr(ANALYZER_CMD_PACKER), "detect_packer"),
+            (tr(ANALYZER_CMD_UNPACK), "unpack_exe"),
+            (tr(ANALYZER_CMD_SUS_STRINGS), "sus_strings_lookup"),
+            (tr(ANALYZER_CMD_ALL_STRINGS), "all_strings_lookup"),
+            (tr(ANALYZER_CMD_HASHES), "get_file_hashs"),
+        ]
+        for label, cmd in commands:
+            btn = QPushButton(label)
+            btn.setFixedHeight(35)
+            btn.clicked.connect(lambda checked, c=cmd: self._run_command(c))
+            layout.addWidget(btn)

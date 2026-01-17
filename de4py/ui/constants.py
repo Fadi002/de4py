@@ -25,10 +25,11 @@ FONT_SIZE_TITLE = 24
 FONT_SIZE_CLOCK = 48
 
 # Spacing
-SPACING_XS = 5
-SPACING_SM = 10
-SPACING_MD = 20
-SPACING_LG = 40
+SPACING_XS = 5 
+SPACING_SM = 8 
+SPACING_MD = 16 
+SPACING_LG = 24 
+SPACING_XL = 32
 
 # Sizing
 SIDEBAR_WIDTH = 240
@@ -41,10 +42,9 @@ FRAME_RADIUS = 10
 FRAME_BORDER = 2
 INPUT_RADIUS = 10
 
-# Animation
-ANIM_DURATION_FAST = 150
+# Animation [DEPRECATED - Moved to MotionManager]
+# Kept briefly to prevent immediate ImportErrors until full migration
 ANIM_DURATION_NORMAL = 200
-ANIM_DURATION_SLOW = 250
 
 # Window
 WINDOW_WIDTH = 1024
@@ -69,12 +69,12 @@ SCREEN_PYLINGUAL = 8
 
 # Navigation items (id, label, icon)
 NAV_ITEMS = [
-    ("home", "Home", "home.svg"),
-    ("deobfuscator", "Deobfuscator", "layers.svg"),
-    ("pyshell", "PyShell", "terminal.svg"),
-    ("analyzer", "Analyzer", "file-text.svg"),
-    ("plugins", "Plugins", "grid.svg"),
-    ("pylingual", "PyLingual", "file.svg"),
-    ("settings", "Settings", "settings.svg"),
-    ("about", "About", "info.svg"),
+    ("home", "nav.home", "home.svg"),
+    ("deobfuscator", "nav.deobfuscator", "layers.svg"),
+    ("pyshell", "nav.pyshell", "terminal.svg"),
+    ("analyzer", "nav.analyzer", "file-text.svg"),
+    ("plugins", "nav.plugins", "grid.svg"),
+    ("pylingual", "nav.pylingual", "file.svg"),
+    ("settings", "nav.settings", "settings.svg"),
+    ("about", "nav.about", "info.svg"),
 ]

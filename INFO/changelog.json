@@ -102,5 +102,15 @@
             "Fixed some bugs & Improved stability",
             "Restructured code"
         ]
+    },
+    {
+        "version": "2.1.3",
+        "changes": [
+            "Improved animations",
+            "Added new themes",
+            "Fixed some bugs",
+            "Added support for new languages",
+            "help us to translate de4py: https://crowdin.com/project/de4py"
+        ]
     }
 ]

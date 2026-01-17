@@ -74,6 +74,14 @@ All contributions are welcome!
 - **Matrix:** [Join our Matrix room](https://matrix.to/#/#de4py_commiunty:matrix.org) 🔒 (recommended)
 - **Discord:** [Join here](https://discord.gg/cYxxUHsbRm) 💬
 
+## 🌐 Help Translate de4py
+
+We use [Crowdin](https://crowdin.com/project/de4py) for translations.  
+
+- Select a language you want to translate.
+- Use the Crowdin web editor.
+- Submit translations for review.
+
 ## ⚠️ Disclaimer
 
 This tool is for **educational purposes only**. Never deobfuscate software without permission. The developers are not responsible for misuse.

@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QProgressBar, QSizePolicy, QGraphicsBlurEffect, QGraphicsScene, QGraphicsPixmapItem
 )
 from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QPoint, QRect, QRectF, Property
-from PySide6.QtSvgWidgets import QSvgWidget
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtGui import QPainter, QColor, QPixmap, QPen
 from de4py.ui.constants import NOTIF_WIDTH, NOTIF_DURATION, NOTIF_PROGRESS_DURATION, ANIM_DURATION_NORMAL
 
@@ -20,18 +20,53 @@ class NotificationWidget(QFrame):
         self._notif_type = notif_type
         self._progress_value = 100
         self._blur_pixmap = blur_pixmap
+        self._icon_color = QColor("white") # Default
 
         # Glass + border properties
         self._border_color = QColor("#0287CF")
         self._border_width = 1.5
         self._corner_radius = 14
+        self._overlay_color = QColor(25, 25, 25, 170)  # Default dark
 
         # Transparent for glass effect
         self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WA_NoSystemBackground, True)
 
         self._setup_ui(notif_type, message)
 
     # Qt properties so QSS can set them dynamically
+    def getOverlayColor(self) -> QColor:
+        return self._overlay_color
+
+    # Qt properties so QSS can set them dynamically
+    def getOverlayColorName(self) -> str:
+        return self._overlay_color.name(QColor.HexArgb)
+
+    def setOverlayColorName(self, color_str: str):
+        if color_str:
+            # Handle hex with alpha or standard names
+            c = QColor(color_str)
+            if c.isValid():
+                self._overlay_color = c
+                self.update()
+
+    overlayColorName = Property(str, getOverlayColorName, setOverlayColorName)
+
+    # New Property for Icon Color
+    def getIconColorName(self) -> str:
+        return self._icon_color.name(QColor.HexArgb)
+
+    def setIconColorName(self, color_str: str):
+        if color_str:
+            c = QColor(color_str)
+            if c.isValid():
+                self._icon_color = c
+                # Refresh icon
+                self._set_icon(self._notif_type)
+                self.update()
+            
+    iconColorName = Property(str, getIconColorName, setIconColorName)
+
     def getBorderColor(self) -> QColor:
         return self._border_color
 
@@ -74,8 +109,8 @@ class NotificationWidget(QFrame):
         inset = bw / 2.0
         overlay_rect = rect.adjusted(math.ceil(inset), math.ceil(inset),
                                      -math.ceil(inset), -math.ceil(inset))
-        overlay_color = QColor(25, 25, 25, 170)
-        painter.setBrush(overlay_color)
+        
+        painter.setBrush(self._overlay_color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(overlay_rect, radius, radius)
 
@@ -102,16 +137,19 @@ class NotificationWidget(QFrame):
         content_layout = QHBoxLayout()
         content_layout.setSpacing(10)
 
-        self.icon_widget = QSvgWidget()
-        self.icon_widget.setFixedSize(24, 24)
+        # Replaced QSvgWidget with QLabel for easier pixmap manipulation
+        self.icon_label = QLabel()
+        self.icon_label.setFixedSize(24, 24)
+        self.icon_label.setStyleSheet("background: transparent; border: none;")
         self._set_icon(notif_type)
-        content_layout.addWidget(self.icon_widget)
+        content_layout.addWidget(self.icon_label)
 
         self.message_label = QLabel(message)
         self.message_label.setWordWrap(True)
         self.message_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.message_label.setMinimumHeight(24)
-        self.message_label.setStyleSheet("color: #ffffff; font-weight: 500;")
+        # Removed hardcoded color/font to allow QSS inheritance
+        # self.message_label.setStyleSheet("color: #ffffff; font-weight: 500;")
         content_layout.addWidget(self.message_label, 1)
 
         layout.addLayout(content_layout)
@@ -140,8 +178,26 @@ class NotificationWidget(QFrame):
         }
         icon_file = icon_map.get(notif_type, "info.svg")
         icon_path = os.path.join(resources_path, icon_file)
+
         if os.path.exists(icon_path):
-            self.icon_widget.load(icon_path)
+            renderer = QSvgRenderer(icon_path)
+            
+            # Create a pixmap larger than needed for quality, then scale down
+            size = 48
+            pix = QPixmap(size, size)
+            pix.fill(Qt.transparent)
+            
+            painter = QPainter(pix)
+            renderer.render(painter)
+            
+            # Now tint it using CompositionMode
+            painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+            painter.fillRect(pix.rect(), self._icon_color)
+            painter.end()
+            
+            # Scale down to 24x24
+            final_pix = pix.scaled(24, 24, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.icon_label.setPixmap(final_pix)
 
     def _update_progress(self):
         if self._progress_value > 0:
