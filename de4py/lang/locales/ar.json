@@ -1,6 +1,6 @@
 {
     "LANG_NAME": "العربية",
-    "IS_RTL": true,
+    "IS_RTL": false,
     "common.app_name": "de4py",
     "nav.home": "الرئيسية",
     "nav.deobfuscator": "إزالة التشويش",
@@ -42,6 +42,15 @@
     "screen.pyshell.msg.inject_failed": "فشل حقن PyShell",
     "screen.pyshell.msg.process_died": "توقفت العملية أو تعطلت",
     "screen.pyshell.msg.need_inject": "يرجى حقن DLL أولاً",
+    "screen.pyshell.msg.enter_pid": "Type process id first",
+    "screen.pyshell.msg.injector_failed": "PyShell injector function failed",
+    "screen.pyshell.msg.cmd_executed": "Command executed",
+    "screen.pyshell.msg.saved_as": "Saved as {filename}",
+    "screen.pyshell.msg.executed_msg": "Executed",
+    "screen.pyshell.msg.dll_detached": "DLL detached",
+    "screen.pyshell.msg.behavior_hint": "Click the button again to open the menu",
+    "screen.pyshell.msg.done": "Done",
+    "screen.pyshell.msg.failed": "Failed",
     "screen.analyzer.title": "المحلل",
     "screen.analyzer.select_file": "اختر ملف",
     "screen.analyzer.analyze": "تحليل",
@@ -64,6 +73,9 @@
     "screen.plugins.failed_load": "فشل في تحميل الإضافات",
     "screen.plugins.made_by": "بواسطة",
     "screen.plugins.type": "النوع",
+    "screen.plugins.msg.theme_applied": "Applied theme: {theme}",
+    "screen.plugins.msg.theme_failed": "Failed to apply theme: {theme}",
+    "screen.plugins.msg.theme_reset": "Theme reset to default",
     "screen.pylingual.title": "PYLINGUAL",
     "screen.pylingual.mode_offline": "غير متصل (محلي)",
     "screen.pylingual.mode_online": "متصل (خادم)",
@@ -127,33 +139,19 @@
     "common.msg.operation_complete": "اكتملت العملية",
     "common.msg.operation_failed": "فشلت العملية",
     "plural.files": {
-        "zero": "لا ملفات",
         "one": "ملف واحد",
-        "two": "ملفان",
-        "few": "{count} ملفات",
-        "many": "{count} ملفاً",
         "other": "{count} ملف"
     },
     "plural.items": {
-        "zero": "لا عناصر",
         "one": "عنصر واحد",
-        "two": "عنصران",
-        "few": "{count} عناصر",
-        "many": "{count} عنصراً",
         "other": "{count} عنصر"
     },
     "plural.seconds": {
         "one": "ثانية واحدة",
-        "two": "ثانيتان",
-        "few": "{count} ثوانٍ",
-        "many": "{count} ثانية",
         "other": "{count} ثانية"
     },
     "plural.minutes": {
         "one": "دقيقة واحدة",
-        "two": "دقيقتان",
-        "few": "{count} دقائق",
-        "many": "{count} دقيقة",
         "other": "{count} دقيقة"
     },
     "tooltip.hamburger": "تبديل القائمة",
@@ -169,17 +167,5 @@
     "dialog.submit_btn": "إرسال",
     "notification.copied": "تم النسخ إلى الحافظة",
     "notification.saved": "تم الحفظ بنجاح",
-    "notification.language_changed": "تم تغيير اللغة إلى {language}",
-    "screen.pyshell.msg.executed_msg": "Executed",
-    "screen.plugins.msg.theme_applied": "Applied theme: {theme}",
-    "screen.pyshell.msg.behavior_hint": "Click the button again to open the menu",
-    "screen.pyshell.msg.cmd_executed": "Command executed",
-    "screen.plugins.msg.theme_reset": "Theme reset to default",
-    "screen.plugins.msg.theme_failed": "Failed to apply theme: {theme}",
-    "screen.pyshell.msg.injector_failed": "PyShell injector function failed",
-    "screen.pyshell.msg.saved_as": "Saved as {filename}",
-    "screen.pyshell.msg.dll_detached": "DLL detached",
-    "screen.pyshell.msg.enter_pid": "Type process id first",
-    "screen.pyshell.msg.failed": "Failed",
-    "screen.pyshell.msg.done": "Done"
+    "notification.language_changed": "تم تغيير اللغة إلى {language}"
 }
