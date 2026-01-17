@@ -23,5 +23,6 @@ files:
     type: json
     update_option: update_as_unapproved
     languages_mapping:
-      zh-CN: zh-cn
-      zh-TW: zh-tw
+      two_letters_code:
+        zh-CN: zh-cn
+        zh-TW: zh-tw
