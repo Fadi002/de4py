@@ -194,8 +194,8 @@ class TranslationManager(QObject):
         # Try current language
         value = self._get_nested_value(self._translations, key)
         
-        # Fallback to English
-        if value is None:
+        # Fallback to English if missing or empty
+        if value is None or value == "":
             value = self._get_nested_value(self._fallback_translations, key)
         
         # Final fallback: return the key itself
@@ -252,6 +252,13 @@ class TranslationManager(QObject):
         
         # Get the translation for this form
         value = plural_obj.get(form, plural_obj.get('other', str(count)))
+        
+        # Check if the retrieved value is valid; if empty/None, try fallback
+        if not value and isinstance(plural_obj, dict):
+             # Try to get from fallback
+             fallback_obj = self._get_nested_value(self._fallback_translations, key)
+             if isinstance(fallback_obj, dict):
+                 value = fallback_obj.get(form, fallback_obj.get('other', str(count)))
         
         # Substitute placeholders including count
         result = str(value)
