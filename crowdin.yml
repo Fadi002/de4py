@@ -1,22 +1,17 @@
 project_id: de4py
-base_path: .
-
-files:
-  - source: "de4py/lang/locales/en.json"
-    translation: "de4py/lang/locales/%locale%.json"
-    type: "json"
-    ignore_identical: true
-    export_pattern: "de4py/lang/locales/%locale%.json"
-    update_option: "update_as_unapproved"
-
 placeholders:
-  - "{count}"
-  - "{name}"
-
+  - '{count}'
+  - '{name}'
 ignore:
-  - "**/*.py"
+  - '**/*.py'
 github:
-  auto_push: true
+  auto_push: 1
   branch_mapping:
-    main: main  
-  commit_message: "Update translations from Crowdin"
+    main: main
+  commit_message: Update translations from Crowdin
+base_path: .
+files:
+  - source: de4py/lang/locales/en.json
+    translation: de4py/lang/locales/%locale%.json
+    type: json
+    update_option: update_as_unapproved
