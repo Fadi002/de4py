@@ -75,12 +75,12 @@ All contributions are welcome!
 - **Signal:** [Join our Signal room](https://signal.group/#CjQKIGl8b9tJIMoMpwnrzUIDSqJY5UMJOzpixJklsEgYSrjJEhCw2rBAUFVOWkwIZ-gM3mqS)
 - **Discord:** [Join here](https://discord.gg/cYxxUHsbRm) 💬
 
-## Pepe Forms (Tor Only) 🐸
+## Pepe Forums (Tor Only) 🐸
 
-Welcome to **Pepe Forms**, a community dedicated to **de4py, Python reverse engineering, and coding projects**, hosted exclusively on Tor.  
+Welcome to **Pepe Forums**, a community dedicated to **de4py, Python reverse engineering, and coding projects**, hosted exclusively on Tor.  
 
 Access the forum here:  
-🌐 [Pepe Forms (Tor)](http://l2ou57pb2wuyodjhio5lgkz4vpujfirmb7m23g4odjxifa7rho2hrfyd.onion/)  
+🌐 [Pepe Forums (Tor)](http://l2ou57pb2wuyodjhio5lgkz4vpujfirmb7m23g4odjxifa7rho2hrfyd.onion/)  
 
 ## 🌐 Help Translate de4py
 
