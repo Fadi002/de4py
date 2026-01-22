@@ -6,6 +6,12 @@ class MonokaiPro(ThemePlugin):
         self.name = "Monokai Pro"
         self.description = "Vibrant, high-contrast dark theme inspired by classic Monokai."
         self.creator = "Fadi002"
+        self.colors = {
+            "background": "#2D2A2E",
+            "primary": "#FC9867",
+            "secondary": "#A6E22E",
+            "text": "#F8F8F2"
+        }
         self.qss = """
 QMainWindow,QWidget#CentralWidget,QWidget#MainContent
 {
@@ -445,6 +451,50 @@ QComboBox QAbstractItemView::item:selected
 {
 background-color:#FC9867;
 color:#ffffff
+        }
+        """
+        self.transparent_qss = """
+QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
+    background-color: transparent;
+}
+/* Custom Sidebar Style for Transparency */
+QWidget#Sidebar {
+    background-color: rgba(45, 42, 46, 0.60);
+    border-right: 2px solid rgba(252, 152, 103, 0.4);
+    qproperty-glow_color: #FC9867;
+}
+QLabel#SidebarTitle {
+    color: #FC9867;
+    background: transparent;
+    padding: 10px;
+}
+QPushButton#NavButton {
+    background-color: transparent;
+    color: #F8F8F2;
+    border: none;
+    text-align: left;
+    padding-left: 20px;
+}
+QPushButton#NavButton:hover {
+    background-color: rgba(252, 152, 103, 0.15);
+}
+QPushButton#NavButton[active="true"] {
+    background-color: rgba(252, 152, 103, 0.25);
+    color: #FC9867;
+    border-left: 4px solid #FC9867;
+    font-weight: bold;
+}
+QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
+    background-color: rgba(45, 42, 46, 0.40);
+}
+QFrame#ModeSelectorFrame {
+    background-color: rgba(45, 42, 46, 0.40);
+}
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+    background-color: rgba(45, 42, 46, 0.5);
+}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    background-color: rgba(45, 42, 46, 0.9);
 }
 """
 

@@ -6,6 +6,12 @@ class CatppuccinFrappe(ThemePlugin):
         self.name = "Catppuccin Frappe"
         self.description = "Gentle, muted contrast with cool pastel tones."
         self.creator = "Fadi002"
+        self.colors = {
+            "background": "#303446",
+            "primary": "#8CAAEE",
+            "secondary": "#B5E8E0",
+            "text": "#C6D0F5"
+        }
         self.qss = """
 QMainWindow,QWidget#CentralWidget,QWidget#MainContent
 {
@@ -445,6 +451,50 @@ QComboBox QAbstractItemView::item:selected
 {
 background-color:#B5E8E0;
 color:#ffffff
+        }
+        """
+        self.transparent_qss = """
+QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
+    background-color: transparent;
+}
+/* Custom Sidebar Style for Transparency */
+QWidget#Sidebar {
+    background-color: rgba(48, 52, 70, 0.60);
+    border-right: 2px solid rgba(140, 170, 238, 0.4);
+    qproperty-glow_color: #8CAAEE;
+}
+QLabel#SidebarTitle {
+    color: #8CAAEE;
+    background: transparent;
+    padding: 10px;
+}
+QPushButton#NavButton {
+    background-color: transparent;
+    color: #C6D0F5;
+    border: none;
+    text-align: left;
+    padding-left: 20px;
+}
+QPushButton#NavButton:hover {
+    background-color: rgba(140, 170, 238, 0.15);
+}
+QPushButton#NavButton[active="true"] {
+    background-color: rgba(140, 170, 238, 0.25);
+    color: #8CAAEE;
+    border-left: 4px solid #8CAAEE;
+    font-weight: bold;
+}
+QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
+    background-color: rgba(48, 52, 70, 0.40);
+}
+QFrame#ModeSelectorFrame {
+    background-color: rgba(48, 52, 70, 0.40);
+}
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+    background-color: rgba(48, 52, 70, 0.5);
+}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    background-color: rgba(48, 52, 70, 0.9);
 }
 """
 

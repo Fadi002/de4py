@@ -7,7 +7,8 @@ from de4py.config.config import settings
 from de4py.lang import tr, translation_manager
 from de4py.lang.keys import (
     SCREEN_TITLE_SETTINGS, SETTINGS_LANGUAGE, SETTINGS_RPC,
-    SETTINGS_STEALTH, SETTINGS_PLUGINS, SETTINGS_RESTART_NOTE
+    SETTINGS_STEALTH, SETTINGS_PLUGINS, SETTINGS_RESTART_NOTE,
+    SETTINGS_TRANSPARENT_UI
 )
 
 
@@ -25,7 +26,7 @@ class SettingsScreen(QWidget):
         
         frame = QFrame()
         frame.setObjectName("StyledFrame")
-        frame.setFixedSize(400, 280)
+        frame.setFixedSize(400, 300)
         
         frame_layout = QVBoxLayout(frame)
         frame_layout.setSpacing(15)
@@ -66,6 +67,10 @@ class SettingsScreen(QWidget):
         self.plugins_checkbox = QCheckBox(tr(SETTINGS_PLUGINS))
         self.plugins_checkbox.stateChanged.connect(lambda s: self._update_config("load_plugins", s == Qt.CheckState.Checked.value))
         frame_layout.addWidget(self.plugins_checkbox)
+
+        self.transparent_checkbox = QCheckBox(tr(SETTINGS_TRANSPARENT_UI))
+        self.transparent_checkbox.stateChanged.connect(self._on_transparent_ui_changed)
+        frame_layout.addWidget(self.transparent_checkbox)
         
         frame_layout.addStretch()
         
@@ -90,6 +95,7 @@ class SettingsScreen(QWidget):
         self.rpc_checkbox.setText(tr(SETTINGS_RPC))
         self.stealth_checkbox.setText(tr(SETTINGS_STEALTH))
         self.plugins_checkbox.setText(tr(SETTINGS_PLUGINS))
+        self.transparent_checkbox.setText(tr(SETTINGS_TRANSPARENT_UI))
         self.note_label.setText(tr(SETTINGS_RESTART_NOTE))
 
     def _load_config(self):
@@ -97,6 +103,7 @@ class SettingsScreen(QWidget):
             self.rpc_checkbox.setChecked(settings.rpc)
             self.stealth_checkbox.setChecked(settings.stealth_title)
             self.plugins_checkbox.setChecked(settings.load_plugins)
+            self.transparent_checkbox.setChecked(settings.transparent_ui)
             
             # Update combo box if setting changed externally
             idx = self.lang_combo.findData(settings.language)
@@ -114,6 +121,16 @@ class SettingsScreen(QWidget):
                 settings.save()
         except Exception:
             pass
+
+    def _on_transparent_ui_changed(self, state):
+        enabled = (state == Qt.CheckState.Checked.value)
+        self._update_config("transparent_ui", enabled)
+        
+        # Apply immediately to main window
+        if self.window():
+            main_window = self.window()
+            if hasattr(main_window, "set_transparent_ui"):
+                main_window.set_transparent_ui(enabled)
 
     def showEvent(self, event):
         super().showEvent(event)

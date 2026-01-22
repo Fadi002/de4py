@@ -26,7 +26,8 @@ from de4py.lang.keys import (
     PYLINGUAL_PLACEHOLDER_RESULT, PYLINGUAL_PLACEHOLDER_SELECTED,
     PYLINGUAL_MSG_OFFLINE_LIMIT, PYLINGUAL_MSG_COMPLETE, PYLINGUAL_MSG_CACHED,
     PYLINGUAL_MSG_INITIALIZING, MSG_COPIED,
-    MSG_SUCCESS, MSG_ERROR, MSG_INFO, MSG_WARNING
+    MSG_SUCCESS, MSG_ERROR, MSG_INFO, MSG_WARNING,
+    BTN_COPY_OUTPUT, LBL_OUTPUT
 )
 
 
@@ -347,7 +348,7 @@ class PyLingualScreen(QWidget):
         self.execute_btn.clicked.connect(self._on_execute_clicked)
         actions_layout.addWidget(self.execute_btn, 1)
         
-        self.copy_btn = QPushButton(tr(PYLINGUAL_COPY))
+        self.copy_btn = QPushButton(tr(BTN_COPY_OUTPUT))
         self.copy_btn.setToolTip(tr(PYLINGUAL_TOOLTIP_COPY))
 
         self.copy_btn.setFixedHeight(45)
@@ -398,7 +399,7 @@ class PyLingualScreen(QWidget):
         content_layout.addWidget(self.progress_frame)
 
         # Result Area
-        self.result_title = QLabel(tr(PYLINGUAL_RESULT))
+        self.result_title = QLabel(tr(LBL_OUTPUT))
         self.result_title.setObjectName("SubtitleLabel")
         content_layout.addWidget(self.result_title)
         
@@ -571,8 +572,8 @@ class PyLingualScreen(QWidget):
         self.online_label.setText(tr(PYLINGUAL_ONLINE))
         self.select_btn.setText(tr(PYLINGUAL_SELECT_FILE))
         self.execute_btn.setText(tr(PYLINGUAL_EXECUTE))
-        self.copy_btn.setText(tr(PYLINGUAL_COPY))
-        self.result_title.setText(tr(PYLINGUAL_RESULT))
+        self.copy_btn.setText(tr(BTN_COPY_OUTPUT))
+        self.result_title.setText(tr(LBL_OUTPUT))
 
     def _on_consent_accepted(self):
         self._consent_accepted = True

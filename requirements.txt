@@ -6,3 +6,4 @@ pycryptodome
 pypresence
 xdis
 pyinstaller
+sentry-sdk

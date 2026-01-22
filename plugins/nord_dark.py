@@ -6,6 +6,12 @@ class NordDark(ThemePlugin):
         self.name = "Nord Dark"
         self.description = "Cold, calm, and minimal dark theme inspired by arctic tones."
         self.creator = "Fadi002"
+        self.colors = {
+            "background": "#2E3440",
+            "primary": "#88C0D0",
+            "secondary": "#81A1C1",
+            "text": "#ECEFF4"
+        }
         self.qss = """
 QMainWindow,QWidget#CentralWidget,QWidget#MainContent
 {
@@ -445,6 +451,50 @@ QComboBox QAbstractItemView::item:selected
 {
 background-color:#88C0D0;
 color:#ffffff
+        }
+        """
+        self.transparent_qss = """
+QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
+    background-color: transparent;
+}
+/* Custom Sidebar Style for Transparency */
+QWidget#Sidebar {
+    background-color: rgba(46, 52, 64, 0.60);
+    border-right: 2px solid rgba(136, 192, 208, 0.4);
+    qproperty-glow_color: #88C0D0;
+}
+QLabel#SidebarTitle {
+    color: #88C0D0;
+    background: transparent;
+    padding: 10px;
+}
+QPushButton#NavButton {
+    background-color: transparent;
+    color: #ECEFF4;
+    border: none;
+    text-align: left;
+    padding-left: 20px;
+}
+QPushButton#NavButton:hover {
+    background-color: rgba(136, 192, 208, 0.15);
+}
+QPushButton#NavButton[active="true"] {
+    background-color: rgba(136, 192, 208, 0.25);
+    color: #88C0D0;
+    border-left: 4px solid #88C0D0;
+    font-weight: bold;
+}
+QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
+    background-color: rgba(46, 52, 64, 0.40);
+}
+QFrame#ModeSelectorFrame {
+    background-color: rgba(46, 52, 64, 0.40);
+}
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+    background-color: rgba(46, 52, 64, 0.5);
+}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    background-color: rgba(46, 52, 64, 0.9);
 }
 """
 

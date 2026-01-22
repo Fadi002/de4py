@@ -28,8 +28,33 @@ from de4py.ui.screens.settings_screen import SettingsScreen
 from de4py.ui.screens.about_screen import AboutScreen
 from de4py.ui.screens.pylingual_screen import PyLingualScreen
 from de4py.ui.widgets.notification_widget import NotificationManager
+# from de4py.utils.win32_blur import enable_transparent_ui # Obsolete
 from de4py.ui.widgets.loading_overlay import LoadingOverlay
 
+
+
+TRANSPARENT_STYLESHEET = """
+/* Transparency Overrides */
+QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
+    background-color: transparent;
+}
+QWidget#Sidebar {
+    background-color: rgba(13,17,23,0.60);
+}
+QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
+    background-color: rgba(24, 28, 36, 0.40);
+}
+QFrame#ModeSelectorFrame {
+    background-color: rgba(24, 28, 36, 0.40);
+}
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+    background-color: rgba(24, 28, 36, 0.5);
+}
+/* Ensure these input widgets become more opaque on focus/hover for readability */
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    background-color: rgba(30, 36, 46, 0.9);
+}
+"""
 
 class MainWindow(QMainWindow):
     """
@@ -45,14 +70,63 @@ class MainWindow(QMainWindow):
 
         self._sidebar_visible = False
         
-        # Initialize localization system with saved language preference
         translation_manager.load_language(settings.language)
         
         self._setup_ui()
         self._connect_signals()
         
-        # Connect language change signal for runtime updates
         translation_manager.language_changed.connect(self._on_language_changed)
+
+        if settings.transparent_ui:
+            self.set_transparent_ui(True)
+
+    def set_transparent_ui(self, enabled: bool):
+        try:
+            from de4py.utils.win32_blur import enable_dynamic_blur, disable_blur
+            
+            if enabled:
+                theme_colors = {}
+                active_style = TRANSPARENT_STYLESHEET
+                
+                if settings.active_theme:
+                    try:
+                        from plugins import load_plugins
+                        loaded = load_plugins()
+                        active_name = settings.active_theme.strip().lower()
+                        for p in loaded:
+                            inst = p.get("instance")
+                            if inst and inst.name.strip().lower() == active_name:
+                                if hasattr(inst, "colors") and inst.colors:
+                                    theme_colors = inst.colors
+                                
+                                if hasattr(inst, "transparent_qss") and inst.transparent_qss:
+                                    active_style = inst.transparent_qss
+                                break
+                    except Exception:
+                        pass
+                
+                enable_dynamic_blur(self, theme_colors)
+                self.setStyleSheet(active_style)
+            else:
+                disable_blur(self)
+                self.setStyleSheet("")
+        except Exception:
+            pass
+
+    def nativeEvent(self, eventType, message):
+        """Handle Windows system color change events to refresh blur."""
+        try:
+            if eventType == "windows_generic_MSG":
+                import ctypes.wintypes
+                msg = ctypes.wintypes.MSG.from_address(message.__int__())
+                # WM_DWMCOLORIZATIONCOLORCHANGED = 0x0320
+                # WM_SETTINGCHANGE = 0x001A
+                if msg.message in (0x0320, 0x001A):
+                    if settings.transparent_ui:
+                        self.set_transparent_ui(True) # Re-trigger calculations
+        except Exception:
+            pass
+        return super().nativeEvent(eventType, message)
 
     def _setup_ui(self):
         central_widget = QWidget()

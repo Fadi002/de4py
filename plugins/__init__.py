@@ -34,6 +34,10 @@ class ThemePlugin(BasePlugin):
         super().__init__()
         self.type = "theme"
         self.qss: str = ""
+        self.transparent_qss: Optional[str] = None
+        self.is_dark: bool = True
+        self.colors: Dict[str, str] = {}  # e.g. {"primary": "#HEX", "background": "#HEX"}
+        self.disable_glow: bool = False # If True, disables native sidebar glow effects
 
 
 # Standard entry point name for plugins

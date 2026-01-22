@@ -6,6 +6,12 @@ class Dracula(ThemePlugin):
         self.name = "Dracula"
         self.description = "Classic high-contrast dark theme with vibrant neon highlights."
         self.creator = "Fadi002"
+        self.colors = {
+            "background": "#282A36",
+            "primary": "#BD93F9",
+            "secondary": "#FF79C6",
+            "text": "#F8F8F2"
+        }
         self.qss = """
 QMainWindow,QWidget#CentralWidget,QWidget#MainContent
 {
@@ -444,7 +450,51 @@ color:#F8F8F2
 QComboBox QAbstractItemView::item:selected
 {
 background-color:#FF79C6;
-color:#ffffff
+}
+        """
+        self.transparent_qss = """
+QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
+    background-color: transparent;
+}
+/* Custom Sidebar Style for Transparency */
+QWidget#Sidebar {
+    background-color: rgba(40, 42, 54, 0.60);
+    border-right: 2px solid rgba(189, 147, 249, 0.4);
+    qproperty-glow_color: #BD93F9;
+}
+QLabel#SidebarTitle {
+    color: #BD93F9;
+    background: transparent;
+    padding: 10px;
+    qproperty-text: "DE4PY"; 
+}
+QPushButton#NavButton {
+    background-color: transparent;
+    color: #F8F8F2;
+    border: none;
+    text-align: left;
+    padding-left: 20px;
+}
+QPushButton#NavButton:hover {
+    background-color: rgba(189, 147, 249, 0.15);
+}
+QPushButton#NavButton[active="true"] {
+    background-color: rgba(189, 147, 249, 0.25);
+    color: #BD93F9;
+    border-left: 4px solid #BD93F9;
+    font-weight: bold;
+}
+QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
+    background-color: rgba(40, 42, 54, 0.40);
+}
+QFrame#ModeSelectorFrame {
+    background-color: rgba(40, 42, 54, 0.40);
+}
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+    background-color: rgba(40, 42, 54, 0.5);
+}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    background-color: rgba(40, 42, 54, 0.9);
 }
 """
 

@@ -31,6 +31,7 @@ QFrame#ClockFrame {
 QWidget#Sidebar {
 	background-color: rgba(13,17,23,0.95);
 	border: none;
+    qproperty-glow_color: #58a6ff;
 }
 
 /* Vertical glowing right border line */

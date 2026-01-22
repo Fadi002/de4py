@@ -112,5 +112,13 @@
             "Added support for new languages",
             "help us to translate de4py: https://crowdin.com/project/de4py"
         ]
+    },
+    {
+        "version": "2.2.3",
+        "changes": [
+            "Added new transparent UI (experimental)",
+            "languages update",
+            "help us to translate de4py: https://crowdin.com/project/de4py"
+        ]
     }
 ]

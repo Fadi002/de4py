@@ -82,7 +82,7 @@ class DeobfuscatorScreen(QWidget):
         
         layout = QVBoxLayout(frame)
         
-        self.output = OutputTextArea("Output:", show_copy=True)
+        self.output = OutputTextArea(show_copy=True)
         layout.addWidget(self.output)
         
         return frame
@@ -127,3 +127,4 @@ class DeobfuscatorScreen(QWidget):
         self.title_label.setText(tr(SCREEN_TITLE_DEOBFUSCATOR))
         self.select_btn.setText(tr(DEOBF_SELECT_FILE))
         self.deobf_btn.setText(tr(DEOBF_DEOBFUSCATE))
+        self.output.retranslate_ui()
