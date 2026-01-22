@@ -119,7 +119,7 @@
     "screen.pyshell.commands_title": "COMMANDS",
     "screen.pyshell.detach": "Detach",
     "screen.pyshell.execute": "Execute",
-    "screen.pyshell.input_placeholder": "输入进程 ID...",
+    "screen.pyshell.input_placeholder": "Enter Process ID...",
     "screen.pyshell.msg.behavior_hint": "Click the button again to open the menu",
     "screen.pyshell.msg.cmd_executed": "Command executed",
     "screen.pyshell.msg.dll_detached": "DLL detached",
@@ -171,5 +171,5 @@
     "tooltip.hamburger": "Toggle menu",
     "tooltip.pyshell.execute": "Execute code in process",
     "tooltip.pyshell.select": "Select process to attach",
-    "screen.settings.transparent": "透明界面 (实验性)"
+    "screen.settings.transparent": "Transparent UI (experimental)"
 }
