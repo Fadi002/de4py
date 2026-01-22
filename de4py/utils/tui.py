@@ -137,7 +137,9 @@ def linux_prompt(tab="~"):
 
 
 
-def custom_error(exc_type, exc_value, exc_traceback):   
+def custom_error(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        return
     print(f"{Fore.RED}=== Start Traceback ==={Style.RESET_ALL}")
     print(f"{Fore.RED}Error Type:{Style.RESET_ALL} {exc_type.__name__}")
     print(f"{Fore.RED}Error Message:{Style.RESET_ALL} {exc_value}")

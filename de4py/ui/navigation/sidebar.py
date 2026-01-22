@@ -42,6 +42,7 @@ class Sidebar(QWidget):
         return self.line_shadow.color()
 
     def set_glow_color(self, color: QColor):
+        # Apply with specific opacities for better visual balance
         self.line_shadow.setColor(QColor(color.red(), color.green(), color.blue(), 120))
         self.title_shadow.setColor(QColor(color.red(), color.green(), color.blue(), 200))
 

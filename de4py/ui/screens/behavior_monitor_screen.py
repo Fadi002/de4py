@@ -95,7 +95,7 @@ class BehaviorMonitorScreen(QWidget):
         frame.setMinimumHeight(360)
         
         layout = QVBoxLayout(frame)
-        self.output = OutputTextArea("Output:", show_copy=True)
+        self.output = OutputTextArea(show_copy=True)
         layout.addWidget(self.output)
         
         return frame
@@ -235,3 +235,4 @@ class BehaviorMonitorScreen(QWidget):
         self.ssl_checkbox.setText(tr(BM_DUMP_SSL))
         self.pyc_checkbox.setText(tr(BM_PYC_DUMPER))
         self.back_btn.setText(tr(BM_BACK_TO_MENU))
+        self.output.retranslate_ui()

@@ -52,6 +52,7 @@ SETTINGS_LANGUAGE = "screen.settings.language"
 SETTINGS_RPC = "screen.settings.rpc"
 SETTINGS_STEALTH = "screen.settings.stealth"
 SETTINGS_PLUGINS = "screen.settings.plugins"
+SETTINGS_TRANSPARENT_UI = "screen.settings.transparent"
 SETTINGS_RESTART_NOTE = "screen.settings.restart_note"
 
 # =============================================================================
@@ -94,6 +95,8 @@ PYSHELL_CMD_DLL_DETACHED = "screen.pyshell.msg.dll_detached"
 PYSHELL_CMD_BEHAVIOR_HINT = "screen.pyshell.msg.behavior_hint"
 PYSHELL_CMD_DONE = "screen.pyshell.msg.done"
 PYSHELL_CMD_FAILED = "screen.pyshell.msg.failed"
+PYSHELL_BTN_STEALTH = "screen.pyshell.btn.stealth"
+
 
 
 # =============================================================================
@@ -195,7 +198,10 @@ BTN_SAVE = "common.btn.save"
 BTN_CLOSE = "common.btn.close"
 BTN_RESET = "common.btn.reset"
 BTN_COPY = "common.btn.copy"
+BTN_COPY_OUTPUT = "common.btn.copy_output"
 BTN_CLEAR = "common.btn.clear"
+LBL_OUTPUT = "common.lbl.output"
+
 
 # =============================================================================
 # Common Messages
