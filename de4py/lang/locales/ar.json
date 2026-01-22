@@ -1,6 +1,6 @@
 {
     "LANG_NAME": "العربية",
-    "IS_RTL": false,
+    "IS_RTL": true,
     "common.app_name": "de4py",
     "common.btn.apply": "تطبيق",
     "common.btn.browse": "استعراض",
@@ -8,11 +8,11 @@
     "common.btn.clear": "مسح",
     "common.btn.close": "إغلاق",
     "common.btn.copy": "نسخ",
-    "common.btn.copy_output": "نسخ الناتج",
+    "common.btn.copy_output": "Copy Output",
     "common.btn.ok": "موافق",
     "common.btn.reset": "إعادة تعيين",
     "common.btn.save": "حفظ",
-    "common.lbl.output": "الناتج:",
+    "common.lbl.output": "Output:",
     "common.msg.confirm": "تأكيد",
     "common.msg.error": "خطأ",
     "common.msg.file_not_found": "الملف غير موجود",
@@ -105,7 +105,7 @@
     "screen.pylingual.tos_content": "باستخدام هذه الخدمة، فإنك توافق على شروط خصوصية PyLingual:\n\nيتم الاحتفاظ بالملفات والتصحيحات المقدمة لخدمة ويب PyLingual لدعم البحث والتطوير في المستقبل.\n\nباستخدام هذه الخدمة، فإنك تضمن أنك لا تنتهك قوانين مراقبة الصادرات، أو حقوق الملكية الفكرية، أو التراخيص، أو الالتزامات القانونية أو التعاقدية الأخرى، وأنك لا تستخدم هذه الخدمة لأغراض غير صحيحة أو غير مصرح بها أو ضارة. قد يتم الكشف عن الملفات المملوكة التي تم تحميلها إلى PyLingual لأطراف ثالثة ذات صلة.",
     "screen.pylingual.tos_title": "شروط خدمة PyLingual",
     "screen.pyshell.attach": "ربط",
-    "screen.pyshell.btn.stealth": "متخفي",
+    "screen.pyshell.btn.stealth": "Stealth",
     "screen.pyshell.clear": "مسح",
     "screen.pyshell.cmd.behavior": "مراقبة السلوك",
     "screen.pyshell.cmd.crash": "إيقاف العملية قسراً",
@@ -119,7 +119,7 @@
     "screen.pyshell.commands_title": "الأوامر",
     "screen.pyshell.detach": "فصل",
     "screen.pyshell.execute": "تنفيذ",
-    "screen.pyshell.input_placeholder": "أدخل معرف العملية...",
+    "screen.pyshell.input_placeholder": "أدخل كود Python...",
     "screen.pyshell.msg.behavior_hint": "اضغط الزر مرة أخرى لفتح القائمة",
     "screen.pyshell.msg.cmd_executed": "تم تنفيذ الأمر",
     "screen.pyshell.msg.dll_detached": "تم فصل DLL",
@@ -171,5 +171,5 @@
     "tooltip.hamburger": "تبديل القائمة",
     "tooltip.pyshell.execute": "تنفيذ الكود في العملية",
     "tooltip.pyshell.select": "اختر العملية للارتباط بها",
-    "screen.settings.transparent": "واجهة شفافة (تجريبي)"
+    "screen.settings.transparent": "Transparent UI (experimental)"
 }
