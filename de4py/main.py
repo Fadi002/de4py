@@ -1,5 +1,34 @@
 import sys
 import os
+
+REQUIRED_LIBS = {
+    "PySide6": "PySide6",
+    "requests": "requests",
+    "psutil": "psutil",
+    "colorama": "colorama",
+    "Crypto": "pycryptodome",
+    "pypresence": "pypresence",
+    "xdis": "xdis",
+    "sentry_sdk": "sentry-sdk"
+}
+
+missing = []
+for module_name, pip_name in REQUIRED_LIBS.items():
+    try:
+        __import__(module_name)
+    except ImportError:
+        missing.append(pip_name)
+
+if missing:
+    print("\n" + "!" * 60)
+    print(f"[!] CRITICAL ERROR: Missing {len(missing)} required libraries:")
+    for lib in missing:
+        print(f"    - {lib}")
+    print("\n[!] Please install the missing requirements by running:")
+    print("    pip install -r requirements.txt")
+    print("!" * 60 + "\n")
+    sys.exit(1)
+
 import random
 import string
 import ctypes
@@ -7,11 +36,13 @@ import logging
 import argparse
 import colorama
 import msvcrt
+import signal
 
-# Prevent creation of __pycache__
+# Handle Ctrl+C gracefully
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+
 sys.dont_write_bytecode = True
 
-# Suppress harmless font compatibility warnings on Windows
 os.environ["QT_LOGGING_RULES"] = "qt.text.font.db=false"
 
 from PySide6.QtWidgets import QApplication
@@ -22,7 +53,17 @@ from de4py.ui.main_window import MainWindow
 from de4py.config.config import settings
 from de4py.utils import rpc, tui, update, setup_logging
 
-# Initialize colorama for terminal support
+try:
+    import sentry_sdk
+    sentry_sdk.init(
+    dsn="https://e3abec75d2b4050308637e9354a03fd0@o4510755728982016.ingest.de.sentry.io/4510755731013712",
+    send_default_pii=True,
+    enable_logs=True,
+    traces_sample_rate=1.0,
+    profile_session_sample_rate=1.0)
+except Exception as e:
+    logging.warning(f"Sentry initialization failed: {e}")
+
 colorama.init(autoreset=True)
 
 DEFAULT_QSS = ""

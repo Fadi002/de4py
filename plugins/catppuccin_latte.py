@@ -6,6 +6,13 @@ class CatppuccinLatte(ThemePlugin):
         self.name = "Catppuccin Latte"
         self.description = "Light and airy theme, soft pastel accents, high readability."
         self.creator = "Fadi002"
+        self.is_dark = False
+        self.colors = {
+            "background": "#EFF1F5",
+            "primary": "#8839EF",
+            "secondary": "#1E66F5",
+            "text": "#4C4F69"
+        }
         self.qss = """
 QMainWindow,QWidget#CentralWidget,QWidget#MainContent
 {
@@ -125,18 +132,18 @@ qproperty-shadow_active_color:transparent;
 qproperty-iconColorName:"#ff4C4F69"
 }
 
-QPushButton#NavButton:hover
-{
-background-color:rgba(76, 79, 105, 0.1);
-color:#4C4F69
+QPushButton#NavButton:hover {
+background-color: rgba(136, 57, 239, 0.15);
+color: #8839EF;
+qproperty-iconColorName: "#ff8839EF";
 }
 
-QPushButton#NavButton[active="true"]
-{
-background-color:rgba(136, 57, 239, 0.15);
-color:#1E66F5;
-border-left:3px solid #8839EF;
-border-radius:3px 8px 8px 3px
+QPushButton#NavButton[active="true"] {
+background-color: rgba(136, 57, 239, 0.25);
+color: #8839EF;
+border-left: 4px solid #8839EF;
+font-weight: 900;
+qproperty-iconColorName: "#ff8839EF";
 }
 
 QPushButton#HamburgerButton
@@ -444,7 +451,73 @@ color:#4C4F69
 QComboBox QAbstractItemView::item:selected
 {
 background-color:#8839EF;
-color:#ffffff
+}
+        """
+        self.transparent_qss = """
+QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
+background-color: transparent;
+}
+
+QWidget#Sidebar {
+background-color: rgba(239, 241, 245, 0.75);
+border-right: 2px solid rgba(136, 57, 239, 0.4);
+qproperty-glow_color: #8839EF;
+}
+
+QLabel#SidebarTitle {
+color: #8839EF;
+font-weight: 900;
+background: transparent;
+padding: 10px;
+}
+
+QLabel {
+color: #8839EF;
+}
+
+QPushButton#NavButton {
+background-color: transparent;
+color: #A0A3BF;
+font-weight: 600;
+border: none;
+text-align: left;
+padding-left: 20px;
+qproperty-iconColorName: "#A0A3BF";
+}
+
+QPushButton#NavButton:hover {
+background-color: rgba(136, 57, 239, 0.15);
+color: #8839EF;
+qproperty-iconColorName: "#ff8839EF";
+}
+
+QPushButton#NavButton[active="true"] {
+background-color: rgba(136, 57, 239, 0.25);
+color: #8839EF;
+border-left: 4px solid #8839EF;
+font-weight: 900;
+qproperty-iconColorName: "#ff8839EF";
+}
+
+QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
+background-color: rgba(239, 241, 245, 0.65);
+border: 2px solid rgba(136, 57, 239, 0.3);
+}
+
+QFrame#ModeSelectorFrame {
+background-color: rgba(239, 241, 245, 0.65);
+border: 1.5px solid #8839EF;
+}
+
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+background-color: rgba(255, 255, 255, 0.85);
+color: #4C4F69;
+border: 1.5px solid #8839EF;
+}
+
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+background-color: rgba(255, 255, 255, 0.95);
+border: 2px solid #8839EF;
 }
 """
 

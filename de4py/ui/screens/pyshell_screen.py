@@ -25,8 +25,8 @@ from de4py.lang.keys import (
     PYSHELL_NEED_INJECT, PYSHELL_ENTER_PID, PYSHELL_INJECTOR_FAILED,
     PYSHELL_CMD_EXECUTED, PYSHELL_CMD_SAVED_AS, PYSHELL_CMD_EXECUTED_MSG,
     PYSHELL_CMD_DLL_DETACHED, PYSHELL_CMD_DONE, PYSHELL_CMD_FAILED,
-    PYSHELL_CMD_BEHAVIOR_HINT,
-    MSG_SUCCESS, MSG_WARNING, MSG_ERROR
+    PYSHELL_CMD_BEHAVIOR_HINT, PYSHELL_BTN_STEALTH,
+    MSG_SUCCESS, MSG_WARNING, MSG_ERROR, LBL_OUTPUT
 )
     
 
@@ -108,7 +108,7 @@ class PyShellScreen(QWidget):
         self.inject_btn.clicked.connect(lambda: self._inject("normal"))
         btn_layout.addWidget(self.inject_btn)
 
-        self.stealth_btn = QPushButton(f"{tr(PYSHELL_ATTACH)} (Stealth)")
+        self.stealth_btn = QPushButton(f"{tr(PYSHELL_ATTACH)} ({tr(PYSHELL_BTN_STEALTH)})")
         self.stealth_btn.setFixedHeight(35)
         self.stealth_btn.clicked.connect(lambda: self._inject("stealth"))
         btn_layout.addWidget(self.stealth_btn)
@@ -129,7 +129,7 @@ class PyShellScreen(QWidget):
         layout.setSpacing(10)
 
         # Uses built-in themed title instead of manual label
-        self.output = OutputTextArea("OUTPUT:", show_copy=True)
+        self.output = OutputTextArea(tr(LBL_OUTPUT), show_copy=True)
         self.output.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.output)
         
@@ -328,7 +328,7 @@ class PyShellScreen(QWidget):
         self.title_label.setText(tr(SCREEN_TITLE_PYSHELL))
         self.pid_label.setText(tr(PYSHELL_PID_LABEL))
         self.inject_btn.setText(tr(PYSHELL_ATTACH))
-        self.stealth_btn.setText(f"{tr(PYSHELL_ATTACH)} (Stealth)")
+        self.stealth_btn.setText(f"{tr(PYSHELL_ATTACH)} ({tr(PYSHELL_BTN_STEALTH)})")
         self.pid_input.setPlaceholderText(tr(PYSHELL_INPUT_PLACEHOLDER))
         self.commands_title.setText(tr(PYSHELL_COMMANDS_TITLE))
         
@@ -338,5 +338,6 @@ class PyShellScreen(QWidget):
              if item.widget():
                  item.widget().deleteLater()
         
+        self.output.retranslate_ui()
         self._add_pyshell_buttons()
 

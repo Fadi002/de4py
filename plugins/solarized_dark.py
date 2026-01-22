@@ -6,6 +6,12 @@ class SolarizedDark(ThemePlugin):
         self.name = "Solarized Dark"
         self.description = "Balanced, low-contrast theme with blue-green base and bright highlights."
         self.creator = "Fadi002"
+        self.colors = {
+            "background": "#002B36",
+            "primary": "#B58900",
+            "secondary": "#CB4B16",
+            "text": "#93A1A1"
+        }
         self.qss = """
 QMainWindow,QWidget#CentralWidget,QWidget#MainContent
 {
@@ -445,6 +451,50 @@ QComboBox QAbstractItemView::item:selected
 {
 background-color:#B58900;
 color:#ffffff
+        }
+        """
+        self.transparent_qss = """
+QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
+    background-color: transparent;
+}
+/* Custom Sidebar Style for Transparency */
+QWidget#Sidebar {
+    background-color: rgba(0, 43, 54, 0.60);
+    border-right: 2px solid rgba(181, 137, 0, 0.4);
+    qproperty-glow_color: #B58900;
+}
+QLabel#SidebarTitle {
+    color: #B58900;
+    background: transparent;
+    padding: 10px;
+}
+QPushButton#NavButton {
+    background-color: transparent;
+    color: #93A1A1;
+    border: none;
+    text-align: left;
+    padding-left: 20px;
+}
+QPushButton#NavButton:hover {
+    background-color: rgba(181, 137, 0, 0.15);
+}
+QPushButton#NavButton[active="true"] {
+    background-color: rgba(181, 137, 0, 0.25);
+    color: #B58900;
+    border-left: 4px solid #B58900;
+    font-weight: bold;
+}
+QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
+    background-color: rgba(0, 43, 54, 0.40);
+}
+QFrame#ModeSelectorFrame {
+    background-color: rgba(0, 43, 54, 0.40);
+}
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+    background-color: rgba(0, 43, 54, 0.5);
+}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    background-color: rgba(0, 43, 54, 0.9);
 }
 """
 

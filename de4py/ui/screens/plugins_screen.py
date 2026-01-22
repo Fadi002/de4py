@@ -120,6 +120,11 @@ class PluginsScreen(QWidget):
                 QApplication.instance().setStyleSheet(plugin.qss)
                 settings.active_theme = plugin.name
                 settings.save()
+                
+                # Refresh transparency styles if enabled
+                if hasattr(self.window(), "set_transparent_ui"):
+                    self.window().set_transparent_ui(settings.transparent_ui)
+                
                 self.window().show_notification("success", tr(PLUGINS_THEME_APPLIED, theme=plugin.name))
                 self._load_plugins() 
             else:
@@ -137,6 +142,11 @@ class PluginsScreen(QWidget):
         QApplication.instance().setStyleSheet(main.DEFAULT_QSS)
         settings.active_theme = None
         settings.save()
+        
+        # Refresh transparency styles if enabled
+        if hasattr(self.window(), "set_transparent_ui"):
+            self.window().set_transparent_ui(settings.transparent_ui)
+            
         self.window().show_notification("success", tr(PLUGINS_THEME_RESET))
         self._load_plugins()
 
