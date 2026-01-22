@@ -6,6 +6,12 @@ class GruvboxDark(ThemePlugin):
         self.name = "Gruvbox Dark"
         self.description = "Retro earthy dark theme with warm, vibrant highlights."
         self.creator = "Fadi002"
+        self.colors = {
+            "background": "#282828",
+            "primary": "#FB4934",
+            "secondary": "#FABD2F",
+            "text": "#EBDBB2"
+        }
         self.qss = """
 QMainWindow,QWidget#CentralWidget,QWidget#MainContent
 {
@@ -445,6 +451,50 @@ QComboBox QAbstractItemView::item:selected
 {
 background-color:#FB4934;
 color:#ffffff
+        }
+        """
+        self.transparent_qss = """
+QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
+    background-color: transparent;
+}
+/* Custom Sidebar Style for Transparency */
+QWidget#Sidebar {
+    background-color: rgba(40, 40, 40, 0.60);
+    border-right: 2px solid rgba(251, 73, 52, 0.4);
+    qproperty-glow_color: #FB4934;
+}
+QLabel#SidebarTitle {
+    color: #FB4934;
+    background: transparent;
+    padding: 10px;
+}
+QPushButton#NavButton {
+    background-color: transparent;
+    color: #EBDBB2;
+    border: none;
+    text-align: left;
+    padding-left: 20px;
+}
+QPushButton#NavButton:hover {
+    background-color: rgba(251, 73, 52, 0.15);
+}
+QPushButton#NavButton[active="true"] {
+    background-color: rgba(251, 73, 52, 0.25);
+    color: #FB4934;
+    border-left: 4px solid #FB4934;
+    font-weight: bold;
+}
+QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
+    background-color: rgba(40, 40, 40, 0.40);
+}
+QFrame#ModeSelectorFrame {
+    background-color: rgba(40, 40, 40, 0.40);
+}
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+    background-color: rgba(40, 40, 40, 0.5);
+}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    background-color: rgba(40, 40, 40, 0.9);
 }
 """
 

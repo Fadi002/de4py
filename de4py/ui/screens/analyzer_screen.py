@@ -113,7 +113,7 @@ class AnalyzerScreen(QWidget):
         frame.setMinimumHeight(360)
         
         layout = QVBoxLayout(frame)
-        self.output = OutputTextArea("Output:", show_copy=True)
+        self.output = OutputTextArea(show_copy=True)
         layout.addWidget(self.output)
         
         return frame
@@ -176,6 +176,8 @@ class AnalyzerScreen(QWidget):
              item = self.options_layout.takeAt(1)
              if item.widget():
                  item.widget().deleteLater()
+        
+        self.output.retranslate_ui()
         
         self._add_command_buttons(self.options_layout)
 

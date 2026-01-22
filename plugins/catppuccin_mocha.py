@@ -6,6 +6,12 @@ class CatppuccinMocha(ThemePlugin):
         self.name = "Catppuccin Mocha"
         self.description = "Soft pastel dark theme with warm accents, calm and soothing look."
         self.creator = "Fadi002"
+        self.colors = {
+            "background": "#1E1E2E",
+            "primary": "#F5BDE6",
+            "secondary": "#CBA6F7",
+            "text": "#CDD6F4"
+        }
         self.qss = """
 QMainWindow,QWidget#CentralWidget,QWidget#MainContent
 {
@@ -445,6 +451,50 @@ QComboBox QAbstractItemView::item:selected
 {
 background-color:#F5BDE6;
 color:#ffffff
+        }
+        """
+        self.transparent_qss = """
+QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
+    background-color: transparent;
+}
+/* Custom Sidebar Style for Transparency */
+QWidget#Sidebar {
+    background-color: rgba(30, 30, 46, 0.60);
+    border-right: 2px solid rgba(245, 189, 230, 0.3);
+    qproperty-glow_color: #F5BDE6; 
+}
+QLabel#SidebarTitle {
+    color: #F5BDE6; 
+    background: transparent;
+    padding: 10px;
+}
+QPushButton#NavButton {
+    background-color: transparent;
+    color: #CDD6F4;
+    border: none;
+    text-align: left;
+    padding-left: 20px;
+}
+QPushButton#NavButton:hover {
+    background-color: rgba(245, 189, 230, 0.15);
+}
+QPushButton#NavButton[active="true"] {
+    background-color: rgba(245, 189, 230, 0.25);
+    color: #F5BDE6;
+    border-left: 4px solid #F5BDE6;
+    font-weight: bold;
+}
+QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
+    background-color: rgba(30, 30, 46, 0.40);
+}
+QFrame#ModeSelectorFrame {
+    background-color: rgba(30, 30, 46, 0.40);
+}
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+    background-color: rgba(30, 30, 46, 0.5);
+}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    background-color: rgba(30, 30, 46, 0.9);
 }
 """
 

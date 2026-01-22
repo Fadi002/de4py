@@ -20,7 +20,6 @@ class AboutScreen(QWidget):
         
         frame = QFrame()
         frame.setObjectName("StyledFrame")
-        frame.setFixedSize(350, 220)
         
         frame_layout = QVBoxLayout(frame)
         frame_layout.setSpacing(12)
