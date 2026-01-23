@@ -101,7 +101,7 @@
     "screen.pylingual.tooltip.copy": "Copy decompiled output to clipboard",
     "screen.pylingual.tooltip.execute": "Start the decompilation process",
     "screen.pylingual.tooltip.select": "Select a Python file for processing",
-    "screen.pylingual.tos_acceptance": "I have read and accept the PyLingual privacy TOS",
+    "screen.pylingual.tos_acceptance": "PyLingual Gizlilik sözleşmesini okudum ve kabul ediyorum",
     "screen.pylingual.tos_content": "By using this service, you accept the PyLingual privacy TOS:\n\nFiles and patches submitted to the PyLingual web service are retained to support future research and development.\n\nBy using this service, you warrant that you are not violating export control laws, intellectual property rights, licenses, or other legal or contractual obligations, and that you are not using this service for improper, unauthorized, or malicious purposes. Proprietary files uploaded to PyLingual may be disclosed to relevant third parties.",
     "screen.pylingual.tos_title": "PyLingual Terms of Service",
     "screen.pyshell.attach": "Attach",
