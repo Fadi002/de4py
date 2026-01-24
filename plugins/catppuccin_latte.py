@@ -477,7 +477,7 @@ color: #8839EF;
 
 QPushButton#NavButton {
 background-color: transparent;
-color: #A0A3BF;
+color: #4C4F69;
 font-weight: 600;
 border: none;
 text-align: left;
@@ -518,6 +518,16 @@ border: 1.5px solid #8839EF;
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
 background-color: rgba(255, 255, 255, 0.95);
 border: 2px solid #8839EF;
+}
+/* Fix Changelog Transparency */
+QScrollArea#ChangelogArea, QScrollArea#ChangelogArea > QWidget > QWidget {
+    background: transparent;
+    border: none;
+}
+QTextBrowser#ChangelogContent {
+    background-color: transparent;
+    border: none;
+    color: #4C4F69;
 }
 """
 

@@ -99,13 +99,24 @@ class NotificationWidget(QFrame):
         bw = float(self._border_width)
         radius = float(self._corner_radius)
 
-        # 1. Draw blur if available
+        inset = bw / 2.0
+        overlay_rect = rect.adjusted(math.ceil(inset), math.ceil(inset),
+                                     -math.ceil(inset), -math.ceil(inset))
+
         if self._blur_pixmap and not self._blur_pixmap.isNull() and self.parent():
+            from PySide6.QtGui import QPainterPath
+            path = QPainterPath()
+            path.addRoundedRect(overlay_rect, radius, radius)
+            
+            painter.save()
+            painter.setClipPath(path)
+            
             global_pos = self.mapTo(self.parent(), QPoint(0, 0))
             src = QRect(global_pos, self.size())
             painter.drawPixmap(rect, self._blur_pixmap, src)
+            
+            painter.restore()
 
-        # 2. Draw semi-transparent glass overlay
         inset = bw / 2.0
         overlay_rect = rect.adjusted(math.ceil(inset), math.ceil(inset),
                                      -math.ceil(inset), -math.ceil(inset))
@@ -114,7 +125,6 @@ class NotificationWidget(QFrame):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(overlay_rect, radius, radius)
 
-        # 3. Draw border on top
         if bw > 0:
             pen = QPen(self._border_color)
             pen.setWidthF(bw)
