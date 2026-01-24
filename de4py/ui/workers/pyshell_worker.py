@@ -17,19 +17,21 @@ class InjectionWorker(QThread):
         self._stealth = stealth
 
     def run(self):
-        try:
-            if self._stealth:
-                result = pyshell_controller.stealth_inject_shell(self._pid)
-            else:
-                result = pyshell_controller.inject_shell(self._pid)
-            
-            if result and result[1]:
-                pyshell_controller.set_handle(result[0])
-                self.finished.emit(result[0], True)
-            else:
-                self.finished.emit(None, False)
-        except Exception as e:
-            self.error.emit(str(e))
+        from de4py.utils import sentry
+        with sentry.transaction("PyShell Injection Task", "worker.pyshell.inject"):
+            try:
+                if self._stealth:
+                    result = pyshell_controller.stealth_inject_shell(self._pid)
+                else:
+                    result = pyshell_controller.inject_shell(self._pid)
+                
+                if result and result[1]:
+                    pyshell_controller.set_handle(result[0])
+                    self.finished.emit(result[0], True)
+                else:
+                    self.finished.emit(None, False)
+            except Exception as e:
+                self.error.emit(str(e))
 
 
 class PipeCommandWorker(QThread):
@@ -41,11 +43,13 @@ class PipeCommandWorker(QThread):
         self._command = command
 
     def run(self):
-        try:
-            result = pyshell_controller.write_to_pipe_detailed(self._command)
-            self.finished.emit(result)
-        except Exception as e:
-            self.error.emit(str(e))
+        from de4py.utils import sentry
+        with sentry.transaction("PyShell Pipe Task", "worker.pyshell.pipe"):
+            try:
+                result = pyshell_controller.write_to_pipe_detailed(self._command)
+                self.finished.emit(result)
+            except Exception as e:
+                self.error.emit(str(e))
 
 
 class ShowConsoleWorker(QThread):

@@ -51,25 +51,12 @@ from PySide6.QtGui import QIcon
 
 from de4py.ui.main_window import MainWindow
 from de4py.config.config import settings
-from de4py.utils import rpc, tui, update, setup_logging
-
-try:
-    import sentry_sdk
-    sentry_sdk.init(
-    dsn="https://e3abec75d2b4050308637e9354a03fd0@o4510755728982016.ingest.de.sentry.io/4510755731013712",
-    send_default_pii=True,
-    enable_logs=True,
-    traces_sample_rate=1.0,
-    profile_session_sample_rate=1.0)
-except Exception as e:
-    logging.warning(f"Sentry initialization failed: {e}")
+from de4py.utils import rpc, tui, update, setup_logging, sentry
 
 colorama.init(autoreset=True)
+sentry.init()
 
 DEFAULT_QSS = ""
-
-QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
 def load_stylesheet(app: QApplication):
     """Loads the dark theme QSS stylesheet."""
@@ -131,61 +118,71 @@ def main():
         logging.error("Failed to check for updates")
     # Handle Modes
     if args.test:
-        logging.info("Starting in Test mode...")
-        from de4py.utils.test import main as run_tests
-        run_tests([])
-        return
+        with sentry.transaction("Test Session", "app.test"):
+            logging.info("Starting in Test mode...")
+            from de4py.utils.test import main as run_tests
+            run_tests([])
+            return
 
     if args.cli:
-        logging.info("Starting in CLI mode...")
-        from de4py.tui import cli
-        cli.start()
-        return
+        with sentry.transaction("CLI Session", "app.cli"):
+            logging.info("Starting in CLI mode...")
+            from de4py.tui import cli
+            cli.start()
+            return
 
     # Default: GUI Mode
-    logging.info("Starting in GUI mode...")
-    app = QApplication(sys.argv)
-    app.setApplicationName("de4py")
-    
-    # Updated icon path
-    icon_path = os.path.join(os.path.dirname(__file__), "ui", "resources", "de4py.ico")
-    if os.path.exists(icon_path):
-        app.setWindowIcon(QIcon(icon_path))
-    
-    load_stylesheet(app)
-    stealth_title = set_stealth_title()
-    
-    if settings.rpc:
-        try:
-            rpc.start_RPC()
-        except Exception:
-            pass
-    
-    window = MainWindow(title=stealth_title)
-    
-    if settings.active_theme:
-        try:
-            from plugins import load_plugins
-            loaded_plugins = load_plugins()
-            for plugin_data in loaded_plugins:
-                plugin_instance = plugin_data.get("instance")
-                if plugin_instance and plugin_instance.name == settings.active_theme:
-                    if hasattr(plugin_instance, 'qss'):
-                        app.setStyleSheet(plugin_instance.qss)
-                    break
-        except Exception as e:
-            logging.error(f"Failed to load persistent theme: {e}")
-            settings.active_theme = None
-            settings.save()
+    with sentry.transaction("GUI Session", "app.gui"):
+        sentry.breadcrumb("GUI Application starting", category="lifecycle")
+        logging.info("Starting in GUI mode...")
+        app = QApplication(sys.argv)
+        app.setApplicationName("de4py")
+        
+        sentry.set_extra_context("app_config", {
+            "mode": "GUI",
+            "rpc_enabled": settings.rpc,
+            "stealth_title": settings.stealth_title
+        })
 
-    window.show()
-    
-    exit_code = app.exec()
-    
-    # Cleanup
-    rpc.KILL_THREAD = True
-    logging.info("De4py shutting down")
-    sys.exit(exit_code)
+        # Updated icon path
+        icon_path = os.path.join(os.path.dirname(__file__), "ui", "resources", "de4py.ico")
+        if os.path.exists(icon_path):
+            app.setWindowIcon(QIcon(icon_path))
+        
+        load_stylesheet(app)
+        stealth_title = set_stealth_title()
+        
+        if settings.rpc:
+            try:
+                rpc.start_RPC()
+            except Exception:
+                pass
+        
+        window = MainWindow(title=stealth_title)
+        
+        if settings.active_theme:
+            try:
+                from plugins import load_plugins
+                loaded_plugins = load_plugins()
+                for plugin_data in loaded_plugins:
+                    plugin_instance = plugin_data.get("instance")
+                    if plugin_instance and plugin_instance.name == settings.active_theme:
+                        if hasattr(plugin_instance, 'qss'):
+                            app.setStyleSheet(plugin_instance.qss)
+                        break
+            except Exception as e:
+                logging.error(f"Failed to load persistent theme: {e}")
+                settings.active_theme = None
+                settings.save()
+
+        window.show()
+        
+        exit_code = app.exec()
+        
+        # Cleanup
+        rpc.KILL_THREAD = True
+        logging.info("De4py shutting down")
+        sys.exit(exit_code)
 
 if __name__ == "__main__":
     main()

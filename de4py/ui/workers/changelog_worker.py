@@ -17,15 +17,17 @@ class ChangelogWorker(QThread):
         super().__init__(parent)
 
     def run(self):
-        try:
-            url = settings.changelog_url
-            response = requests.get(url, timeout=10)
-            self.finished.emit(response.text)
-        except ConnectionError:
-            self.error.emit("No internet connection available.")
-        except Timeout:
-            self.error.emit("The server took too long to respond.")
-        except RequestException as e:
-            self.error.emit(f"Failed to load changelog: {str(e)}")
-        except Exception as e:
-            self.error.emit(f"An unexpected error occurred: {str(e)}")
+        from de4py.utils import sentry
+        with sentry.span("fetch.changelog"):
+            try:
+                url = settings.changelog_url
+                response = requests.get(url, timeout=10)
+                self.finished.emit(response.text)
+            except ConnectionError:
+                self.error.emit("No internet connection available.")
+            except Timeout:
+                self.error.emit("The server took too long to respond.")
+            except RequestException as e:
+                self.error.emit(f"Failed to load changelog: {str(e)}")
+            except Exception as e:
+                self.error.emit(f"An unexpected error occurred: {str(e)}")

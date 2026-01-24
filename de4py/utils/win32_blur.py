@@ -38,6 +38,18 @@ WCA_ACCENT_POLICY = 19
 DWMWA_USE_IMMERSIVE_DARK_MODE = 20 
 DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19
 
+# Window Styles
+GWL_STYLE = -16
+WS_CAPTION = 0x00C00000
+WS_SYSMENU = 0x00080000
+WS_THICKFRAME = 0x00040000
+
+# Window Positioning
+SWP_NOMOVE = 0x0002
+SWP_NOSIZE = 0x0001
+SWP_NOZORDER = 0x0004
+SWP_FRAMECHANGED = 0x0020
+
 # =============================================================================
 # Helper Functions
 # =============================================================================
@@ -217,8 +229,26 @@ def enable_dynamic_blur(window: QMainWindow, theme_colors: dict = None):
     else:
         window._blur_filter.update_params(blur_color, force_dark_mode)
     
+    try:
+        hwnd = int(window.winId())
+        user32 = ctypes.windll.user32
+        
+        style = user32.GetWindowLongW(hwnd, GWL_STYLE)
+        
+        style &= ~WS_CAPTION
+        style &= ~WS_SYSMENU
+        style |= WS_THICKFRAME
+        
+        user32.SetWindowLongW(hwnd, GWL_STYLE, style)
+        user32.SetWindowPos(hwnd, None, 0, 0, 0, 0,
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
+    except Exception:
+        pass
+        
+    # Apply blur after style change to ensure correct context
     _apply_blur_color(window, blur_color)
     _apply_dark_mode(window, force_dark_mode)
+
     window.repaint()
 
 def disable_blur(window: QMainWindow):
@@ -228,6 +258,33 @@ def disable_blur(window: QMainWindow):
     
     window.setAttribute(Qt.WA_TranslucentBackground, False)
     _apply_blur_color(window, 0, enabled=False)
+    
+    try:
+        hwnd = int(window.winId())
+        user32 = ctypes.windll.user32
+        
+        GWL_STYLE = -16
+        GWL_EXSTYLE = -20
+        WS_OVERLAPPEDWINDOW = 0x00CF0000
+        WS_EX_LAYERED = 0x00080000
+        
+        # Restore standard overlapping window style
+        style = user32.GetWindowLongW(hwnd, GWL_STYLE)
+        exstyle = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        
+        user32.SetWindowLongW(hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW)
+        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, exstyle & ~WS_EX_LAYERED)
+        
+        # Restore icon and title if needed (MainWindow will handle title usually)
+        SWP_NOMOVE = 0x0002
+        SWP_NOSIZE = 0x0001
+        SWP_NOZORDER = 0x0004
+        SWP_FRAMECHANGED = 0x0020
+        user32.SetWindowPos(hwnd, None, 0, 0, 0, 0,
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
+    except Exception:
+        pass
+        
     window.repaint()
 
 def _apply_blur_color(window: QMainWindow, color: int, enabled: bool = True):

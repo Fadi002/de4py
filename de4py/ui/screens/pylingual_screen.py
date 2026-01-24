@@ -17,6 +17,7 @@ from PySide6.QtGui import QColor, QPainter, QPixmap
 
 from de4py.ui.workers.pylingual_worker import PyLingualWorker
 from de4py.lang import tr
+from de4py.utils import sentry
 from de4py.lang.keys import (
     SCREEN_TITLE_PYLINGUAL, PYLINGUAL_OFFLINE, PYLINGUAL_ONLINE,
     PYLINGUAL_SELECT_FILE, PYLINGUAL_EXECUTE, PYLINGUAL_COPY,
@@ -419,6 +420,8 @@ class PyLingualScreen(QWidget):
             label.style().unpolish(label)
             label.style().polish(label)
 
+        sentry.breadcrumb(f"PyLingual mode toggled: {'Online' if checked else 'Offline'}", category="user.action")
+        
         if checked:
             if not self._consent_accepted:
                 self._check_consent()
@@ -441,6 +444,7 @@ class PyLingualScreen(QWidget):
             # Show only the basename for a cleaner look
             basename = os.path.basename(filename)
             self.result_area.setPlaceholderText(tr(PYLINGUAL_PLACEHOLDER_SELECTED, filename=basename))
+            sentry.breadcrumb(f"File selected for PyLingual: {basename}", category="user.action", path=filename)
 
             
             if hasattr(self.window(), "show_notification"):
@@ -468,19 +472,29 @@ class PyLingualScreen(QWidget):
         self._show_progress(True)
         self._set_controls_enabled(False)
         
-        # Create and start worker
-        self._worker = PyLingualWorker(self._selected_file_path)
-        self._worker.progress.connect(self._on_worker_progress)
-        self._worker.finished.connect(self._on_worker_finished)
-        self._worker.error.connect(self._on_worker_error)
-        self._worker.cached.connect(self._on_worker_cached)
-        self._worker.start()
+        with sentry.transaction("PyLingual Decompilation", "tool.pylingual"):
+            file_size = os.path.getsize(self._selected_file_path) if os.path.exists(self._selected_file_path) else 0
+            sentry.set_extra_context("pylingual_meta", {
+                "mode": "Online",
+                "file_path": self._selected_file_path,
+                "file_size": file_size
+            })
+            
+            # Create and start worker
+            self._worker = PyLingualWorker(self._selected_file_path)
+            self._worker.progress.connect(self._on_worker_progress)
+            self._worker.finished.connect(self._on_worker_finished)
+            self._worker.error.connect(self._on_worker_error)
+            self._worker.cached.connect(self._on_worker_cached)
+            self._worker.start()
 
     def _execute_offline(self):
         """Execute local decompilation (placeholder for future implementation)."""
-        main_win = self.window()
-        if hasattr(main_win, "show_notification"):
-            main_win.show_notification("info", tr(PYLINGUAL_MSG_OFFLINE_LIMIT))
+        with sentry.transaction("PyLingual Decompilation", "tool.pylingual"):
+            sentry.set_extra_context("pylingual_meta", {"mode": "Offline"})
+            main_win = self.window()
+            if hasattr(main_win, "show_notification"):
+                main_win.show_notification("info", tr(PYLINGUAL_MSG_OFFLINE_LIMIT))
 
 
     def _on_worker_progress(self, stage: str, percentage: float, message: str):

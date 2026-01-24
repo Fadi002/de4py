@@ -16,16 +16,18 @@ class BehaviorMonitorWorker(QThread):
         self._running = True
 
     def run(self):
-        try:
-            while self._running and not pyshell_controller.get_stop_threads():
-                try:
-                    message = pyshell_controller.read_from_analyzer_pipe()
-                    if message:
-                        self.text_received.emit(message)
-                except Exception:
-                    break
-        except Exception as e:
-            self.error.emit(str(e))
+        from de4py.utils import sentry
+        with sentry.transaction("Behavior Monitor Task", "worker.behavior_monitor"):
+            try:
+                while self._running and not pyshell_controller.get_stop_threads():
+                    try:
+                        message = pyshell_controller.read_from_analyzer_pipe()
+                        if message:
+                            self.text_received.emit(message)
+                    except Exception:
+                        break
+            except Exception as e:
+                self.error.emit(str(e))
 
     def stop(self):
         self._running = False
