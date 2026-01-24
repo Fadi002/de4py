@@ -9,6 +9,8 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor, QCursor, QPainter, QBrush, QPen, QFont, QPalette, QIcon, QPixmap
 
+from de4py.utils import sentry
+
 class AnimatedButton(QPushButton):
     def __init__(self, text="", parent=None):
         super().__init__(text, parent)
@@ -358,9 +360,10 @@ class AnimatedStackedWidget(QStackedWidget):
             self.setCurrentIndex(index)
             return
 
-        next_widget.setVisible(True)
-        
-        # Setup opacity effects
+        with sentry.span("ui.transition", description=f"Index {self.currentIndex()} → {index}"):
+            next_widget.setVisible(True)
+            
+            # Setup opacity effects
         current_effect = QGraphicsOpacityEffect(current_widget)
         next_effect = QGraphicsOpacityEffect(next_widget)
         current_widget.setGraphicsEffect(current_effect)

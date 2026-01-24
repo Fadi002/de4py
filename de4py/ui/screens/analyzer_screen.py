@@ -6,6 +6,8 @@ from PySide6.QtCore import Qt
 
 from de4py.ui.widgets.output_textarea import OutputTextArea
 from de4py.ui.workers.analyzer_worker import AnalyzerWorker
+from de4py.utils import sentry
+import os
 from de4py.lang import tr
 from de4py.lang.keys import (
     SCREEN_TITLE_ANALYZER, ANALYZER_SELECT_FILE, ANALYZER_ANALYZE,
@@ -129,6 +131,7 @@ class AnalyzerScreen(QWidget):
             self._file_path = file_path
             filename = file_path.split("/")[-1].split("\\")[-1]
             self.file_label.setText(filename)
+            sentry.breadcrumb(f"File selected for analysis: {filename}", category="user.action", path=file_path)
 
     def _run_command(self, command: str):
         if not self._file_path:
@@ -140,12 +143,20 @@ class AnalyzerScreen(QWidget):
             return
 
         
-        self.window().show_loading()
-        
-        self._worker = AnalyzerWorker(command, self._file_path, self)
-        self._worker.finished.connect(self._on_command_finished)
-        self._worker.error.connect(self._on_command_error)
-        self._worker.start()
+        with sentry.transaction("File Analysis", "tool.analyzer"):
+            file_size = os.path.getsize(self._file_path) if os.path.exists(self._file_path) else 0
+            sentry.set_extra_context("analyzer_meta", {
+                "command": command,
+                "file_path": self._file_path,
+                "file_size": file_size
+            })
+            
+            self.window().show_loading()
+            
+            self._worker = AnalyzerWorker(command, self._file_path, self)
+            self._worker.finished.connect(self._on_command_finished)
+            self._worker.error.connect(self._on_command_error)
+            self._worker.start()
 
     def _on_command_finished(self, result: str):
         self.window().hide_loading()

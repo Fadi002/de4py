@@ -108,6 +108,13 @@ class BehaviorMonitorScreen(QWidget):
         self.ssl_checkbox.stateChanged.connect(self._on_dump_ssl)
         self.pyc_checkbox.stateChanged.connect(self._on_pyc_dumper)
 
+        from de4py.utils import sentry
+        self.mf_checkbox.toggled.connect(lambda checked: sentry.breadcrumb(f"Monitor Files toggled: {checked}", category="user.action"))
+        self.mp_checkbox.toggled.connect(lambda checked: sentry.breadcrumb(f"Monitor Processes toggled: {checked}", category="user.action"))
+        self.mc_checkbox.toggled.connect(lambda checked: sentry.breadcrumb(f"Monitor Connections toggled: {checked}", category="user.action"))
+        self.ssl_checkbox.toggled.connect(lambda checked: sentry.breadcrumb(f"SSL Dump toggled: {checked}", category="user.action"))
+        self.pyc_checkbox.toggled.connect(lambda checked: sentry.breadcrumb(f"PYC Dumper toggled: {checked}", category="user.action"))
+
     def _add_output(self, text: str):
         self.output.append_text(text)
 

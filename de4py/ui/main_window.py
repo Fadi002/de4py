@@ -1,6 +1,6 @@
 import os
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QPushButton
+    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QPushButton
 )
 from de4py.ui.widgets.core_animations import AnimatedStackedWidget
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QSize
@@ -28,24 +28,42 @@ from de4py.ui.screens.settings_screen import SettingsScreen
 from de4py.ui.screens.about_screen import AboutScreen
 from de4py.ui.screens.pylingual_screen import PyLingualScreen
 from de4py.ui.widgets.notification_widget import NotificationManager
-# from de4py.utils.win32_blur import enable_transparent_ui # Obsolete
 from de4py.ui.widgets.loading_overlay import LoadingOverlay
-
-
+from de4py.ui.widgets.custom_title_bar import CustomTitleBar
 
 TRANSPARENT_STYLESHEET = """
 /* Transparency Overrides */
-QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
+QMainWindow, QWidget#CentralWidget {
+    background-color: rgba(20, 20, 20, 0.02); /* Near-zero alpha to force render surface */
+}
+QWidget#MainContent {
     background-color: transparent;
 }
 QWidget#Sidebar {
-    background-color: rgba(13,17,23,0.60);
+    background-color: rgba(20, 30, 48, 0.75);
+    border-right: 1px solid rgba(88, 166, 255, 0.2);
+}
+QPushButton#NavButton {
+    color: #ffffff;
+    font-weight: 500;
+}
+QScrollArea#ChangelogArea, QScrollArea#ChangelogArea > QWidget > QWidget {
+    background: transparent;
+    border: none;
+}
+QTextBrowser#ChangelogContent {
+    background-color: transparent;
+    border: none;
+    color: #e6edf3;
 }
 QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
     background-color: rgba(24, 28, 36, 0.40);
 }
 QFrame#ModeSelectorFrame {
     background-color: rgba(24, 28, 36, 0.40);
+}
+QFrame#NotificationFrame {
+    qproperty-overlayColorName: rgba(25, 25, 25, 0.40);
 }
 QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
     background-color: rgba(24, 28, 36, 0.5);
@@ -84,6 +102,11 @@ class MainWindow(QMainWindow):
         try:
             from de4py.utils.win32_blur import enable_dynamic_blur, disable_blur
             
+            # Toggling TranslucentBackground usually requires a hide/show cycle
+            was_visible = self.isVisible()
+            if was_visible:
+                self.hide()
+
             if enabled:
                 theme_colors = {}
                 active_style = TRANSPARENT_STYLESHEET
@@ -107,11 +130,19 @@ class MainWindow(QMainWindow):
                 
                 enable_dynamic_blur(self, theme_colors)
                 self.setStyleSheet(active_style)
+                self.title_bar.set_theme_colors(theme_colors)
+                self.title_bar.show()
+                self.title_bar.raise_()
             else:
                 disable_blur(self)
                 self.setStyleSheet("")
+                self.title_bar.hide()
+            
+            if was_visible:
+                self.show()
+                
         except Exception:
-            pass
+            self.show() # Safety fallback
 
     def nativeEvent(self, eventType, message):
         """Handle Windows system color change events to refresh blur."""
@@ -119,11 +150,9 @@ class MainWindow(QMainWindow):
             if eventType == "windows_generic_MSG":
                 import ctypes.wintypes
                 msg = ctypes.wintypes.MSG.from_address(message.__int__())
-                # WM_DWMCOLORIZATIONCOLORCHANGED = 0x0320
-                # WM_SETTINGCHANGE = 0x001A
                 if msg.message in (0x0320, 0x001A):
                     if settings.transparent_ui:
-                        self.set_transparent_ui(True) # Re-trigger calculations
+                        self.set_transparent_ui(True) 
         except Exception:
             pass
         return super().nativeEvent(eventType, message)
@@ -136,6 +165,9 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
+        
+        self.title_bar = CustomTitleBar(self)
+        self.title_bar.hide()
         
         self.sidebar = Sidebar(self)
         self.sidebar.setFixedWidth(0)
@@ -165,9 +197,13 @@ class MainWindow(QMainWindow):
         self.hamburger_btn.move(SPACING_MD, SPACING_MD)
         if os.path.exists(icon_path):
              self.hamburger_btn.setIcon(QIcon(icon_path))
+        
+        # Initial raise
         self.hamburger_btn.raise_()
-
+        self.title_bar.raise_()
+        
         self.sidebar.setFixedWidth(0) # Ensure start state
+    
 
     def _create_screens(self):
         self.home_screen = HomeScreen(self)
@@ -203,6 +239,10 @@ class MainWindow(QMainWindow):
         self.hamburger_btn.clicked.connect(self._toggle_sidebar)
         self.sidebar.navigation_requested.connect(self._navigate_to)
         
+        # Custom Title Bar Signals
+        self.title_bar.close_requested.connect(self.close)
+        self.title_bar.minimize_requested.connect(self.showMinimized)
+        
         # Connect process death from PyShell to Behavior Monitor reset
         self.pyshell_screen.process_died.connect(self.behavior_monitor_screen.handle_process_death)
 
@@ -233,6 +273,8 @@ class MainWindow(QMainWindow):
             "pylingual": SCREEN_PYLINGUAL,
         }
         if screen_id in screen_map:
+            from de4py.utils import sentry
+            sentry.breadcrumb(f"Navigating to screen: {screen_id}", category="navigation")
             self.screen_stack.fade_to_index(screen_map[screen_id])
             self.sidebar.set_active(screen_id)
             
@@ -260,6 +302,12 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.loading_overlay.setGeometry(self.rect())
+        self._update_title_bar_geometry()
+
+    def _update_title_bar_geometry(self):
+        if hasattr(self, 'title_bar'):
+            self.title_bar.setGeometry(0, 0, self.width(), 28)
+            self.title_bar.raise_()
 
     def _on_language_changed(self, lang_code: str):
         """
