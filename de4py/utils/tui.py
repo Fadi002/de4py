@@ -150,6 +150,12 @@ def custom_error(exc_type, exc_value, exc_traceback):
     print("\n".join(traceback_lines))
     print(f"{Fore.RED}=== End of Traceback ==={Style.RESET_ALL}")
     try:
+        import sentry_sdk
+        sentry_sdk.capture_exception(exc_value)
+    except:
+        pass
+
+    try:
         from de4py.api.telemetry import report_error
         report_error(
             source="core",

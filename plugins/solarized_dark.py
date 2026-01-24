@@ -470,10 +470,11 @@ QLabel#SidebarTitle {
 }
 QPushButton#NavButton {
     background-color: transparent;
-    color: #93A1A1;
+    color: #ffffff;
     border: none;
     text-align: left;
     padding-left: 20px;
+    font-weight: 500;
 }
 QPushButton#NavButton:hover {
     background-color: rgba(181, 137, 0, 0.15);
@@ -495,6 +496,16 @@ QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
 }
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
     background-color: rgba(0, 43, 54, 0.9);
+}
+/* Fix Changelog Transparency */
+QScrollArea#ChangelogArea, QScrollArea#ChangelogArea > QWidget > QWidget {
+    background: transparent;
+    border: none;
+}
+QTextBrowser#ChangelogContent {
+    background-color: transparent;
+    border: none;
+    color: #e6edf3;
 }
 """
 

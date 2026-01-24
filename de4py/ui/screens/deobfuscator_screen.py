@@ -12,6 +12,8 @@ from de4py.lang.keys import (
 
 from de4py.ui.widgets.output_textarea import OutputTextArea
 from de4py.ui.workers.deobfuscator_worker import DeobfuscatorWorker
+from de4py.utils import sentry
+import os
 
 
 class DeobfuscatorScreen(QWidget):
@@ -98,18 +100,26 @@ class DeobfuscatorScreen(QWidget):
             self._file_path = file_path
             filename = file_path.split("/")[-1].split("\\")[-1]
             self.file_label.setText(filename)
+            sentry.breadcrumb(f"File selected for deobfuscation: {filename}", category="user.action", path=file_path)
 
     def _on_deobfuscate(self):
         if not self._file_path:
             self.window().show_notification("warning", tr(MSG_NO_FILE_SELECTED))
             return
         
-        self.window().show_loading()
-        
-        self._worker = DeobfuscatorWorker(self._file_path, self)
-        self._worker.finished.connect(self._on_deobf_finished)
-        self._worker.error.connect(self._on_deobf_error)
-        self._worker.start()
+        with sentry.transaction("Deobfuscation Run", "tool.deobfuscate"):
+            file_size = os.path.getsize(self._file_path) if os.path.exists(self._file_path) else 0
+            sentry.set_extra_context("deobfuscator_meta", {
+                "file_path": self._file_path,
+                "file_size": file_size
+            })
+            
+            self.window().show_loading()
+            
+            self._worker = DeobfuscatorWorker(self._file_path, self)
+            self._worker.finished.connect(self._on_deobf_finished)
+            self._worker.error.connect(self._on_deobf_error)
+            self._worker.start()
 
     def _on_deobf_finished(self, result: str):
         self.window().hide_loading()

@@ -57,87 +57,89 @@ class PyLingualWorker(QThread):
     
     def run(self):
         """Execute the decompilation workflow in background thread."""
-        try:
-            self._client = PyLingualClient()
-            
-            # Step 1: Upload file
-            self._progress_callback("uploading", 0.0, "Uploading file to PyLingual...")
-            
+        from de4py.utils import sentry
+        with sentry.transaction("PyLingual Task", "worker.pylingual"):
             try:
-                upload_result = self._client.upload_file(self._file_path)
-            except FileTooLargeError as e:
-                self.error.emit(str(e))
-                self._report_telemetry(e, "upload")
-                return
-            except FileNotFoundError as e:
-                self.error.emit(f"File not found: {self._file_path}")
-                return
-            
-            if self._is_cancelled:
-                return
-            
-            # Check if cached
-            if upload_result.cached:
-                self.cached.emit()
-                self._progress_callback("cached", 100.0, "Result retrieved from cache")
-            
-            identifier = upload_result.identifier
-            
-            # Step 2: Poll for progress (skip if cached result)
-            if not upload_result.cached:
-                while not self._is_cancelled:
-                    progress = self._client.check_progress(identifier)
-                    
-                    self._progress_callback(
-                        progress.stage,
-                        progress.percentage,
-                        progress.message,
-                    )
-                    
-                    if progress.stage == "done":
-                        break
-                    
-                    if progress.stage == "error" or not progress.success:
-                        self.error.emit(progress.message or "Decompilation failed")
-                        self._report_telemetry(
-                            Exception(progress.message),
-                            "decompile"
+                self._client = PyLingualClient()
+                
+                # Step 1: Upload file
+                self._progress_callback("uploading", 0.0, "Uploading file to PyLingual...")
+                
+                try:
+                    upload_result = self._client.upload_file(self._file_path)
+                except FileTooLargeError as e:
+                    self.error.emit(str(e))
+                    self._report_telemetry(e, "upload")
+                    return
+                except FileNotFoundError as e:
+                    self.error.emit(f"File not found: {self._file_path}")
+                    return
+                
+                if self._is_cancelled:
+                    return
+                
+                # Check if cached
+                if upload_result.cached:
+                    self.cached.emit()
+                    self._progress_callback("cached", 100.0, "Result retrieved from cache")
+                
+                identifier = upload_result.identifier
+                
+                # Step 2: Poll for progress (skip if cached result)
+                if not upload_result.cached:
+                    while not self._is_cancelled:
+                        progress = self._client.check_progress(identifier)
+                        
+                        self._progress_callback(
+                            progress.stage,
+                            progress.percentage,
+                            progress.message,
                         )
-                        return
-                    
-                    # Wait before next poll
-                    self.msleep(int(self._client.poll_interval * 1000))
+                        
+                        if progress.stage == "done":
+                            break
+                        
+                        if progress.stage == "error" or not progress.success:
+                            self.error.emit(progress.message or "Decompilation failed")
+                            self._report_telemetry(
+                                Exception(progress.message),
+                                "decompile"
+                            )
+                            return
+                        
+                        # Wait before next poll
+                        self.msleep(int(self._client.poll_interval * 1000))
+                
+                if self._is_cancelled:
+                    return
+                
+                # Step 3: Get result
+                self._progress_callback("retrieving", 95.0, "Retrieving decompiled code...")
+                result = self._client.get_result(identifier)
+                
+                if result.success and result.source_code:
+                    self._progress_callback("done", 100.0, "Decompilation complete!")
+                    self.finished.emit(result.source_code)
+                else:
+                    error_msg = result.error or "Failed to retrieve decompiled code"
+                    self.error.emit(error_msg)
+                    self._report_telemetry(Exception(error_msg), "result")
             
-            if self._is_cancelled:
-                return
-            
-            # Step 3: Get result
-            self._progress_callback("retrieving", 95.0, "Retrieving decompiled code...")
-            result = self._client.get_result(identifier)
-            
-            if result.success and result.source_code:
-                self._progress_callback("done", 100.0, "Decompilation complete!")
-                self.finished.emit(result.source_code)
-            else:
-                error_msg = result.error or "Failed to retrieve decompiled code"
+            except ApiError as e:
+                error_msg = f"{e.message}"
+                if e.action:
+                    error_msg += f" ({e.action})"
                 self.error.emit(error_msg)
-                self._report_telemetry(Exception(error_msg), "result")
-        
-        except ApiError as e:
-            error_msg = f"{e.message}"
-            if e.action:
-                error_msg += f" ({e.action})"
-            self.error.emit(error_msg)
-            self._report_telemetry(e, "api")
-        
-        except Exception as e:
-            logger.exception("Unexpected error in PyLingual worker")
-            self.error.emit(f"Unexpected error: {str(e)}")
-            self._report_telemetry(e, "unexpected")
-        
-        finally:
-            if self._client:
-                self._client.close()
+                self._report_telemetry(e, "api")
+            
+            except Exception as e:
+                logger.exception("Unexpected error in PyLingual worker")
+                self.error.emit(f"Unexpected error: {str(e)}")
+                self._report_telemetry(e, "unexpected")
+            
+            finally:
+                if self._client:
+                    self._client.close()
     
     def _report_telemetry(self, exception: Exception, action: str):
         """Report error to telemetry system."""

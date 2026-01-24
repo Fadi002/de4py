@@ -120,5 +120,11 @@
             "languages update",
             "help us to translate de4py: https://crowdin.com/project/de4py"
         ]
+    },
+    {
+        "version": "2.2.4",
+        "changes": [
+            "Fixed some bugs"
+        ]
     }
 ]

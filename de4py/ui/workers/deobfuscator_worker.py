@@ -16,8 +16,10 @@ class DeobfuscatorWorker(QThread):
         self._file_path = file_path
 
     def run(self):
-        try:
-            result = deobfuscator_controller.run_detect_obfuscator(self._file_path)
-            self.finished.emit(str(result))
-        except Exception as e:
-            self.error.emit(f"Error: {str(e)}")
+        from de4py.utils import sentry
+        with sentry.transaction("Deobfuscator Task", "worker.deobfuscator"):
+            try:
+                result = deobfuscator_controller.run_detect_obfuscator(self._file_path)
+                self.finished.emit(str(result))
+            except Exception as e:
+                self.error.emit(f"Error: {str(e)}")

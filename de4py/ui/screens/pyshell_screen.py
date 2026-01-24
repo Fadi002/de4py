@@ -13,7 +13,7 @@ from de4py.ui.workers.pyshell_worker import (
 )
 from de4py.ui.constants import SPACING_MD
 from de4py.ui.controllers import pyshell_controller
-from de4py.utils import gen_path
+from de4py.utils import gen_path, sentry
 from de4py.lang import tr
 from de4py.lang.keys import (
     SCREEN_TITLE_PYSHELL, PYSHELL_ATTACH, PYSHELL_DETACH, PYSHELL_EXECUTE, PYSHELL_CLEAR,
@@ -216,11 +216,16 @@ class PyShellScreen(QWidget):
         self.window().show_loading()
         stealth = inject_type == "stealth"
 
-        worker = InjectionWorker(pid, stealth, self)
-        worker.finished.connect(self._on_inject_finished)
-        worker.error.connect(self._on_inject_error)
-        worker.start()
-        self._workers.append(worker)
+        with sentry.transaction("PyShell Injection", "pyshell.inject"):
+            sentry.set_extra_context("pyshell_meta", {
+                "pid": pid,
+                "stealth": stealth
+            })
+            worker = InjectionWorker(pid, stealth, self)
+            worker.finished.connect(self._on_inject_finished)
+            worker.error.connect(self._on_inject_error)
+            worker.start()
+            self._workers.append(worker)
 
     def _on_inject_finished(self, handle, success: bool):
         self.window().hide_loading()
@@ -302,10 +307,12 @@ class PyShellScreen(QWidget):
             self._workers.append(worker)
 
         else:
-            worker = PipeCommandWorker(command, self)
-            worker.finished.connect(lambda _: self._on_command_result(tr(PYSHELL_CMD_EXECUTED_MSG)))
-            worker.start()
-            self._workers.append(worker)
+            with sentry.transaction("PyShell Command", "pyshell.command"):
+                sentry.set_extra_context("pyshell_meta", {"command": command})
+                worker = PipeCommandWorker(command, self)
+                worker.finished.connect(lambda _: self._on_command_result(tr(PYSHELL_CMD_EXECUTED_MSG)))
+                worker.start()
+                self._workers.append(worker)
 
     def _on_command_result(self, message: str):
         self.output.set_text(message)
