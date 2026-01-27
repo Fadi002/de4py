@@ -9,7 +9,8 @@ REQUIRED_LIBS = {
     "Crypto": "pycryptodome",
     "pypresence": "pypresence",
     "xdis": "xdis",
-    "sentry_sdk": "sentry-sdk"
+    "sentry_sdk": "sentry-sdk",
+    "pefile": "pefile"
 }
 
 missing = []
