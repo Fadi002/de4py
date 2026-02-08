@@ -1,7 +1,9 @@
 <a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/de4py.jpg?raw=true"></img></a>
 # de4py
 
-**Advanced Python Deobfuscator & Reverse Engineering Toolkit**
+> ⚠️ **de4py is FREE & OPEN SOURCE (GPL-3.0).  
+> Any paid versions sold elsewhere are NOT official.
+> If you paid for de4py, you were misled.**
 
 De4py is an advanced Python deobfuscator with a beautiful UI (PySide6) and a robust set of features for malware analysts and reverse engineers. It supports both automatic deobfuscation of common packers and manual analysis tools.
 
