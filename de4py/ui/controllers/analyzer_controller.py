@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 from de4py.engines.analyzers import (
     detect_packer, unpack_file, get_file_hashs,
     sus_strings_lookup, all_strings_lookup
