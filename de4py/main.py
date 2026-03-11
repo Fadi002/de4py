@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import sys
 import os
 
@@ -36,6 +45,12 @@ import ctypes
 import logging
 import argparse
 import colorama
+
+from de4py._meta import PROJECT_SIGNATURE
+from de4py.config.config import settings
+__version__ = settings.version
+
+_PROJECT_SIGNATURE = PROJECT_SIGNATURE
 import msvcrt
 import signal
 
@@ -89,7 +104,13 @@ def main():
     parser = argparse.ArgumentParser(description="de4py - Python Deobfuscator & Analyzer")
     parser.add_argument("--cli", action="store_true", help="Start in CLI mode")
     parser.add_argument("--test", action="store_true", help="Run internal tests")
+    parser.add_argument("--about", action="store_true", help="Show project info and exit")
     args = parser.parse_args()
+
+    if args.about:
+        from de4py.about import print_about
+        print_about()
+        return
 
     # Setup environment
     setup_logging()
@@ -97,6 +118,8 @@ def main():
     # Show Banner
     tui.clear_console()
     print(tui.__BANNER__)
+
+
     logging.info("Starting de4py")
 
     # Check for updates
