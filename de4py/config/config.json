@@ -9,7 +9,7 @@
     "api_base_url": "https://de4py-api.vercel.app",
     "api_timeout": 700,
     "poll_interval": 2.0,
-    "active_theme": null,
+    "active_theme": "One Dark",
     "language": "en",
     "transparent_ui": true
 }

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "de4py"
-version = "2.1.1"
+version = "2.2.4"
 dependencies = [
     "PySide6",
     "requests",
@@ -18,10 +18,10 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "MIT"}
+license = "CC-BY-NC-4.0"
 
 [project.scripts]
 de4py = "de4py.main:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+include = ["de4py*"]

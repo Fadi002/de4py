@@ -1,8 +1,20 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 from dataclasses import dataclass, field, asdict
 import json
 import os
 import logging
 from typing import Optional, Dict, Any
+
+# Authorship signature — helps prove provenance
+PROJECT_SIGNATURE = "de4py-core-signature-7f3a91"
 
 # =============================================================================
 # Configuration Definition
