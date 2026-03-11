@@ -91,4 +91,12 @@ This tool is for **educational purposes only**. Never deobfuscate software witho
 
 ## 📄 License
 
-Licensed under **GNU General Public License v3.0**.
+Licensed under **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)**.
+
+## 📝 Attribution Notice
+
+This project was created by **Fadi002**.
+
+If you fork or redistribute this project, you must retain the original copyright notices
+and provide appropriate attribution according to the **CC BY-NC 4.0** license.
+Commercial use is not permitted without explicit permission from the author.

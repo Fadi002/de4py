@@ -1,9 +1,20 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import re
 import pkgutil
 import importlib
 from typing import List, Dict, Optional, Type
 from de4py.core.interfaces import BaseEngine, Deobfuscator, Analyzer
 from de4py.engines.adapter import LegacyDeobfuscatorAdapter
+
+PROJECT_SIGNATURE = "de4py-core-signature-7f3a91"
 
 class EngineManager:
     """Manages registration and retrieval of deobfuscators and analyzers."""
