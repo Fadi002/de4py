@@ -10,8 +10,6 @@
 from typing import Callable, Any, Dict
 from de4py.core.interfaces import Deobfuscator
 
-PROJECT_SIGNATURE = "de4py-core-signature-7f3a91"
-
 class LegacyDeobfuscatorAdapter(Deobfuscator):
     def __init__(self, name: str, deobfuscate_func: Callable[[str], str], description: str = ""):
         self._name = name

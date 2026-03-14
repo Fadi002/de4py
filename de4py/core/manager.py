@@ -14,8 +14,6 @@ from typing import List, Dict, Optional, Type
 from de4py.core.interfaces import BaseEngine, Deobfuscator, Analyzer
 from de4py.engines.adapter import LegacyDeobfuscatorAdapter
 
-PROJECT_SIGNATURE = "de4py-core-signature-7f3a91"
-
 class EngineManager:
     """Manages registration and retrieval of deobfuscators and analyzers."""
 

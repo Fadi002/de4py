@@ -107,7 +107,7 @@ class DeobfuscatorScreen(QWidget):
         )
         if file_path:
             self._file_path = file_path
-            filename = file_path.split("/")[-1].split("\\")[-1]
+            filename = os.path.basename(file_path)
             self.file_label.setText(filename)
             sentry.breadcrumb(f"File selected for deobfuscation: {filename}", category="user.action", path=file_path)
 
@@ -132,7 +132,6 @@ class DeobfuscatorScreen(QWidget):
 
     def _on_deobf_finished(self, result: str):
         self.window().hide_loading()
-        self.output.set_text(result)
         self.output.set_text(result)
         self.window().show_notification("success", tr(MSG_OPERATION_COMPLETE))
 

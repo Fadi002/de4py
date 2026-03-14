@@ -48,14 +48,16 @@ import colorama
 
 from de4py._meta import PROJECT_SIGNATURE
 from de4py.config.config import settings
+
 __version__ = settings.version
 
-_PROJECT_SIGNATURE = PROJECT_SIGNATURE
-import msvcrt
+# Windows-only modules — guard against non-Windows platforms
 import signal
-
-# Handle Ctrl+C gracefully
 signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+_IS_WINDOWS = sys.platform == "win32"
+if _IS_WINDOWS:
+    import msvcrt
 
 sys.dont_write_bytecode = True
 
@@ -66,8 +68,8 @@ from PySide6.QtCore import QFile, QTextStream, Qt
 from PySide6.QtGui import QIcon
 
 from de4py.ui.main_window import MainWindow
-from de4py.config.config import settings
-from de4py.utils import rpc, tui, update, setup_logging, sentry
+from de4py.utils import rpc, sentry, setup_logging
+from de4py.utils import tui, update
 
 colorama.init(autoreset=True)
 sentry.init()
@@ -125,20 +127,21 @@ def main():
     # Check for updates
     try:
         if update.check_update():
-                logging.info("You are using the latest version")
+            logging.info("You are using the latest version")
         else:
             logging.warning("There's a new version. Are you sure you want to use this version?")
             tui.fade_type('Answer [y/n]\n')
-            if not input(">>> ").lower() == 'y':
-                 logging.warning("Download it from here : https://github.com/Fadi002/de4py")
-                 logging.warning("Press any key to exit...")
-                 while True:
-                    if msvcrt.kbhit():
-                        key = msvcrt.getch()
-                        logging.warning("Exiting...")
-                        rpc.KILL_THREAD = True
-                        ctypes.windll.kernel32.ExitProcess(0)
-    except:
+            if input(">>> ").lower() != 'y':
+                logging.warning("Download it from here: https://github.com/Fadi002/de4py")
+                logging.warning("Press any key to exit...")
+                if _IS_WINDOWS:
+                    while True:
+                        if msvcrt.kbhit():
+                            msvcrt.getch()
+                            break
+                rpc.KILL_THREAD = True
+                sys.exit(0)
+    except Exception:
         logging.error("Failed to check for updates")
     # Handle Modes
     if args.test:
