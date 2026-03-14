@@ -126,5 +126,11 @@
         "changes": [
             "Fixed some bugs"
         ]
+    },
+    {
+        "version": "2.2.5",
+        "changes": [
+            "Optimized code"
+        ]
     }
 ]
