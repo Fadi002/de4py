@@ -43,7 +43,6 @@ class OutputTextArea(QWidget):
         
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
-        self.text_edit.setReadOnly(True)
         layout.addWidget(self.text_edit)
 
     def _copy_to_clipboard(self):

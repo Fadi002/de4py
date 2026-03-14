@@ -7,14 +7,12 @@
 #
 # See the LICENSE file for details.
 
-PROJECT_SIGNATURE = "de4py-core-signature-7f3a91"
-
 import os
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QPushButton
+    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout
 )
 from de4py.ui.widgets.core_animations import AnimatedStackedWidget
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QSize
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 
 from de4py.config.config import settings
@@ -212,8 +210,6 @@ class MainWindow(QMainWindow):
         # Initial raise
         self.hamburger_btn.raise_()
         self.title_bar.raise_()
-        
-        self.sidebar.setFixedWidth(0) # Ensure start state
     
 
     def _create_screens(self):
@@ -327,20 +323,15 @@ class MainWindow(QMainWindow):
         """
         from de4py.lang import tr, keys
         self.setWindowTitle(tr(keys.APP_NAME))
-        
-        # Retranslate sidebar
+
         if hasattr(self.sidebar, 'retranslate_ui'):
             self.sidebar.retranslate_ui()
 
-        
-        # Retranslate all screens in the stack
         for i in range(self.screen_stack.count()):
             widget = self.screen_stack.widget(i)
             if hasattr(widget, 'retranslate_ui'):
                 widget.retranslate_ui()
-        
-        # Show notification about language change
-        from de4py.lang import tr, keys
+
         available = translation_manager.get_available_languages()
         lang_name = available.get(lang_code, lang_code)
         self.show_notification("info", tr(keys.NOTIF_LANGUAGE_CHANGED, language=lang_name))

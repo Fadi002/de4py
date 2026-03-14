@@ -297,7 +297,7 @@ class NotificationManager(QWidget):
         anim_in.setDuration(ANIM_DURATION_NORMAL)
         anim_in.setStartValue(QPoint(x_start, y))
         anim_in.setEndValue(QPoint(x_end, y))
-        anim_in.setEasingCurve(QEasingCurve.OutCubic)
+        anim_in.setEasingCurve(QEasingCurve.Type.OutCubic)
         anim_in.start()
         anim_in.valueChanged.connect(notif.update)
 
@@ -311,7 +311,7 @@ class NotificationManager(QWidget):
         anim_out = QPropertyAnimation(notif, b"pos", notif)
         anim_out.setDuration(ANIM_DURATION_NORMAL)
         anim_out.setEndValue(QPoint(x_end, notif.y()))
-        anim_out.setEasingCurve(QEasingCurve.InCubic)
+        anim_out.setEasingCurve(QEasingCurve.Type.InCubic)
         anim_out.valueChanged.connect(notif.update)
 
         def on_finished():
@@ -333,7 +333,7 @@ class NotificationManager(QWidget):
             anim = QPropertyAnimation(n, b"pos", n)
             anim.setDuration(ANIM_DURATION_NORMAL)
             anim.setEndValue(QPoint(x, y))
-            anim.setEasingCurve(QEasingCurve.InOutCubic)
+            anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
             anim.valueChanged.connect(n.update)
             anim.start()
             y += n.height() + 10

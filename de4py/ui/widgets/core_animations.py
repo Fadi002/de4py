@@ -9,14 +9,14 @@
 
 from PySide6.QtWidgets import (
     QPushButton, QGraphicsDropShadowEffect, QStackedWidget, 
-    QWidget, QGraphicsOpacityEffect, QCheckBox, QAbstractButton
+    QWidget, QGraphicsOpacityEffect, QCheckBox
 )
 from PySide6.QtCore import (
-    Qt, QPropertyAnimation, QEasingCurve, QRect, Property, 
-    QAbstractAnimation, QParallelAnimationGroup, QPoint, QSize, 
-    QRectF, Signal, QPointF
+    Qt, QPropertyAnimation, QEasingCurve, Property,
+    QParallelAnimationGroup, QSize,
+    QRectF, Signal
 )
-from PySide6.QtGui import QColor, QCursor, QPainter, QBrush, QPen, QFont, QPalette, QIcon, QPixmap
+from PySide6.QtGui import QColor, QCursor, QPainter, QBrush, QPen, QIcon, QPixmap
 
 from de4py.utils import sentry
 
@@ -32,17 +32,24 @@ class AnimatedButton(QPushButton):
         
         # Internal state for animations
         self._scale = 1.0
-        self._hover_progress = 0.0 
-        
+        self._hover_progress = 0.0
+
         # Shadow effect
         self._shadow = QGraphicsDropShadowEffect(self)
         self._shadow.setBlurRadius(0)
         self._shadow.setOffset(0, 2)
         self._shadow.setColor(QColor(0, 0, 0, 0))
         self.setGraphicsEffect(self._shadow)
-        
-        # Animation Group
-        self._anim_group = QParallelAnimationGroup(self)
+
+        # Persistent animations — parented to self so Qt never deletes them out from under us.
+        # We reconfigure start/end values and restart rather than creating new objects.
+        self._hover_anim = QPropertyAnimation(self, b"hover_progress", self)
+        self._hover_anim.setDuration(200)
+        self._hover_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+
+        self._press_anim = QPropertyAnimation(self, b"scale_factor", self)
+        self._press_anim.setDuration(100)
+        self._press_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
 
     @Property(float)
     def scale_factor(self):
@@ -143,20 +150,16 @@ class AnimatedButton(QPushButton):
         super().mouseReleaseEvent(event)
 
     def _animate_hover(self, active):
-        anim = QPropertyAnimation(self, b"hover_progress", self)
-        anim.setDuration(200)
-        anim.setStartValue(self._hover_progress)
-        anim.setEndValue(1.0 if active else 0.0)
-        anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-        anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+        self._hover_anim.stop()
+        self._hover_anim.setStartValue(self._hover_progress)
+        self._hover_anim.setEndValue(1.0 if active else 0.0)
+        self._hover_anim.start()
 
     def _animate_press(self, pressed):
-        anim = QPropertyAnimation(self, b"scale_factor", self)
-        anim.setDuration(100)
-        anim.setStartValue(self._scale)
-        anim.setEndValue(0.97 if pressed else 1.0)
-        anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-        anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+        self._press_anim.stop()
+        self._press_anim.setStartValue(self._scale)
+        self._press_anim.setEndValue(0.97 if pressed else 1.0)
+        self._press_anim.start()
 
     def paintEvent(self, event):
         # We customized painting to handle scaling
@@ -213,7 +216,8 @@ class AnimatedToggle(QCheckBox):
     def _handle_state_change(self, state):
         self._anim.stop()
         self._anim.setStartValue(self._position)
-        self._anim.setEndValue(1.0 if state == Qt.CheckState.Checked.value else 0.0)
+        # state is an int: 2 = Checked, 0 = Unchecked
+        self._anim.setEndValue(1.0 if state == 2 else 0.0)
         self._anim.start()
 
     def hitButton(self, pos):
@@ -262,13 +266,18 @@ class AnimatedCheckBox(QCheckBox):
     def __init__(self, text="", parent=None):
         super().__init__(text, parent)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        
+
         self._check_progress = 0.0
         self._hover_progress = 0.0
-        
+
         self._active_color = QColor(0, 255, 34)
         self._border_color = QColor(100, 100, 100)
         self._bg_color = QColor(30, 30, 30)
+
+        # Persistent animation — parented to self, never deleted by Qt
+        self._check_anim = QPropertyAnimation(self, b"check_progress", self)
+        self._check_anim.setDuration(250)
+        self._check_anim.setEasingCurve(QEasingCurve.Type.OutBack)
 
     @Property(float)
     def check_progress(self):
@@ -290,12 +299,10 @@ class AnimatedCheckBox(QCheckBox):
         super().nextCheckState()
 
     def _animate_check(self):
-        anim = QPropertyAnimation(self, b"check_progress", self)
-        anim.setDuration(250)
-        anim.setStartValue(self._check_progress)
-        anim.setEndValue(1.0 if self.isChecked() else 0.0)
-        anim.setEasingCurve(QEasingCurve.Type.OutBack)
-        anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+        self._check_anim.stop()
+        self._check_anim.setStartValue(self._check_progress)
+        self._check_anim.setEndValue(1.0 if self.isChecked() else 0.0)
+        self._check_anim.start()
     
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -322,23 +329,21 @@ class AnimatedCheckBox(QCheckBox):
         painter.setPen(QPen(self._border_color if self._check_progress < 0.5 else self._active_color, 2))
         painter.drawRoundedRect(box_rect, 4, 4)
    
-        # Draw Checkmark`
+             # Draw Checkmark
         if self._check_progress > 0.1:
-            painter.translate(0, box_y)
-            path = QPainter.Path()
-            painter.translate(box_size/2, box_size/2)
+            painter.save()
+            painter.translate(box_size / 2, box_y + box_size / 2)
             painter.scale(self._check_progress, self._check_progress)
-            painter.translate(-box_size/2, -box_size/2)
-            
-            pen = QPen(QColor(0,0,0) if self._active_color.lightness() > 150 else QColor(255,255,255), 2)
+            painter.translate(-box_size / 2, -box_size / 2)
+
+            pen = QPen(QColor(0, 0, 0) if self._active_color.lightness() > 150 else QColor(255, 255, 255), 2)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             painter.setPen(pen)
-            
+
             painter.drawLine(4, 9, 7, 12)
             painter.drawLine(7, 12, 14, 5)
-            
-            painter.translate(0, -box_y)
+            painter.restore()
 
         # Draw Text
         if self.text():
@@ -373,36 +378,36 @@ class AnimatedStackedWidget(QStackedWidget):
             next_widget.setVisible(True)
             
             # Setup opacity effects
-        current_effect = QGraphicsOpacityEffect(current_widget)
-        next_effect = QGraphicsOpacityEffect(next_widget)
-        current_widget.setGraphicsEffect(current_effect)
-        next_widget.setGraphicsEffect(next_effect)
-        
-        next_effect.setOpacity(0)
-        
-        # Create Animation Group
-        self._anim_group = QParallelAnimationGroup(self)
-        
-        anim_out = QPropertyAnimation(current_effect, b"opacity")
-        anim_out.setDuration(250)
-        anim_out.setStartValue(1)
-        anim_out.setEndValue(0)
-        
-        anim_in = QPropertyAnimation(next_effect, b"opacity")
-        anim_in.setDuration(250)
-        anim_in.setStartValue(0)
-        anim_in.setEndValue(1)
-        
-        self._anim_group.addAnimation(anim_out)
-        self._anim_group.addAnimation(anim_in)
-        
-        def on_finished():
-            self.setCurrentIndex(index)
-            current_widget.setGraphicsEffect(None)
-            next_widget.setGraphicsEffect(None)
-            current_widget.setVisible(False) 
-            self._is_animating = False
+            current_effect = QGraphicsOpacityEffect(current_widget)
+            next_effect = QGraphicsOpacityEffect(next_widget)
+            current_widget.setGraphicsEffect(current_effect)
+            next_widget.setGraphicsEffect(next_effect)
             
-        self._anim_group.finished.connect(on_finished)
-        self._is_animating = True
-        self._anim_group.start()
+            next_effect.setOpacity(0)
+            
+            # Create Animation Group
+            self._anim_group = QParallelAnimationGroup(self)
+            
+            anim_out = QPropertyAnimation(current_effect, b"opacity")
+            anim_out.setDuration(250)
+            anim_out.setStartValue(1)
+            anim_out.setEndValue(0)
+            
+            anim_in = QPropertyAnimation(next_effect, b"opacity")
+            anim_in.setDuration(250)
+            anim_in.setStartValue(0)
+            anim_in.setEndValue(1)
+            
+            self._anim_group.addAnimation(anim_out)
+            self._anim_group.addAnimation(anim_in)
+            
+            def on_finished():
+                self.setCurrentIndex(index)
+                current_widget.setGraphicsEffect(None)
+                next_widget.setGraphicsEffect(None)
+                current_widget.setVisible(False) 
+                self._is_animating = False
+                
+            self._anim_group.finished.connect(on_finished)
+            self._is_animating = True
+            self._anim_group.start()

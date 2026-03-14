@@ -117,7 +117,6 @@ class HomeScreen(QWidget):
         self.arch_label.setObjectName("EnvLabel")
         layout.addWidget(self.arch_label)
 
-        system_info = platform.uname()
         self.os_label = QLabel()
         self.os_label.setObjectName("EnvLabel")
         layout.addWidget(self.os_label)

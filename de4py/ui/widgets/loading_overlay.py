@@ -23,16 +23,21 @@ class LoadingOverlay(QWidget):
         self._blurred_bg = None
         self._lock_events = False
         self.setAttribute(Qt.WA_TranslucentBackground, True)
-        
-        # Setup Status Label
+
+        # Single reusable opacity effect
+        self._opacity_effect = QGraphicsOpacityEffect(self)
+        self._opacity_effect.setOpacity(0.0)
+        self.setGraphicsEffect(self._opacity_effect)
+
+        self._fade_anim = QPropertyAnimation(self._opacity_effect, b"opacity", self)
+        self._fade_anim.setDuration(250)
+
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Spacer for spinner (handled in paintEvent)
         layout.addSpacing(100)
-        
+
         self.status_label = QLabel("")
-        self.status_label.setObjectName("SubtitleLabel") # Use existing style
+        self.status_label.setObjectName("SubtitleLabel")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setStyleSheet("color: white; font-weight: bold; font-size: 18px;")
         layout.addWidget(self.status_label)
@@ -46,7 +51,7 @@ class LoadingOverlay(QWidget):
         if not self._lock_events and self.parent():
             self.setGeometry(self.parent().rect())
             self._blurred_bg = self._create_blur_cache()
-        self._timer.start(16)  # ~60 FPS
+        self._timer.start(16)
 
     def hideEvent(self, event):
         super().hideEvent(event)
@@ -55,24 +60,27 @@ class LoadingOverlay(QWidget):
             self._blurred_bg = None
 
     def fade_in(self):
+        self._fade_anim.stop()
         self.setHidden(False)
-        self.effect = QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(self.effect)
-        self.anim = QPropertyAnimation(self.effect, b"opacity")
-        self.anim.setDuration(250)
-        self.anim.setStartValue(0)
-        self.anim.setEndValue(1)
-        self.anim.start()
+        self._fade_anim.setStartValue(self._opacity_effect.opacity())
+        self._fade_anim.setEndValue(1.0)
+        # Disconnect any hide-on-finish slot left over from a previous fade_out
+        try:
+            self._fade_anim.finished.disconnect()
+        except RuntimeError:
+            pass
+        self._fade_anim.start()
 
     def fade_out(self):
-        self.effect = QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(self.effect)
-        self.anim = QPropertyAnimation(self.effect, b"opacity")
-        self.anim.setDuration(250)
-        self.anim.setStartValue(1)
-        self.anim.setEndValue(0)
-        self.anim.finished.connect(lambda: self.setHidden(True))
-        self.anim.start()
+        self._fade_anim.stop()
+        self._fade_anim.setStartValue(self._opacity_effect.opacity())
+        self._fade_anim.setEndValue(0.0)
+        try:
+            self._fade_anim.finished.disconnect()
+        except RuntimeError:
+            pass
+        self._fade_anim.finished.connect(lambda: self.setHidden(True))
+        self._fade_anim.start()
 
     def _rotate(self):
         self._angle = (self._angle + 6) % 360  # smaller increment = smoother
