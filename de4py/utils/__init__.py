@@ -7,7 +7,8 @@
 #
 # See the LICENSE file for details.
 
-from .tui import *
-from .update import *
-from .pathgen import *
-from .rpc import *
+from .tui import setup_logging, clear_console, fade_type, __BANNER__
+from .update import check_update
+from .pathgen import gen_path
+from . import rpc
+from . import sentry
