@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 def wodx(file_path):
     file_name = file_path.split('/')[-1].split('.')[0]
     data = open(file_path,'r').read()

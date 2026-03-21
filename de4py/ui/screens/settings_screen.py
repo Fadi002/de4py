@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QFrame, QCheckBox, QComboBox, QHBoxLayout
 )
@@ -57,22 +66,20 @@ class SettingsScreen(QWidget):
         frame_layout.addLayout(lang_layout)
         
         self.rpc_checkbox = QCheckBox(tr(SETTINGS_RPC))
-        self.rpc_checkbox.stateChanged.connect(lambda s: self._update_config("rpc", s == Qt.CheckState.Checked.value))
+        self.rpc_checkbox.stateChanged.connect(lambda s: self._update_config("rpc", s == 2))
         frame_layout.addWidget(self.rpc_checkbox)
         
         self.stealth_checkbox = QCheckBox(tr(SETTINGS_STEALTH))
-        self.stealth_checkbox.stateChanged.connect(lambda s: self._update_config("stealth_title", s == Qt.CheckState.Checked.value))
+        self.stealth_checkbox.stateChanged.connect(lambda s: self._update_config("stealth_title", s == 2))
         frame_layout.addWidget(self.stealth_checkbox)
         
         self.plugins_checkbox = QCheckBox(tr(SETTINGS_PLUGINS))
-        self.plugins_checkbox.stateChanged.connect(lambda s: self._update_config("load_plugins", s == Qt.CheckState.Checked.value))
+        self.plugins_checkbox.stateChanged.connect(lambda s: self._update_config("load_plugins", s == 2))
         frame_layout.addWidget(self.plugins_checkbox)
 
         self.transparent_checkbox = QCheckBox(tr(SETTINGS_TRANSPARENT_UI))
         self.transparent_checkbox.stateChanged.connect(self._on_transparent_ui_changed)
         frame_layout.addWidget(self.transparent_checkbox)
-        
-        frame_layout.addStretch()
         
         frame_layout.addStretch()
         
@@ -123,7 +130,7 @@ class SettingsScreen(QWidget):
             pass
 
     def _on_transparent_ui_changed(self, state):
-        enabled = (state == Qt.CheckState.Checked.value)
+        enabled = (state == 2)
         self._update_config("transparent_ui", enabled)
         
         # Apply immediately to main window

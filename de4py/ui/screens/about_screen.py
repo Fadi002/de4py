@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame
 from PySide6.QtCore import Qt
 
@@ -5,6 +14,9 @@ from de4py.lang import tr
 from de4py.lang.keys import (
     SCREEN_TITLE_ABOUT, ABOUT_GITHUB, ABOUT_DISCORD
 )
+from de4py._meta import AUTHOR, PROJECT_URL, COPYRIGHT, LICENSE, PROJECT_SIGNATURE
+
+_PROJECT_SIGNATURE = PROJECT_SIGNATURE
 
 
 class AboutScreen(QWidget):
@@ -53,9 +65,14 @@ class AboutScreen(QWidget):
         discord = QLabel("Made by 0xmrpepe & advdebug with <3")
         discord.setAlignment(Qt.AlignmentFlag.AlignCenter)
         frame_layout.addWidget(discord)
+
+        copyright_label = QLabel(f"{COPYRIGHT} | {LICENSE}")
+        copyright_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(copyright_label)
         
         layout.addWidget(frame)
 
     def retranslate_ui(self):
         """Update UI texts when language changes."""
         self.title_label.setText(tr(SCREEN_TITLE_ABOUT))
+

@@ -1,4 +1,13 @@
-import sentry_sdk
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
+# sentry.py - sentry_sdk moved to local scope
 from contextlib import contextmanager
 import logging
 
@@ -25,6 +34,7 @@ def transaction(name, op):
     if not ENABLED:
         yield None
         return
+    import sentry_sdk
     with sentry_sdk.start_transaction(name=name, op=op) as t:
         yield t
 
@@ -33,11 +43,13 @@ def span(op, description=None):
     if not ENABLED:
         yield None
         return
+    import sentry_sdk
     with sentry_sdk.start_span(op=op, description=description) as s:
         yield s
 
 def breadcrumb(msg, category="app", level="info", **data):
     if ENABLED:
+        import sentry_sdk
         sentry_sdk.add_breadcrumb(
             message=msg,
             category=category,
@@ -47,8 +59,10 @@ def breadcrumb(msg, category="app", level="info", **data):
 
 def set_user_context(user_id=None, email=None, username=None):
     if ENABLED:
+        import sentry_sdk
         sentry_sdk.set_user({"id": user_id, "email": email, "username": username})
 
 def set_extra_context(key, value):
     if ENABLED:
+        import sentry_sdk
         sentry_sdk.set_context(key, value)

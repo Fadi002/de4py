@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import hashlib
 import logging
 import os
@@ -14,7 +23,7 @@ from de4py.api.constants import (
     STAGE_ERROR,
     MAX_FILE_SIZE_BYTES,
 )
-from de4py.config.config import __POLL_INTERVAL__
+from de4py.config.config import settings as _settings
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +99,7 @@ class PyLingualClient:
     def __init__(self):
         """Initialize the PyLingual client."""
         self._client = De4pyApiClient()
-        self.poll_interval = __POLL_INTERVAL__
+        self.poll_interval = _settings.poll_interval
     
     def _validate_file(self, file_path: str) -> int:
         """

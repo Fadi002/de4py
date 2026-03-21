@@ -1,74 +1,61 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import sys
 import os
-
-REQUIRED_LIBS = {
-    "PySide6": "PySide6",
-    "requests": "requests",
-    "psutil": "psutil",
-    "colorama": "colorama",
-    "Crypto": "pycryptodome",
-    "pypresence": "pypresence",
-    "xdis": "xdis",
-    "sentry_sdk": "sentry-sdk",
-    "pefile": "pefile"
-}
-
-missing = []
-for module_name, pip_name in REQUIRED_LIBS.items():
-    try:
-        __import__(module_name)
-    except ImportError:
-        missing.append(pip_name)
-
-if missing:
-    print("\n" + "!" * 60)
-    print(f"[!] CRITICAL ERROR: Missing {len(missing)} required libraries:")
-    for lib in missing:
-        print(f"    - {lib}")
-    print("\n[!] Please install the missing requirements by running:")
-    print("    pip install -r requirements.txt")
-    print("!" * 60 + "\n")
-    sys.exit(1)
-
-import random
-import string
-import ctypes
-import logging
 import argparse
-import colorama
-import msvcrt
-import signal
 
-# Handle Ctrl+C gracefully
-signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-sys.dont_write_bytecode = True
-
-os.environ["QT_LOGGING_RULES"] = "qt.text.font.db=false"
-
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QFile, QTextStream, Qt
-from PySide6.QtGui import QIcon
-
-from de4py.ui.main_window import MainWindow
+# Global configuration and meta
 from de4py.config.config import settings
-from de4py.utils import rpc, tui, update, setup_logging, sentry
+__version__ = settings.version
 
-colorama.init(autoreset=True)
-sentry.init()
+def check_dependencies():
+    """Verify that all required libraries are installed."""
+    REQUIRED_LIBS = {
+        "PySide6": "PySide6",
+        "requests": "requests",
+        "psutil": "psutil",
+        "colorama": "colorama",
+        "Crypto": "pycryptodome",
+        "pypresence": "pypresence",
+        "xdis": "xdis",
+        "sentry_sdk": "sentry-sdk",
+        "pefile": "pefile",
+        "msvcrt": "msvcrt"
+    }
 
-DEFAULT_QSS = ""
+    missing = []
+    for module_name, pip_name in REQUIRED_LIBS.items():
+        try:
+            __import__(module_name)
+        except ImportError:
+            missing.append(pip_name)
 
-def load_stylesheet(app: QApplication):
+    if missing:
+        print("\n" + "!" * 60)
+        print(f"[!] CRITICAL ERROR: Missing {len(missing)} required libraries:")
+        for lib in missing:
+            print(f"    - {lib}")
+        print("\n[!] Please install the missing requirements by running:")
+        print("    pip install -r requirements.txt")
+        print("!" * 60 + "\n")
+        sys.exit(1)
+
+def load_stylesheet(app):
     """Loads the dark theme QSS stylesheet."""
-    global DEFAULT_QSS
+    from PySide6.QtCore import QFile, QTextStream
     theme_path = os.path.join(os.path.dirname(__file__), "ui", "themes", "dark_theme.qss")
     if os.path.exists(theme_path):
         file = QFile(theme_path)
         if file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
             stream = QTextStream(file)
             qss = stream.readAll()
-            DEFAULT_QSS = qss
             app.setStyleSheet(qss)
             file.close()
             return qss
@@ -76,6 +63,9 @@ def load_stylesheet(app: QApplication):
 
 def set_stealth_title():
     """Sets a random console title for stealth if enabled."""
+    import random
+    import string
+    import ctypes
     if settings.stealth_title:
         random_title = ''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(10, 40)))
         try:
@@ -89,34 +79,68 @@ def main():
     parser = argparse.ArgumentParser(description="de4py - Python Deobfuscator & Analyzer")
     parser.add_argument("--cli", action="store_true", help="Start in CLI mode")
     parser.add_argument("--test", action="store_true", help="Run internal tests")
+    parser.add_argument("--about", action="store_true", help="Show project info and exit")
+    parser.add_argument("--checksums-gen", action="store_true", help="Generate project checksums")
     args = parser.parse_args()
 
-    # Setup environment
+    if args.about:
+        from de4py.about import print_about
+        print_about()
+        return
+
+    if args.checksums_gen:
+        from de4py.utils.checksums import main as run_checksum_gen
+        run_checksum_gen()
+        return
+
+    # For any other mode, check dependencies first
+    check_dependencies()
+    
+    # Delayed imports to avoid errors if dependencies were missing
+    import logging
+    import colorama
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QIcon
+    from de4py.ui.main_window import MainWindow
+    from de4py.utils import rpc, sentry, setup_logging
+    from de4py.utils import tui, update
+    import signal
+    import msvcrt
+    
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    colorama.init(autoreset=True)
     setup_logging()
+    sentry.init()
+    
+    # OS specifics
+    _IS_WINDOWS = sys.platform == "win32"
     
     # Show Banner
     tui.clear_console()
     print(tui.__BANNER__)
+
+
     logging.info("Starting de4py")
 
     # Check for updates
     try:
         if update.check_update():
-                logging.info("You are using the latest version")
+            logging.info("You are using the latest version")
         else:
             logging.warning("There's a new version. Are you sure you want to use this version?")
             tui.fade_type('Answer [y/n]\n')
-            if not input(">>> ").lower() == 'y':
-                 logging.warning("Download it from here : https://github.com/Fadi002/de4py")
-                 logging.warning("Press any key to exit...")
-                 while True:
-                    if msvcrt.kbhit():
-                        key = msvcrt.getch()
-                        logging.warning("Exiting...")
-                        rpc.KILL_THREAD = True
-                        ctypes.windll.kernel32.ExitProcess(0)
-    except:
-        logging.error("Failed to check for updates")
+            if input(">>> ").lower() not in ('y', 'yes'):
+                logging.warning("Download it from here: https://github.com/Fadi002/de4py")
+                logging.warning("Press any key to exit...")
+                if _IS_WINDOWS:
+                    while True:
+                        if msvcrt.kbhit():
+                            msvcrt.getch()
+                            break
+                rpc.KILL_THREAD = True
+                sys.exit(0)
+    except Exception as e:
+        logging.error(f"Failed to check for updates: {e}")
     # Handle Modes
     if args.test:
         with sentry.transaction("Test Session", "app.test"):
@@ -153,13 +177,38 @@ def main():
         load_stylesheet(app)
         stealth_title = set_stealth_title()
         
+        # Initialize Developer Tools if in DEV_MODE
+        try:
+            from de4py.ui.devtools.manager import init_devtools
+            from de4py.ui.devtools.context import context
+            app._dev_manager = init_devtools(app)
+            if app._dev_manager:
+                print("\n" + "="*40)
+                print("[+] Developer Mode ACTIVE")
+                print("[+] Press Ctrl+Shift+D to open Control Panel")
+                print("="*40 + "\n")
+        except Exception as e:
+            logging.error(f"[DevTools] Failed to initialize: {e}")
+            import traceback
+            traceback.print_exc()
+        
         if settings.rpc:
             try:
                 rpc.start_RPC()
             except Exception:
                 pass
         
+        if os.getenv("DEV_MODE") == "1":
+            try:
+                import de4py.api.client
+                from de4py.ui.devtools.proxy.api import DevApiProxy
+                de4py.api.client.De4pyApiClient = DevApiProxy
+                logging.info("[DevTools] API Client Class hijacked for proxying.")
+            except Exception as e:
+                logging.debug(f"[DevTools] Proxy injection failed: {e}")
+        
         window = MainWindow(title=stealth_title)
+        context.main_window = window
         
         if settings.active_theme:
             try:

@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import os
 import math
 from PySide6.QtWidgets import (
@@ -21,6 +30,7 @@ class NotificationWidget(QFrame):
         self._progress_value = 100
         self._blur_pixmap = blur_pixmap
         self._icon_color = QColor("white") # Default
+        self.is_closing = False
 
         # Glass + border properties
         self._border_color = QColor("#0287CF")
@@ -271,8 +281,8 @@ class NotificationManager(QWidget):
             self._blurred_bg = self._create_blur_cache(top_window)
 
         if len(self._notifications) >= self.MAX_NOTIFICATIONS:
-            oldest = self._notifications.pop(0)
-            oldest.deleteLater()
+            oldest = self._notifications.pop(-1)
+            self._slide_out(oldest)
 
         notif = NotificationWidget(notif_type, message, parent_widget, self._blurred_bg)
         self._notifications.insert(0, notif)
@@ -281,28 +291,36 @@ class NotificationManager(QWidget):
 
         x_start = parent_widget.width() + NotificationWidget.SLIDE_OFFSET
         x_end = parent_widget.width() - NOTIF_WIDTH - 20
-        y = 20 + sum(n.height() + 10 for n in self._notifications[:-1])
+        y = 20 # Newest always at top
         notif.move(x_start, y)
 
         anim_in = QPropertyAnimation(notif, b"pos", notif)
         anim_in.setDuration(ANIM_DURATION_NORMAL)
         anim_in.setStartValue(QPoint(x_start, y))
         anim_in.setEndValue(QPoint(x_end, y))
-        anim_in.setEasingCurve(QEasingCurve.OutCubic)
+        anim_in.setEasingCurve(QEasingCurve.Type.OutCubic)
         anim_in.start()
         anim_in.valueChanged.connect(notif.update)
+        
+        # Move existing notifications down
+        self._restack_notifications()
 
         QTimer.singleShot(NOTIF_DURATION, lambda n=notif: self._slide_out(n))
 
     def _slide_out(self, notif: NotificationWidget):
-        if notif not in self._notifications:
-            return
-
-        x_end = self.parent().width() + NotificationWidget.SLIDE_OFFSET
+        try:
+            if not notif or notif.is_closing:
+                return
+            notif.is_closing = True
+        except RuntimeError:
+            return  # C++ object already deleted
+        
+        parent = self.parent() or self
+        x_end = parent.width() + NotificationWidget.SLIDE_OFFSET
         anim_out = QPropertyAnimation(notif, b"pos", notif)
         anim_out.setDuration(ANIM_DURATION_NORMAL)
         anim_out.setEndValue(QPoint(x_end, notif.y()))
-        anim_out.setEasingCurve(QEasingCurve.InCubic)
+        anim_out.setEasingCurve(QEasingCurve.Type.InCubic)
         anim_out.valueChanged.connect(notif.update)
 
         def on_finished():
@@ -320,11 +338,13 @@ class NotificationManager(QWidget):
         parent_widget = self.parent() or self
         y = 20
         for n in self._notifications:
+            if n.is_closing:
+                continue
             x = parent_widget.width() - NOTIF_WIDTH - 20
             anim = QPropertyAnimation(n, b"pos", n)
             anim.setDuration(ANIM_DURATION_NORMAL)
             anim.setEndValue(QPoint(x, y))
-            anim.setEasingCurve(QEasingCurve.InOutCubic)
+            anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
             anim.valueChanged.connect(n.update)
             anim.start()
             y += n.height() + 10

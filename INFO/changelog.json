@@ -126,5 +126,19 @@
         "changes": [
             "Fixed some bugs"
         ]
+    },
+    {
+        "version": "2.2.5",
+        "changes": [
+            "Optimized code"
+        ]
+    },
+    {
+        "version": "3.1.1",
+        "changes": [
+            "Introduced the new de4py Onyx-Alpha deobfuscation engine",
+            "Refactored engine directory structure",
+            "Optimizations and bug fixes"
+        ]
     }
 ]
