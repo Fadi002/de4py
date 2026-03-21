@@ -1,9 +1,18 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import os
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QPushButton
+    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout
 )
 from de4py.ui.widgets.core_animations import AnimatedStackedWidget
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QSize
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon
 
 from de4py.config.config import settings
@@ -84,6 +93,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         from de4py.lang import tr, keys
         self.setWindowTitle(title if title else tr(keys.APP_NAME))
+        translation_manager.load_language(settings.language)
+        
+        # Enforce Fixed size for main application
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
 
         self._sidebar_visible = False
@@ -97,6 +109,9 @@ class MainWindow(QMainWindow):
 
         if settings.transparent_ui:
             self.set_transparent_ui(True)
+            
+        from de4py.utils.win32_blur import set_high_precision_timer
+        set_high_precision_timer(True)
 
     def set_transparent_ui(self, enabled: bool):
         try:
@@ -201,8 +216,6 @@ class MainWindow(QMainWindow):
         # Initial raise
         self.hamburger_btn.raise_()
         self.title_bar.raise_()
-        
-        self.sidebar.setFixedWidth(0) # Ensure start state
     
 
     def _create_screens(self):
@@ -316,20 +329,15 @@ class MainWindow(QMainWindow):
         """
         from de4py.lang import tr, keys
         self.setWindowTitle(tr(keys.APP_NAME))
-        
-        # Retranslate sidebar
+
         if hasattr(self.sidebar, 'retranslate_ui'):
             self.sidebar.retranslate_ui()
 
-        
-        # Retranslate all screens in the stack
         for i in range(self.screen_stack.count()):
             widget = self.screen_stack.widget(i)
             if hasattr(widget, 'retranslate_ui'):
                 widget.retranslate_ui()
-        
-        # Show notification about language change
-        from de4py.lang import tr, keys
+
         available = translation_manager.get_available_languages()
         lang_name = available.get(lang_code, lang_code)
         self.show_notification("info", tr(keys.NOTIF_LANGUAGE_CHANGED, language=lang_name))

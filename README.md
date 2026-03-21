@@ -1,9 +1,9 @@
 <a href="#home"><img src="https://github.com/Fadi002/de4py/blob/main/Pictures/de4py.jpg?raw=true"></img></a>
 # de4py
 
-> ⚠️ **de4py is FREE & OPEN SOURCE (GPL-3.0).  
-> Any paid versions sold elsewhere are NOT official.
-> If you paid for de4py, you were misled.**
+> ⚠️ **de4py is FREE & OPEN SOURCE (CC BY-NC 4.0).**  
+> **Any paid versions sold elsewhere or commercial use are NOT permitted.**
+> **If you paid for de4py, you were misled.**
 
 De4py is an advanced Python deobfuscator with a beautiful UI (PySide6) and a robust set of features for malware analysts and reverse engineers. It supports both automatic deobfuscation of common packers and manual analysis tools.
 
@@ -13,13 +13,14 @@ Maintained by [Fadi002](https://github.com/Fadi002) and [AdvDebug](https://githu
 
 | Feature | Function |
 | :--- | :--- |
-| **Deobfuscation** | Support for popular obfuscators: **Jawbreaker, BlankOBF, PlusOBF, Wodx, Hyperion, pyobfuscate**. |
-| **File Analyzer** | Detection of packers (PyInstaller), hash calculation, suspicious string lookup, and metadata extraction. |
-| **PyCode Execution** | Execute Python code inside the target process (useful for bypassing licensing checks). |
-| **Pyshell GUI** | Custom GUI to easily inject and execute Python code in valid processes. |
-| **Behavior Monitor** | Monitor process handles, memory access, sockets, and dumped content (including decrypted OpenSSL traffic). |
+| **Onyx Engine (AI)** | Advanced deobfuscation utilizing local LLMs (Ollama) combined with AST cleaning, control-flow flattening recovery, and pattern matching. |
+| **Legacy Deobfuscation** | Direct support for popular obfuscators: **Jawbreaker, BlankOBF, PlusOBF, Wodx, Hyperion, pyobfuscate**. |
+| **File Analyzer** | Detection of packers (PyInstaller, unpy2exe), dynamic hash calculation, suspicious string lookup, and metadata extraction. |
+| **Pyshell GUI & Code Execution** | Custom GUI to execute Python code inside external target processes (useful for dynamic analysis and licensing bypasses). |
 | **Modern UI** | Built with **PySide6** and a custom dark theme for a premium look and feel. CLI mode also supported. |
-| **API System** | Use de4py as a library in your own tools. |
+| **Global Localization** | Support for over **18+ languages** out of the box, powered by a community-driven localization engine. |
+| **Plugin Architecture & API** | Extensible plugin system to create custom analyzers. You can also use de4py directly as a programmable library in your own tools. |
+| **Behavior Monitor & DevTools** | Monitor process handles, memory access, and sockets. Built-in developer tools for real-time inspection, UI debugging, and API testing. |
 
 ## 📦 Installation & Usage
 
@@ -49,6 +50,16 @@ python main.py
 ```bash
 python -m de4py --cli
 ```
+
+### 🧠 Onyx Engine & Ollama Setup
+To use the advanced **Onyx-Alpha Deobfuscator** (which utilizes local LLMs for heavily obfuscated code), you need to set up Ollama:
+
+1. Download and install [Ollama](https://ollama.com/).
+2. Open your terminal and pull the required model (default is `qwen2.5-coder:1.5b`):
+   ```bash
+   ollama run qwen2.5-coder:1.5b
+   ```
+3. Once the model is downloaded and running, the Onyx engine in de4py will automatically connect to it for AI-assisted deobfuscation. You can change the model and thresholds in the UI settings.
 
 ## 🛠 Project Structure
 
@@ -91,4 +102,12 @@ This tool is for **educational purposes only**. Never deobfuscate software witho
 
 ## 📄 License
 
-Licensed under **GNU General Public License v3.0**.
+Licensed under **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)**.
+
+## 📝 Attribution Notice
+
+This project was created by **Fadi002**.
+
+If you fork or redistribute this project, you must retain the original copyright notices
+and provide appropriate attribution according to the **CC BY-NC 4.0** license.
+Commercial use is not permitted without explicit permission from the author.

@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import re
 import pkgutil
 import importlib
@@ -12,6 +21,14 @@ class EngineManager:
         self._deobfuscators: Dict[str, Deobfuscator] = {}
         self._analyzers: Dict[str, Analyzer] = {}
         self.load_legacy_engines()
+        
+        # Load modern engines
+        try:
+            from de4py.engines.onyx.engine import OnyxAlpha
+            engine = OnyxAlpha()
+            self.register_deobfuscator(engine)
+        except ImportError as e:
+            print(f"Failed to load Onyx engine: {e}")
 
     def register_deobfuscator(self, deobfuscator: Deobfuscator):
         self._deobfuscators[deobfuscator.name.lower()] = deobfuscator

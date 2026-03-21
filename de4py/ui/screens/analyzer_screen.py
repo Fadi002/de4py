@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import json
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton, QFileDialog, QSizePolicy
@@ -129,7 +138,7 @@ class AnalyzerScreen(QWidget):
         )
         if file_path:
             self._file_path = file_path
-            filename = file_path.split("/")[-1].split("\\")[-1]
+            filename = os.path.basename(file_path)
             self.file_label.setText(filename)
             sentry.breadcrumb(f"File selected for analysis: {filename}", category="user.action", path=file_path)
 
@@ -182,14 +191,14 @@ class AnalyzerScreen(QWidget):
         self.title_label.setText(tr(SCREEN_TITLE_ANALYZER))
         self.select_btn.setText(tr(ANALYZER_SELECT_FILE))
         self.options_title.setText(tr(ANALYZER_OPTIONS_TITLE))
-        # We need to refresh the options frame to update command button texts
-        while self.options_layout.count() > 1: # Keep the title
-             item = self.options_layout.takeAt(1)
-             if item.widget():
-                 item.widget().deleteLater()
-        
+
+        # Remove only button widgets (keep title at index 0)
+        while self.options_layout.count() > 1:
+            item = self.options_layout.takeAt(1)
+            if item.widget():
+                item.widget().deleteLater()
+
         self.output.retranslate_ui()
-        
         self._add_command_buttons(self.options_layout)
 
     def _add_command_buttons(self, layout):

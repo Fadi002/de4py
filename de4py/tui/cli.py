@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import colorama, msvcrt, platform, signal
 from tkinter import Tk, filedialog
 from de4py.engines.legacy.detector import detect_obfuscator
@@ -10,12 +19,15 @@ from de4py.engines.analyzers import (
 )
 from de4py.config.config import settings
 from de4py.utils import tui, rpc, update, custom_error, fade_type
+from de4py._meta import PROJECT_SIGNATURE
 from colorama import Fore, Style
 import socket
 import sys
 import requests
 import time
 from de4py.de4py_api.api import Pyshell
+
+_PROJECT_SIGNATURE = PROJECT_SIGNATURE
 
 def signal_handler(sig, frame):
     tui.clear_console()
@@ -58,9 +70,8 @@ def home_tab():
     elif choice == "analyzer":
         analyzer_tab()
     elif choice == "about":
-        print(
-            f"\n{Fore.CYAN}This tool created by 0xmrpepe, advdebug\nwebsite: https://de4py.000.pe\ngithub: https://github.com/Fadi002/de4py{Style.RESET_ALL}\n"
-        )
+        from de4py.about import print_about
+        print_about()
     elif choice == "neofetch":
         neofetch()
     elif choice == "changelog":
