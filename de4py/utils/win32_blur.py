@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import platform
 import ctypes
 from ctypes import c_int, c_void_p, Structure, POINTER, byref, sizeof, windll
@@ -49,6 +58,24 @@ SWP_NOMOVE = 0x0002
 SWP_NOSIZE = 0x0001
 SWP_NOZORDER = 0x0004
 SWP_FRAMECHANGED = 0x0020
+
+def set_high_precision_timer(enabled: bool):
+    try:
+        winmm = ctypes.windll.winmm
+        if enabled:
+            winmm.timeBeginPeriod(1)
+        else:
+            winmm.timeEndPeriod(1)
+    except Exception:
+        pass
+
+class MARGINS(Structure):
+    _fields_ = [
+        ("cxLeftWidth", c_int),
+        ("cxRightWidth", c_int),
+        ("cyTopHeight", c_int),
+        ("cyBottomHeight", c_int)
+    ]
 
 # =============================================================================
 # Helper Functions
@@ -171,8 +198,7 @@ class DynamicBlurEventFilter(QObject):
         self.force_dark = force_dark
         self._apply()
 
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        if event.type() in (QEvent.Type.Resize, QEvent.Type.Move, QEvent.Type.WindowActivate):
+        if event.type() in (QEvent.Type.Resize, QEvent.Type.Move, QEvent.Type.WindowActivate, QEvent.Type.WindowDeactivate):
             self._timer.start()
         return False
     
@@ -237,9 +263,15 @@ def enable_dynamic_blur(window: QMainWindow, theme_colors: dict = None):
         
         style &= ~WS_CAPTION
         style &= ~WS_SYSMENU
-        style |= WS_THICKFRAME
+        style &= ~WS_THICKFRAME # Remove Thick Frame to prevent white border when unfocused
         
         user32.SetWindowLongW(hwnd, GWL_STYLE, style)
+        
+        # Ensure shadow stays even without thick frame
+        dwmapi = ctypes.windll.dwmapi
+        policy = c_int(2) # DWMNCRP_ENABLED
+        dwmapi.DwmSetWindowAttribute(hwnd, 2, byref(policy), sizeof(policy))
+        
         user32.SetWindowPos(hwnd, None, 0, 0, 0, 0,
                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
     except Exception:
@@ -300,6 +332,16 @@ def _apply_blur_color(window: QMainWindow, color: int, enabled: bool = True):
         if enabled:
             accent.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND
             accent.AccentFlags = 2
+            
+            if not window.isActiveWindow():
+                a = (color >> 24) & 0xFF
+                r = color & 0xFF
+                g = (color >> 8) & 0xFF
+                b = (color >> 16) & 0xFF
+                
+                new_a = min(0xAA, a + 0x30)
+                color = (new_a << 24) | (b << 16) | (g << 8) | r
+                
             accent.GradientColor = color
         else:
             accent.AccentState = ACCENT_DISABLED

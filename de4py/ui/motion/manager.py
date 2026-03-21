@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 from PySide6.QtCore import (
     QObject, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, 
     QAbstractAnimation, QPoint, QRect, Property
@@ -11,10 +20,10 @@ class MotionManager(QObject):
     DURATION_SLIDE = 350       # Sidebar/Panel movement (heavier feel)
     DURATION_TRANSITION = 220  # Screen transitions
     
-    EASE_STANDARD = QEasingCurve.OutCubic 
-    EASE_HEAVY = QEasingCurve.OutExpo
-    EASE_SPRING = QEasingCurve.OutBack
-    EASE_FADE = QEasingCurve.InOutSine
+    EASE_STANDARD = QEasingCurve.Type.OutCubic
+    EASE_HEAVY = QEasingCurve.Type.OutExpo
+    EASE_SPRING = QEasingCurve.Type.OutBack
+    EASE_FADE = QEasingCurve.Type.InOutSine
 
     _active_animations = {}
 

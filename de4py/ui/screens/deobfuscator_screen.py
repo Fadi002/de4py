@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton, QFileDialog, QSizePolicy
 )
@@ -5,7 +14,7 @@ from PySide6.QtCore import Qt
 
 from de4py.lang import tr
 from de4py.lang.keys import (
-    SCREEN_TITLE_DEOBFUSCATOR, DEOBF_SELECT_FILE, DEOBF_DEOBFUSCATE,
+    SCREEN_TITLE_DEOBFUSCATOR,    DEOBF_SELECT_FILE, DEOBF_DEOBFUSCATE, DEOBF_RESEARCH_NOTE,
     MSG_NO_FILE_SELECTED, MSG_OPERATION_COMPLETE, MSG_OPERATION_FAILED,
     MSG_WARNING, MSG_SUCCESS, MSG_ERROR
 )
@@ -75,6 +84,13 @@ class DeobfuscatorScreen(QWidget):
         self.deobf_btn.clicked.connect(self._on_deobfuscate)
         layout.addWidget(self.deobf_btn, alignment=Qt.AlignmentFlag.AlignCenter)
     
+        self.disclaimer_label = QLabel(tr(DEOBF_RESEARCH_NOTE))
+        self.disclaimer_label.setObjectName("DisclaimerLabel")
+        self.disclaimer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.disclaimer_label.setWordWrap(True)
+        self.disclaimer_label.setStyleSheet("font-size: 10px; color: #8b949e; margin-top: 10px;")
+        layout.addWidget(self.disclaimer_label)
+
         return frame
     
     def _create_right_frame(self):
@@ -98,7 +114,7 @@ class DeobfuscatorScreen(QWidget):
         )
         if file_path:
             self._file_path = file_path
-            filename = file_path.split("/")[-1].split("\\")[-1]
+            filename = os.path.basename(file_path)
             self.file_label.setText(filename)
             sentry.breadcrumb(f"File selected for deobfuscation: {filename}", category="user.action", path=file_path)
 
@@ -124,7 +140,6 @@ class DeobfuscatorScreen(QWidget):
     def _on_deobf_finished(self, result: str):
         self.window().hide_loading()
         self.output.set_text(result)
-        self.output.set_text(result)
         self.window().show_notification("success", tr(MSG_OPERATION_COMPLETE))
 
     def _on_deobf_error(self, error: str):
@@ -137,4 +152,5 @@ class DeobfuscatorScreen(QWidget):
         self.title_label.setText(tr(SCREEN_TITLE_DEOBFUSCATOR))
         self.select_btn.setText(tr(DEOBF_SELECT_FILE))
         self.deobf_btn.setText(tr(DEOBF_DEOBFUSCATE))
+        self.disclaimer_label.setText(tr(DEOBF_RESEARCH_NOTE))
         self.output.retranslate_ui()

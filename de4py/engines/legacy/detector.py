@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import re
 import traceback
 
@@ -61,4 +70,10 @@ def detect_obfuscator(file_path):
             except Exception as e:
                 return f"Failed to deobfuscate:\n{e}"
     
-    return "Cant detect the obfuscator\nsend the sample to add it https://de4py.000.pe/"
+    # Fallback to the de4py Onyx-Alpha pipeline if no legacy regex matches
+    try:
+        from de4py.engines.onyx.engine import OnyxAlpha
+        pipeline = OnyxAlpha()
+        return pipeline.deobfuscate(file_path)
+    except Exception as e:
+        return f"de4py Onyx-Alpha pipeline failed:\n{e}\n\nCant detect the obfuscator\nsend the sample to add it https://de4py.000.pe/"

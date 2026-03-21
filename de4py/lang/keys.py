@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 """
 Translation Key Constants
 ==========================
@@ -62,6 +71,7 @@ DEOBF_SELECT_FILE = "screen.deobfuscator.select_file"
 DEOBF_DEOBFUSCATE = "screen.deobfuscator.deobfuscate"
 DEOBF_OUTPUT = "screen.deobfuscator.output"
 DEOBF_PROCESSING = "screen.deobfuscator.processing"
+DEOBF_RESEARCH_NOTE = "screen.deobfuscator.research_note"
 
 # =============================================================================
 # PyShell Screen
@@ -254,3 +264,95 @@ DIALOG_SUBMIT_BTN = "dialog.submit_btn"
 NOTIF_COPIED = "notification.copied"
 NOTIF_SAVED = "notification.saved"
 NOTIF_LANGUAGE_CHANGED = "notification.language_changed"
+
+# =============================================================================
+# DevTools
+# =============================================================================
+DEV_TITLE = "devtools.title"
+DEV_TAB_APP = "devtools.tabs.app"
+DEV_TAB_UI = "devtools.tabs.ui"
+DEV_TAB_TREE = "devtools.tabs.tree"
+DEV_TAB_SCENARIOS = "devtools.tabs.scenarios"
+DEV_TAB_LOGS = "devtools.tabs.logs"
+DEV_TAB_BACKEND = "devtools.tabs.backend"
+
+DEV_UI_HIGHLIGHT = "devtools.ui.highlight"
+DEV_UI_INSPECT = "devtools.ui.inspect"
+DEV_UI_FPS = "devtools.ui.fps"
+DEV_UI_ANIM_SPEED = "devtools.ui.anim_speed"
+DEV_UI_STRESS_TITLE = "devtools.ui.stress_title"
+DEV_UI_BREAK = "devtools.ui.break"
+DEV_UI_AUTOFILL = "devtools.ui.autofill"
+DEV_UI_PROP_INSPECTOR = "devtools.ui.prop_inspector"
+DEV_UI_REFRESH = "devtools.ui.refresh"
+
+DEV_PROP_CLASS = "devtools.prop.class"
+DEV_PROP_NAME = "devtools.prop.name"
+DEV_PROP_TEXT = "devtools.prop.text"
+DEV_PROP_ENABLED = "devtools.prop.enabled"
+DEV_PROP_VISIBLE = "devtools.prop.visible"
+DEV_PROP_STYLE = "devtools.prop.style"
+DEV_PROP_TOOLTIP = "devtools.prop.tooltip"
+DEV_PROP_GEOMETRY = "devtools.prop.geometry"
+DEV_PROP_HEADER_PROPERTY = "devtools.prop.header_property"
+DEV_PROP_HEADER_VALUE = "devtools.prop.header_value"
+
+DEV_TREE_SEARCH = "devtools.tree.search"
+DEV_BACKEND_LATENCY = "devtools.backend.latency"
+DEV_BACKEND_ERROR = "devtools.backend.error"
+DEV_BACKEND_OFFLINE = "devtools.backend.offline"
+DEV_BACKEND_CRASH = "devtools.backend.crash"
+DEV_BACKEND_STATE_TITLE = "devtools.backend.state_title"
+DEV_BACKEND_MODE_NORMAL = "devtools.backend.mode_normal"
+DEV_BACKEND_MODE_FAIL = "devtools.backend.mode_fail"
+DEV_BACKEND_MODE_EMPTY = "devtools.backend.mode_empty"
+DEV_BACKEND_CONDITIONS_TITLE = "devtools.backend.conditions_title"
+DEV_BACKEND_PRESET_SLOW3G = "devtools.backend.preset_slow3g"
+DEV_BACKEND_PRESET_2GEDGE = "devtools.backend.preset_2gedge"
+
+DEV_APP_FONT_SCALE = "devtools.app.font_scale"
+DEV_APP_WINDOW_PRESETS = "devtools.app.window_presets"
+DEV_APP_NAV_TITLE = "devtools.app.nav_title"
+DEV_APP_PRESET_MOBILE = "devtools.app.preset_mobile"
+DEV_APP_PRESET_TABLET = "devtools.app.preset_tablet"
+DEV_APP_PRESET_DESKTOP = "devtools.app.preset_desktop"
+DEV_APP_NOTIF_TITLE = "devtools.app.notif_title"
+DEV_APP_LOAD_SIM = "devtools.app.load_sim"
+DEV_APP_RUN = "devtools.app.run"
+DEV_APP_SYSTEM_TITLE = "devtools.app.system_title"
+DEV_APP_FONT_SIZE = "devtools.app.font_size"
+DEV_APP_FORCE_RELOAD = "devtools.app.force_reload"
+
+DEV_LOG_TITLE = "devtools.log.title"
+DEV_LOG_FILTER = "devtools.log.filter"
+DEV_LOG_STRESS = "devtools.log.stress"
+
+DEV_TREE_TITLE = "devtools.tree.title"
+DEV_TREE_HEADER_WIDGET = "devtools.tree.header_widget"
+DEV_TREE_HEADER_NAME = "devtools.tree.header_name"
+DEV_TREE_HEADER_TYPE = "devtools.tree.header_type"
+DEV_TREE_HEADER_STATUS = "devtools.tree.header_status"
+DEV_TREE_SYNC = "devtools.tree.sync"
+DEV_TREE_TYPE_WINDOW = "devtools.tree.type_window"
+DEV_TREE_TYPE_CHILD = "devtools.tree.type_child"
+DEV_TREE_STATUS_VISIBLE = "devtools.tree.status_visible"
+DEV_TREE_STATUS_HIDDEN = "devtools.tree.status_hidden"
+
+DEV_SCENARIO_TITLE = "devtools.scenario.title"
+DEV_SCENARIO_RUN = "devtools.scenario.run"
+DEV_SCENARIO_STOP = "devtools.scenario.stop"
+DEV_SCENARIO_NETWORK = "devtools.scenario.network"
+DEV_SCENARIO_UI_STRESS = "devtools.scenario.ui_stress"
+DEV_SCENARIO_FIRST_RUN = "devtools.scenario.first_run"
+DEV_SCENARIO_MAINTENANCE = "devtools.scenario.maintenance"
+DEV_SCENARIO_RESET = "devtools.scenario.reset"
+
+DEV_UI_FPS_LABEL = "devtools.ui.fps_label"
+DEV_LOG_INIT = "devtools.log.init"
+DEV_LOG_SHOWN = "devtools.log.shown"
+DEV_LOG_HIDDEN = "devtools.log.hidden"
+
+DEV_LOG_PROP_SET = "devtools.log.prop_set"
+DEV_LOG_PROP_FAIL = "devtools.log.prop_fail"
+DEV_LOG_STRESS_APPLIED = "devtools.log.stress_applied"
+DEV_LOG_AUTOFILL_DONE = "devtools.log.autofill_done"

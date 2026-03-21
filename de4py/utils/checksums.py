@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import os
 import hashlib
 import json
@@ -12,32 +21,41 @@ def calculate_checksum(file_path, hash_algorithm="sha256", buffer_size=8192):
     return hasher.hexdigest()
 
 def generate_checksums(directory, hash_algorithm="sha256"):
-    excludes = [
-        'checksums.json', 'checksums.py', '.git', '__pycache__', 
-        '.env', '.venv', 'logs', 'brain', 'ui/resources', 'config',
-        'README.md', 'FAQ.md', 'LICENSE', '.github', 'cleanup.bat', 'requirements.txt',
-        'logs/'
-    ]
+    excluded_dirs = {
+        'env', 'venv', 'logs', 'brain', '__pycache__', 
+        '__MACOSX', 'tests', 'INFO', 'Pictures', 
+    }
+    excluded_paths = {
+        'ui/resources', 'config'
+    }
+    excluded_files = {
+        'checksums.json', 'checksums.py', '.DS_Store', 'cleanup.bat', 'LICENSE',
+        'crowdin.yml', 'pyproject.toml'
+    }
+    excluded_extensions = (
+        '.pyc', '.pyo', '.pyd', '.log', '.tmp', '.bak', '.md', '.txt'
+    )
     
     checksums = {}
     for root, dirs, files in os.walk(directory):
         rel_root = os.path.relpath(root, directory).replace('\\', '/')
         if rel_root == '.': rel_root = ''
 
-        # Filter directories to skip excluded ones
-        dirs[:] = [d for d in dirs if d not in excludes and os.path.join(rel_root, d).replace('\\', '/') not in excludes]
-        
-        # Check if current directory itself is excluded (as a path)
-        if rel_root in excludes:
-            dirs[:] = []
-            continue
+        # Filter out excluded directories, hidden directories (starts with .), and explicit paths
+        dirs[:] = [
+            d for d in dirs 
+            if d not in excluded_dirs 
+            and not d.startswith('.')
+            and os.path.join(rel_root, d).replace('\\', '/') not in excluded_paths
+        ]
 
         for file_name in files:
-            rel_path = os.path.join(rel_root, file_name).replace('\\', '/')
-            if file_name in excludes or rel_path in excludes:
+            if file_name in excluded_files or file_name.endswith(excluded_extensions) or file_name.startswith('.'):
                 continue
                 
+            rel_path = os.path.join(rel_root, file_name).replace('\\', '/')
             file_path = os.path.join(root, file_name)
+            
             checksum = calculate_checksum(file_path, hash_algorithm)
             checksums[rel_path] = checksum # Use relative path for consistency
     return checksums

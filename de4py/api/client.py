@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import logging
 import requests
 from requests.exceptions import RequestException, ConnectionError, Timeout
@@ -78,6 +87,7 @@ class De4pyApiClient:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError:
+            print(f"Response text: {response.text}")
             status_code = response.status_code
             
             # Check for known error codes

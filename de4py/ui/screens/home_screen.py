@@ -1,3 +1,12 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
 import json
 import platform
 from PySide6.QtWidgets import (
@@ -108,7 +117,6 @@ class HomeScreen(QWidget):
         self.arch_label.setObjectName("EnvLabel")
         layout.addWidget(self.arch_label)
 
-        system_info = platform.uname()
         self.os_label = QLabel()
         self.os_label.setObjectName("EnvLabel")
         layout.addWidget(self.os_label)
