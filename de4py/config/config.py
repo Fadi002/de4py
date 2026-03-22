@@ -17,13 +17,13 @@ PROJECT_SIGNATURE = "de4py-core-signature-7f3a91"
 
 @dataclass
 class Settings:
-    version: str = "V2.2.5"
+    version: str = "V3.1.1"
     changelog_url: str = "https://raw.githubusercontent.com/Fadi002/de4py/main/INFO/changelog.json"
     version_url: str = "https://raw.githubusercontent.com/Fadi002/de4py/main/INFO/version"
     rpc: bool = True
     stealth_title: bool = True
     load_plugins: bool = True
-    build_num: str = "2.2.5.260314083-stable-de4py"
+    build_num: str = "3.1.1.260321656-stable-de4py"
     api_base_url: str = "https://de4py-api.vercel.app"
     api_timeout: int = 700
     poll_interval: float = 2.0

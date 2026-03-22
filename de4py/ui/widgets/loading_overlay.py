@@ -31,6 +31,8 @@ class LoadingOverlay(QWidget):
 
         self._fade_anim = QPropertyAnimation(self._opacity_effect, b"opacity", self)
         self._fade_anim.setDuration(250)
+        self._fade_anim.finished.connect(self._on_fade_finished)
+        self._fade_target: str | None = None # "visible" or "hidden"
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -45,6 +47,11 @@ class LoadingOverlay(QWidget):
     def set_status(self, text: str):
         self.status_label.setText(text)
         self.update()
+
+    def _on_fade_finished(self):
+        if self._fade_target == "hidden":
+            self.setHidden(True)
+        self._fade_target = None
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -61,25 +68,17 @@ class LoadingOverlay(QWidget):
 
     def fade_in(self):
         self._fade_anim.stop()
+        self._fade_target = "visible"
         self.setHidden(False)
         self._fade_anim.setStartValue(self._opacity_effect.opacity())
         self._fade_anim.setEndValue(1.0)
-        # Disconnect any hide-on-finish slot left over from a previous fade_out
-        try:
-            self._fade_anim.finished.disconnect()
-        except RuntimeError:
-            pass
         self._fade_anim.start()
 
     def fade_out(self):
         self._fade_anim.stop()
+        self._fade_target = "hidden"
         self._fade_anim.setStartValue(self._opacity_effect.opacity())
         self._fade_anim.setEndValue(0.0)
-        try:
-            self._fade_anim.finished.disconnect()
-        except RuntimeError:
-            pass
-        self._fade_anim.finished.connect(lambda: self.setHidden(True))
         self._fade_anim.start()
 
     def _rotate(self):
