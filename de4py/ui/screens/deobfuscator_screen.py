@@ -14,7 +14,7 @@ from PySide6.QtCore import Qt
 
 from de4py.lang import tr
 from de4py.lang.keys import (
-    SCREEN_TITLE_DEOBFUSCATOR, DEOBF_SELECT_FILE, DEOBF_DEOBFUSCATE,
+    SCREEN_TITLE_DEOBFUSCATOR,    DEOBF_SELECT_FILE, DEOBF_DEOBFUSCATE, DEOBF_RESEARCH_NOTE,
     MSG_NO_FILE_SELECTED, MSG_OPERATION_COMPLETE, MSG_OPERATION_FAILED,
     MSG_WARNING, MSG_SUCCESS, MSG_ERROR
 )
@@ -84,6 +84,13 @@ class DeobfuscatorScreen(QWidget):
         self.deobf_btn.clicked.connect(self._on_deobfuscate)
         layout.addWidget(self.deobf_btn, alignment=Qt.AlignmentFlag.AlignCenter)
     
+        self.disclaimer_label = QLabel(tr(DEOBF_RESEARCH_NOTE))
+        self.disclaimer_label.setObjectName("DisclaimerLabel")
+        self.disclaimer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.disclaimer_label.setWordWrap(True)
+        self.disclaimer_label.setStyleSheet("font-size: 10px; color: #8b949e; margin-top: 10px;")
+        layout.addWidget(self.disclaimer_label)
+
         return frame
     
     def _create_right_frame(self):
@@ -145,4 +152,5 @@ class DeobfuscatorScreen(QWidget):
         self.title_label.setText(tr(SCREEN_TITLE_DEOBFUSCATOR))
         self.select_btn.setText(tr(DEOBF_SELECT_FILE))
         self.deobf_btn.setText(tr(DEOBF_DEOBFUSCATE))
+        self.disclaimer_label.setText(tr(DEOBF_RESEARCH_NOTE))
         self.output.retranslate_ui()

@@ -1,6 +1,5 @@
 """
 Example of a Modern Deobfuscator Engine for de4py.
-This demonstrates the class-based approach using the Deobfuscator interface.
 """
 
 from pathlib import Path

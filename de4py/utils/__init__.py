@@ -10,5 +10,3 @@
 from .tui import setup_logging, clear_console, fade_type, __BANNER__
 from .update import check_update
 from .pathgen import gen_path
-from . import rpc
-from . import sentry
