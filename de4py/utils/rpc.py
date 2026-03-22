@@ -7,7 +7,7 @@
 #
 # See the LICENSE file for details.
 
-from pypresence import Presence
+# rpc.py - Presence moved to local scope
 import threading
 import time
 import logging
@@ -43,6 +43,7 @@ def _rpc_loop():
 def start_RPC():
     global RPC
     try:
+        from pypresence import Presence
         RPC = Presence("1190392428247650466")
         RPC.connect()
         t = threading.Thread(target=_rpc_loop, daemon=True)

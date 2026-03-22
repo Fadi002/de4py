@@ -1,4 +1,13 @@
-import re, lzma, base64, lzma, codecs, marshal, io, dis, sys
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
+import re, lzma, base64, codecs, marshal, io, dis, sys
 def get_bytes(text):
     return re.search(r"b'(.+)'", text).group(1)
 def decompressing(payload):
