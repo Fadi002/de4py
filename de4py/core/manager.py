@@ -21,6 +21,14 @@ class EngineManager:
         self._deobfuscators: Dict[str, Deobfuscator] = {}
         self._analyzers: Dict[str, Analyzer] = {}
         self.load_legacy_engines()
+        
+        # Load modern engines
+        try:
+            from de4py.engines.onyx.engine import OnyxAlpha
+            engine = OnyxAlpha()
+            self.register_deobfuscator(engine)
+        except ImportError as e:
+            print(f"Failed to load Onyx engine: {e}")
 
     def register_deobfuscator(self, deobfuscator: Deobfuscator):
         self._deobfuscators[deobfuscator.name.lower()] = deobfuscator

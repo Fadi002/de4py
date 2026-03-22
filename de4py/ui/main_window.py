@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout
 )
 from de4py.ui.widgets.core_animations import AnimatedStackedWidget
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon
 
 from de4py.config.config import settings
@@ -93,6 +93,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         from de4py.lang import tr, keys
         self.setWindowTitle(title if title else tr(keys.APP_NAME))
+        translation_manager.load_language(settings.language)
+        
+        # Enforce Fixed size for main application
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
 
         self._sidebar_visible = False
@@ -106,6 +109,9 @@ class MainWindow(QMainWindow):
 
         if settings.transparent_ui:
             self.set_transparent_ui(True)
+            
+        from de4py.utils.win32_blur import set_high_precision_timer
+        set_high_precision_timer(True)
 
     def set_transparent_ui(self, enabled: bool):
         try:
