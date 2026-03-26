@@ -101,15 +101,18 @@ def main():
         run_checksum_gen()
         return
 
-    # ── UpdateManager CLI commands ──────────────────────────────────
-    if args.update_check or args.update or args.rollback:
+    # ── UpdateManager ──────────────────────────────────────────────
+    mgr = None
+    if any([args.update_check, args.update, args.rollback]) or settings.auto_update:
         from de4py.update_manager import UpdateManager
         mgr = UpdateManager(
             current_version=settings.version,
-            channel=getattr(settings, 'update_channel', 'stable'),
-            auto_update=getattr(settings, 'auto_update', True),
+            channel=settings.update_channel,
+            auto_update=settings.auto_update
         )
 
+    # 1. Handle explicit CLI update commands
+    if mgr and (args.update_check or args.update or args.rollback):
         if args.rollback:
             if mgr.has_rollback_available():
                 print("[*] Rolling back to previous version...")
@@ -135,6 +138,30 @@ def main():
         else:
             print(f"[+] You are running the latest version ({settings.version})")
         return
+
+    # 2. Handle auto-update check (Startup)
+    if mgr and settings.auto_update and not any([args.test, args.cli]):
+        try:
+            release = mgr.auto_check()
+            if release:
+                print(f"\n[!] UPDATE AVAILABLE: {release.version}")
+                print("[?] A new version is available. Continue anyway? [y/n]")
+                choice = input(">>> ").lower()
+                if choice not in ('y', 'yes'):
+                    print(f"[*] Download it from: https://github.com/Fadi002/de4py/releases")
+                    if sys.platform == "win32":
+                        print("[*] Press any key to exit...")
+                        import msvcrt
+                        while True:
+                            if msvcrt.kbhit():
+                                msvcrt.getch()
+                                break
+                    sys.exit(0)
+            else:
+                # Silently log to console if up to date
+                print(f"[*] Version check: {settings.version} (Latest)")
+        except Exception as e:
+            print(f"[!] Auto-update check failed: {e}")
 
     # For any other mode, check dependencies first
     check_dependencies()
