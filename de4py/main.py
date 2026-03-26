@@ -15,6 +15,9 @@ import argparse
 from de4py.config.config import settings
 __version__ = settings.version
 
+# Module-level store for the default QSS stylesheet
+DEFAULT_QSS = ""
+
 def check_dependencies():
     """Verify that all required libraries are installed."""
     REQUIRED_LIBS = {
@@ -49,6 +52,7 @@ def check_dependencies():
 
 def load_stylesheet(app):
     """Loads the dark theme QSS stylesheet."""
+    global DEFAULT_QSS
     from PySide6.QtCore import QFile, QTextStream
     theme_path = os.path.join(os.path.dirname(__file__), "ui", "themes", "dark_theme.qss")
     if os.path.exists(theme_path):
@@ -58,6 +62,7 @@ def load_stylesheet(app):
             qss = stream.readAll()
             app.setStyleSheet(qss)
             file.close()
+            DEFAULT_QSS = qss
             return qss
     return ""
 
@@ -81,6 +86,9 @@ def main():
     parser.add_argument("--test", action="store_true", help="Run internal tests")
     parser.add_argument("--about", action="store_true", help="Show project info and exit")
     parser.add_argument("--checksums-gen", action="store_true", help="Generate project checksums")
+    parser.add_argument("--update-check", action="store_true", help="Check for available updates")
+    parser.add_argument("--update", action="store_true", help="Download and install the latest update")
+    parser.add_argument("--rollback", action="store_true", help="Rollback to the previous version")
     args = parser.parse_args()
 
     if args.about:
@@ -93,6 +101,44 @@ def main():
         run_checksum_gen()
         return
 
+    # ── UpdateManager ──────────────────────────────────────────────
+    mgr = None
+    if any([args.update_check, args.update, args.rollback]) or settings.auto_update:
+        from de4py.update_manager import UpdateManager
+        mgr = UpdateManager(
+            current_version=settings.version,
+            channel=settings.update_channel,
+            auto_update=settings.auto_update
+        )
+
+    # 1. Handle explicit CLI update commands (e.g. --update-check)
+    if mgr and (args.update_check or args.update or args.rollback):
+        if args.rollback:
+            if mgr.has_rollback_available():
+                print("[*] Rolling back to previous version...")
+                if mgr.rollback():
+                    print("[+] Rollback successful. Please restart de4py.")
+                else:
+                    print("[!] Rollback failed.")
+            else:
+                print("[!] No backup available for rollback.")
+            return
+
+        release = mgr.check()
+        if release:
+            print(f"[+] Update available: {release.version}")
+            if release.changelog:
+                print(f"    Changelog: {release.changelog[:200]}...")
+            if args.update:
+                print("[*] Downloading and installing update...")
+                if mgr.download_and_install(release):
+                    print("[+] Update installed. Please restart de4py.")
+                else:
+                    print("[!] Update failed. Use --rollback if needed.")
+        else:
+            print(f"[+] You are running the latest version ({settings.version})")
+        return
+
     # For any other mode, check dependencies first
     check_dependencies()
     
@@ -103,7 +149,7 @@ def main():
     from PySide6.QtGui import QIcon
     from de4py.ui.main_window import MainWindow
     from de4py.utils import rpc, sentry, setup_logging
-    from de4py.utils import tui, update
+    from de4py.utils import tui
     import signal
     import msvcrt
     
@@ -119,29 +165,29 @@ def main():
     tui.clear_console()
     print(tui.__BANNER__)
 
-
     logging.info("Starting de4py")
 
-    # Check for updates
-    try:
-        if update.check_update():
-            logging.info("You are using the latest version")
-        else:
-            logging.warning("There's a new version. Are you sure you want to use this version?")
-            tui.fade_type('Answer [y/n]\n')
-            if input(">>> ").lower() not in ('y', 'yes'):
-                logging.warning("Download it from here: https://github.com/Fadi002/de4py")
-                logging.warning("Press any key to exit...")
-                if _IS_WINDOWS:
-                    while True:
-                        if msvcrt.kbhit():
-                            msvcrt.getch()
-                            break
-                rpc.KILL_THREAD = True
-                sys.exit(0)
-    except Exception as e:
-        logging.error(f"Failed to check for updates: {e}")
-    # Handle Modes
+    # 2. Handle auto-update check (Startup flow)
+    if mgr and settings.auto_update and not any([args.test, args.cli]):
+        try:
+            release = mgr.auto_check()
+            if release:
+                print(f"\n[!] UPDATE AVAILABLE: {release.version}")
+                print("[?] A new version is available. Continue anyway? [y/n]")
+                choice = input(">>> ").lower()
+                if choice not in ('y', 'yes'):
+                    print(f"[*] Download it from: https://github.com/Fadi002/de4py/releases")
+                    if _IS_WINDOWS:
+                        print("[*] Press any key to exit...")
+                        while True:
+                            if msvcrt.kbhit():
+                                msvcrt.getch()
+                                break
+                    sys.exit(0)
+        except Exception as e:
+            print(f"[!] Auto-update check failed: {e}")
+
+    # 3. Mode Steering (Test / CLI / GUI)
     if args.test:
         with sentry.transaction("Test Session", "app.test"):
             logging.info("Starting in Test mode...")

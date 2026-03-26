@@ -29,7 +29,12 @@ class Settings:
     poll_interval: float = 2.0
     active_theme: Optional[str] = None
     language: str = "en"
-    transparent_ui: bool = False    
+    transparent_ui: bool = False
+    auto_update: bool = True
+    update_channel: str = "stable"
+    last_update_check: Optional[str] = None
+    github_repo: str = "Fadi002/de4py"
+    telemetry: bool = True
     _path: str = field(default=os.path.join(os.path.dirname(__file__), 'config.json'), repr=False, init=False)
 
     def __post_init__(self):

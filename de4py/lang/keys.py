@@ -62,6 +62,9 @@ SETTINGS_RPC = "screen.settings.rpc"
 SETTINGS_STEALTH = "screen.settings.stealth"
 SETTINGS_PLUGINS = "screen.settings.plugins"
 SETTINGS_TRANSPARENT_UI = "screen.settings.transparent"
+SETTINGS_AUTO_UPDATE = "screen.settings.auto_update"
+SETTINGS_UPDATE_CHANNEL = "screen.settings.update_channel"
+SETTINGS_TELEMETRY = "screen.settings.telemetry"
 SETTINGS_RESTART_NOTE = "screen.settings.restart_note"
 
 # =============================================================================
