@@ -7,166 +7,252 @@
 #
 # See the LICENSE file for details.
 
-#useless prototype shit (updated version soon since this one is hardcodded)
+"""
+engines/vm_lifter.py
+
+Dynamic stack-based VM bytecode lifter.
+
+Instead of hardcoding opcode semantics, this engine:
+  1. Detects a VM class in source by finding a class with a __call__ method
+     containing a match/case dispatch on an integer opcode variable.
+  2. Reads the match/case body to infer what each opcode DOES
+     (push, pop, store_local, store_global, binary op, call, return, etc.)
+  3. Extracts pickle payloads from VM(...) call sites.
+  4. Lifts each payload's bytecode to readable Python using the extracted
+     opcode semantics.
+
+This makes the lifter work on ANY stack VM that follows the pattern:
+    while cx < len(bytecode):
+        opc = bytecode[cx]; opa = bytecode[cx+1]
+        match opc:
+            case N: <semantics>
+        cx += 2
+"""
 
 import ast
 import pickle
+import re
 import textwrap
 from typing import Any, Dict, List, Optional, Tuple
 
 
-OPS: Dict[int, str] = {
-    1:"LOAD_CONST", 2:"STORE_LOCAL", 3:"LOAD_LOCAL",
-    4:"STORE_GLOBAL", 5:"LOAD_GLOBAL",
-    6:"ADD", 7:"SUB", 8:"MUL", 9:"DIV", 10:"FDIV", 11:"MOD",
-    12:"POW", 13:"LSHIFT", 14:"RSHIFT", 15:"OR", 16:"XOR", 17:"AND", 18:"MATMUL",
-    19:"CALL", 20:"MAKE_VM", 21:"RETURN", 22:"IMPORT",
-    23:"COMPARE", 24:"JUMP_IF_FALSE", 25:"JUMP",
-    26:"AND_BOOL", 27:"OR_BOOL", 28:"LOAD_ATTR",
-    29:"BUILD_TUPLE", 30:"BUILD_LIST", 31:"BUILD_SLICE", 32:"SUBSCRIPT",
+# ─── Opcode semantic inference ────────────────────────────────────────────────
+
+class _OpcodeInfo:
+    """Describes what a single opcode does."""
+    def __init__(self, num: int, body_src: List[str]):
+        self.num      = num
+        self.body_src = body_src        # raw unparsed statements
+        self.kind     = self._infer_kind()
+
+    def _infer_kind(self) -> str:
+        src = ' '.join(self.body_src)
+        if 'return' in src:              return 'RETURN'
+        if 'import' in src and '__import__' in src: return 'IMPORT'
+        if 'append' in src or 'push' in src:
+            if 'consts' in src:          return 'LOAD_CONST'
+            if 'locals' in src or 'vlocals' in src:
+                if 'names' in src:       return 'LOAD_LOCAL'
+            if 'globals' in src or 'vglobals' in src:
+                if 'names' in src:       return 'LOAD_GLOBAL'
+        if ('pop' in src or 'pop()' in src) and ('=' in src):
+            if 'locals' in src or 'vlocals' in src: return 'STORE_LOCAL'
+            if 'globals' in src or 'vglobals' in src: return 'STORE_GLOBAL'
+            if 'VM(' in src:             return 'MAKE_VM'
+        if 'getattr' in src:             return 'LOAD_ATTR'
+        if '+' in src and 'pop' in src:  return 'BINARY_ADD'
+        if '-' in src and 'pop' in src:  return 'BINARY_SUB'
+        if '*' in src and 'pop' in src and '**' not in src: return 'BINARY_MUL'
+        if '//' in src and 'pop' in src:  return 'BINARY_FDIV'
+        if '/' in src and 'pop' in src:  return 'BINARY_DIV'
+        if '%' in src and 'pop' in src:  return 'BINARY_MOD'
+        if '**' in src and 'pop' in src: return 'BINARY_POW'
+        if '^' in src and 'pop' in src:  return 'BINARY_XOR'
+        if '|' in src and 'pop' in src:  return 'BINARY_OR'
+        if '&' in src and 'pop' in src:  return 'BINARY_AND'
+        if '<<' in src and 'pop' in src: return 'BINARY_LSHIFT'
+        if '>>' in src and 'pop' in src: return 'BINARY_RSHIFT'
+        if 'function(' in src or 'func(' in src or '(*args)' in src: return 'CALL'
+        if 'if not' in src and 'cx' in src: return 'JUMP_IF_FALSE'
+        if 'cx =' in src and 'continue' in src: return 'JUMP'
+        if 'tuple' in src and 'values' in src: return 'BUILD_TUPLE'
+        if 'list' in src or ('values' in src and 'append' in src): return 'BUILD_LIST'
+        if 'slice' in src:               return 'BUILD_SLICE'
+        if '[' in src and ']' in src and 'pop' in src: return 'SUBSCRIPT'
+        if 'match' in src and 'opa' in src: return 'COMPARE'
+        if 'and' in src and 'pop' in src: return 'AND_BOOL'
+        if 'or' in src and 'pop' in src:  return 'OR_BOOL'
+        return f'OPC_{self.num}'
+
+
+class _VMOpcodeTable:
+    """Extracted opcode table from a VM class."""
+
+    def __init__(self):
+        self.opcodes: Dict[int, _OpcodeInfo] = {}
+        self.stack_var     = 'stack'
+        self.const_var     = 'consts'
+        self.name_var      = 'names'
+        self.local_var     = 'locals'
+        self.cx_var        = 'cx'
+        self.bytecode_var  = 'bytecode'
+
+    def load_from_class(self, cls_node: ast.ClassDef) -> bool:
+        """Parse the VM class and populate the opcode table. Returns True on success."""
+        call_method = None
+        for item in cls_node.body:
+            if isinstance(item, ast.FunctionDef) and item.name == '__call__':
+                call_method = item
+                break
+
+        if call_method is None:
+            return False
+
+        # Infer variable names from assignments in the method
+        for stmt in ast.walk(call_method):
+            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                t = stmt.targets[0]
+                v = stmt.value
+                if isinstance(t, ast.Name):
+                    if isinstance(v, ast.List) and not v.elts:
+                        self.stack_var = t.id
+                    if (isinstance(v, ast.Attribute)
+                            and isinstance(v.value, ast.Name)
+                            and v.value.id == 'self'):
+                        if 'const' in v.attr.lower():  self.const_var   = t.id
+                        if 'name'  in v.attr.lower():  self.name_var    = t.id
+                        if 'byte'  in v.attr.lower():  self.bytecode_var = t.id
+
+        # Find the match statement
+        for stmt in ast.walk(call_method):
+            if isinstance(stmt, ast.Match):
+                for case in stmt.cases:
+                    pat = case.pattern
+                    if (isinstance(pat, ast.MatchValue)
+                            and isinstance(pat.value, ast.Constant)
+                            and isinstance(pat.value.value, int)):
+                        opc_num  = pat.value.value
+                        body_src = [ast.unparse(s) for s in case.body]
+                        self.opcodes[opc_num] = _OpcodeInfo(opc_num, body_src)
+                return True  # found it
+
+        return bool(self.opcodes)
+
+
+# ─── Stack lifter ─────────────────────────────────────────────────────────────
+
+_BIN_OPS = {
+    'BINARY_ADD':'+','BINARY_SUB':'-','BINARY_MUL':'*','BINARY_FDIV':'//', 'BINARY_DIV':'/',
+    'BINARY_MOD':'%','BINARY_POW':'**','BINARY_XOR':'^','BINARY_OR':'|',
+    'BINARY_AND':'&','BINARY_LSHIFT':'<<','BINARY_RSHIFT':'>>',
 }
 
-CMP_OPS = {1:"==",2:"!=",3:"<",4:"<=",5:">",6:">=",7:"is",8:"is not",9:"in",10:"not in"}
-BIN_OPS = {6:"+",7:"-",8:"*",9:"/",10:"//",11:"%",12:"**",13:"<<",14:">>",15:"|",16:"^",17:"&",18:"@"}
+_CMP_OPS = {1:'==',2:'!=',3:'<',4:'<=',5:'>',6:'>=',
+            7:'is',8:'is not',9:'in',10:'not in'}
 
 
 class _StackLifter:
-    def __init__(self, bytecode, consts, names):
-        self.bc     = list(bytecode)
-        self.consts = list(consts)
-        self.names  = list(names)
-        self._stack: List[str] = []
+    def __init__(self, bc: List[int], consts: List[Any], names: List[str],
+                 table: _VMOpcodeTable):
+        self.bc     = bc
+        self.consts = consts
+        self.names  = names
+        self.table  = table
+        self._stack : List[str] = []
         self._locals: Dict[str,str] = {}
-        self._globals: Dict[str,str] = {}
-        self._lines: List[str] = []
-        self._nested_payloads: List[Tuple[int, str]] = []  # (const_idx, name)
+        self._globals:Dict[str,str] = {}
+        self._lines : List[str] = []
 
-    def _push(self, e: str): self._stack.append(e)
-    def _pop(self) -> str: return self._stack.pop() if self._stack else "_underflow"
-    def _emit(self, line: str): self._lines.append(line)
-
-    def _fmt(self, val: Any) -> str:
-        if isinstance(val, bytes): return f"<bytes[{len(val)}]>"
-        return repr(val)
+    def _push(self, e): self._stack.append(e)
+    def _pop(self):     return self._stack.pop() if self._stack else '_underflow'
+    def _emit(self, l): self._lines.append(l)
+    def _name(self, i): return self.names[i] if i < len(self.names) else f'names_{i}'
+    def _const(self, i):
+        if i >= len(self.consts): return f'consts_{i}'
+        v = self.consts[i]
+        return f'<bytes[{len(v)}]>' if isinstance(v, bytes) else repr(v)
 
     def lift(self) -> str:
-        bc = self.bc
         cx = 0
-        while cx < len(bc) - 1:
-            opc, opa = bc[cx], bc[cx+1]
+        while cx < len(self.bc) - 1:
+            opc, opa = self.bc[cx], self.bc[cx+1]
+            info = self.table.opcodes.get(opc)
+            kind = info.kind if info else f'OPC_{opc}'
 
-            if opc == 1:
-                val = self.consts[opa] if opa < len(self.consts) else None
-                self._push(self._fmt(val) if not isinstance(val, bytes) else f"<payload_{opa}>")
-
-            elif opc == 2:
-                name = self.names[opa] if opa < len(self.names) else f"local_{opa}"
-                val  = self._pop()
-                self._locals[name] = val
-                self._emit(f"{name} = {val}")
-
-            elif opc == 3:
-                name = self.names[opa] if opa < len(self.names) else f"local_{opa}"
-                self._push(self._locals.get(name, name))
-
-            elif opc == 4:
-                name = self.names[opa] if opa < len(self.names) else f"global_{opa}"
-                val  = self._pop()
-                self._globals[name] = val
-                self._emit(f"{name} = {val}")
-
-            elif opc == 5:
-                name = self.names[opa] if opa < len(self.names) else f"global_{opa}"
-                self._push(self._globals.get(name, name))
-
-            elif opc in BIN_OPS:
+            if kind == 'LOAD_CONST':
+                self._push(self._const(opa))
+            elif kind == 'STORE_LOCAL':
+                n = self._name(opa); v = self._pop()
+                self._locals[n] = v; self._emit(f'{n} = {v}')
+            elif kind == 'LOAD_LOCAL':
+                n = self._name(opa); self._push(self._locals.get(n, n))
+            elif kind == 'STORE_GLOBAL':
+                n = self._name(opa); v = self._pop()
+                self._globals[n] = v; self._emit(f'{n} = {v}')
+            elif kind == 'LOAD_GLOBAL':
+                n = self._name(opa); self._push(self._globals.get(n, n))
+            elif kind in _BIN_OPS:
                 b = self._pop(); a = self._pop()
-                self._push(f"({a} {BIN_OPS[opc]} {b})")
-
-            elif opc == 19:
+                self._push(f'({a} {_BIN_OPS[kind]} {b})')
+            elif kind == 'CALL':
                 args = [self._pop() for _ in range(opa)][::-1]
                 func = self._pop()
-                self._push(f"{func}({', '.join(args)})")
-
-            elif opc == 20:
-                name = self.names[opa] if opa < len(self.names) else f"vm_{opa}"
-                self._pop()  # discard bytes placeholder
-                self._nested_payloads.append((opa, name))
-                self._emit(f"# {name} = VM(<nested payload>)  — see lifted definition above")
-                self._globals[name] = name
-
-            elif opc == 21:
-                val = self._pop()
-                self._emit(f"return {val}")
-                break
-
-            elif opc == 22:
-                name = self.names[opa] if opa < len(self.names) else f"mod_{opa}"
-                self._emit(f"import {name}")
-                self._globals[name] = name
-
-            elif opc == 23:
+                self._push(f'{func}({", ".join(args)})')
+            elif kind == 'MAKE_VM':
+                n = self._name(opa); self._pop()
+                self._emit(f'# {n} = VM(<nested>)  — see nested def above')
+                self._globals[n] = n
+            elif kind == 'RETURN':
+                self._emit(f'return {self._pop()}'); break
+            elif kind == 'IMPORT':
+                n = self._name(opa); self._emit(f'import {n}')
+                self._globals[n] = n
+            elif kind == 'COMPARE':
                 b = self._pop(); a = self._pop()
-                op = CMP_OPS.get(opa, f"cmp_{opa}")
-                self._push(f"({a} {op} {b})")
-
-            elif opc == 24:
-                cond   = self._pop()
-                target = opa
-                self._emit(f"if not ({cond}):  # else jump to [{target}]")
-                self._emit(f"    pass")
-
-            elif opc == 25:
-                target = opa
-                if target <= cx:
-                    self._emit(f"# ↑ loop back to [{target}]")
-                else:
-                    self._emit(f"# → jump to [{target}]")
-
-            elif opc == 26:
-                b = self._pop(); a = self._pop()
-                self._push(f"({a} and {b})")
-
-            elif opc == 27:
-                b = self._pop(); a = self._pop()
-                self._push(f"({a} or {b})")
-
-            elif opc == 28:
-                attr_str = self._pop()
-                obj      = self._pop()
+                op = _CMP_OPS.get(opa, f'cmp_{opa}')
+                self._push(f'({a} {op} {b})')
+            elif kind == 'JUMP_IF_FALSE':
+                cond = self._pop()
+                self._emit(f'if not ({cond}):  # jump → [{opa}]')
+                self._emit('    pass')
+            elif kind == 'JUMP':
+                self._emit(f'# jump → [{opa}]')
+                if opa <= cx:
+                    self._emit('# ↑ loop back')
+            elif kind == 'AND_BOOL':
+                b = self._pop(); a = self._pop(); self._push(f'({a} and {b})')
+            elif kind == 'OR_BOOL':
+                b = self._pop(); a = self._pop(); self._push(f'({a} or {b})')
+            elif kind == 'LOAD_ATTR':
+                attr = self._pop(); obj = self._pop()
                 try:
-                    attr = ast.literal_eval(attr_str)
-                    self._push(f"{obj}.{attr}")
+                    attr_name = ast.literal_eval(attr)
+                    self._push(f'{obj}.{attr_name}')
                 except Exception:
-                    self._push(f"getattr({obj}, {attr_str})")
-
-            elif opc == 29:
+                    self._push(f'getattr({obj}, {attr})')
+            elif kind == 'BUILD_TUPLE':
                 items = [self._pop() for _ in range(opa)][::-1]
-                self._push(f"({', '.join(items)},)")
-
-            elif opc == 30:
+                self._push(f'({", ".join(items)},)')
+            elif kind == 'BUILD_LIST':
                 items = [self._pop() for _ in range(opa)][::-1]
-                self._push(f"[{', '.join(items)}]")
-
-            elif opc == 31:
-                step  = self._pop()
-                stop  = self._pop()
-                start = self._pop()
-                s = f"{'' if start=='None' else start}:{'' if stop=='None' else stop}"
-                if step != 'None': s += f":{step}"
+                self._push(f'[{", ".join(items)}]')
+            elif kind == 'BUILD_SLICE':
+                step=self._pop(); stop=self._pop(); start=self._pop()
+                s = f'{""if start=="None" else start}:{""if stop=="None" else stop}'
+                if step != 'None': s += f':{step}'
                 self._push(s)
-
-            elif opc == 32:
-                idx = self._pop(); obj = self._pop()
-                self._push(f"{obj}[{idx}]")
-
+            elif kind == 'SUBSCRIPT':
+                idx=self._pop(); obj=self._pop()
+                self._push(f'{obj}[{idx}]')
             else:
-                self._emit(f"# UNKNOWN_OPC {opc} {opa}")
+                self._emit(f'# {kind}  opa={opa}')
 
             cx += 2
 
-        return "\n".join(self._lines)
+        return '\n'.join(self._lines)
 
+
+# ─── Main engine ──────────────────────────────────────────────────────────────
 
 class VMLifter:
 
@@ -185,9 +271,23 @@ class VMLifter:
                             and isinstance(c.pattern.value, ast.Constant)
                             and isinstance(c.pattern.value.value, int)
                         )
-                        if n >= 8:
+                        if n >= 6:
                             return True
         return False
+
+    def _extract_vm_class(self, source: str) -> Optional[_VMOpcodeTable]:
+        """Parse the VM class from source and return its opcode table."""
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                table = _VMOpcodeTable()
+                if table.load_from_class(node):
+                    print(f'[VMLifter] Extracted {len(table.opcodes)} opcodes from {node.name}')
+                    return table
+        return None
 
     def _extract_payloads(self, source: str) -> List[Tuple[bytes, str]]:
         try:
@@ -196,96 +296,100 @@ class VMLifter:
             return []
         result = []
         for node in ast.walk(tree):
-            if (isinstance(node, ast.Assign)
-                    and isinstance(node.value, ast.Call)
-                    and isinstance(node.value.func, ast.Name)
-                    and node.value.func.id == "VM"
-                    and node.value.args
-                    and isinstance(node.value.args[0], ast.Constant)
-                    and isinstance(node.value.args[0].value, bytes)):
-                name = node.targets[0].id if isinstance(node.targets[0], ast.Name) else "vm"
-                result.append((node.value.args[0].value, name))
+            # vm = VM(b'...') or VM(b'...')()
+            call = None
+            var_name = 'vm'
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+                call = node.value
+                if isinstance(node.targets[0], ast.Name):
+                    var_name = node.targets[0].id
+            elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+                c = node.value
+                # VM(b'...')()
+                if isinstance(c.func, ast.Call):
+                    call = c.func
+
+            if call and isinstance(call.func, ast.Name):
+                if call.args and isinstance(call.args[0], ast.Constant):
+                    v = call.args[0].value
+                    if isinstance(v, bytes) and len(v) > 10:
+                        result.append((v, var_name))
         return result
 
-    def _lift_data(self, data: Any, name: str) -> str:
+    def _lift_data(self, data: Any, name: str, table: _VMOpcodeTable) -> str:
         if not (isinstance(data, (tuple, list)) and len(data) >= 3):
-            return f"# Cannot lift {name}: unexpected format"
+            return f'# Cannot lift {name}: unexpected format'
 
-        raw_bc, consts, raw_names = data[0], data[1], data[2]
-        bc     = list(raw_bc)
-        consts = list(consts)
-        names  = list(raw_names)
+        bc     = list(data[0])
+        consts = list(data[1])
+        names  = list(data[2])
 
-        # Recursively lift nested VM payloads found in consts
-        nested_defs: List[str] = []
+        # Find nested VMs in consts (LOAD_CONST → MAKE_VM pattern)
         nested_name_map: Dict[int, str] = {}
-
-        # Build const_idx → nested_func_name from MAKE_VM opcodes
         for i in range(0, len(bc) - 3, 2):
-            if bc[i] == 1 and bc[i+2] == 20:
+            if bc[i+2] == next((k for k, v in table.opcodes.items()
+                                if v.kind == 'MAKE_VM'), None):
                 const_idx = bc[i+1]
                 name_idx  = bc[i+3]
                 if name_idx < len(names):
                     nested_name_map[const_idx] = names[name_idx]
 
-        for const_idx, nested_func_name in nested_name_map.items():
-            if const_idx < len(consts) and isinstance(consts[const_idx], bytes):
+        nested_defs = []
+        for ci, fn in nested_name_map.items():
+            if ci < len(consts) and isinstance(consts[ci], bytes):
                 try:
-                    nested_data = pickle.loads(consts[const_idx])
-                    nested_defs.append(self._lift_data(nested_data, nested_func_name))
+                    nd = pickle.loads(consts[ci])
+                    nested_defs.append(self._lift_data(nd, fn, table))
                 except Exception as e:
-                    nested_defs.append(f"# Could not lift {nested_func_name}: {e}")
+                    nested_defs.append(f'# Could not lift {fn}: {e}')
 
-        # Lift this function's bytecode
-        lifter = _StackLifter(bc, consts, names)
+        lifter = _StackLifter(bc, consts, names, table)
         body   = lifter.lift()
 
-        # Determine parameter names (first few names typically are params)
-        # Use names that appear in LOAD_LOCAL before any STORE_LOCAL
-        param_names: List[str] = []
-        seen_stores: set = set()
-        for i in range(0, len(bc) - 1, 2):
+        # Infer params: LOAD_LOCAL before first STORE_LOCAL
+        params, seen = [], set()
+        for i in range(0, len(bc)-1, 2):
             opc2, opa2 = bc[i], bc[i+1]
-            if opc2 == 2 and opa2 < len(names):
-                seen_stores.add(names[opa2])
-            elif opc2 == 3 and opa2 < len(names):
+            load_opc  = [k for k,v in table.opcodes.items() if v.kind=='LOAD_LOCAL']
+            store_opc = [k for k,v in table.opcodes.items() if v.kind=='STORE_LOCAL']
+            if opc2 in store_opc and opa2 < len(names):
+                seen.add(names[opa2])
+            elif opc2 in load_opc and opa2 < len(names):
                 n = names[opa2]
-                if n not in seen_stores and n not in param_names:
-                    param_names.append(n)
+                if n not in seen and n not in params:
+                    params.append(n)
 
-        params = ", ".join(param_names)
-        func_src  = [f"def {name}({params}):"]
-        for line in body.splitlines():
-            func_src.append(f"    {line}")
-        if not body.strip():
-            func_src.append("    pass")
+        lines = [f'def {name}({", ".join(params)}):']
+        if body.strip():
+            lines += [f'    {l}' for l in body.splitlines()]
+        else:
+            lines.append('    pass')
 
         parts = []
         if nested_defs:
             parts.extend(nested_defs)
-            parts.append("")
-        parts.append("\n".join(func_src))
-        return "\n".join(parts)
+            parts.append('')
+        parts.append('\n'.join(lines))
+        return '\n'.join(parts)
 
     def deobfuscate(self, source: str) -> str:
+        table    = self._extract_vm_class(source)
         payloads = self._extract_payloads(source)
         if not payloads:
             return source
 
         header = [
-            "# " + "═" * 60,
-            "# VM BYTECODE — LIFTED TO PYTHON",
-            "# The following reconstructs the embedded stack-VM programs.",
-            "# " + "═" * 60,
-            "",
+            '# ' + '═'*60,
+            '# VM BYTECODE — LIFTED TO PYTHON (dynamic opcode extraction)',
+            '# ' + '═'*60,
+            '',
         ]
-
-        lifted_blocks: List[str] = []
+        blocks = []
         for payload_bytes, var_name in payloads:
             try:
                 data = pickle.loads(payload_bytes)
-                lifted_blocks.append(self._lift_data(data, var_name))
+                blocks.append(self._lift_data(data, var_name, table or _VMOpcodeTable()))
             except Exception as e:
-                lifted_blocks.append(f"# Could not lift {var_name!r}: {e}")
+                blocks.append(f'# Could not lift {var_name!r}: {e}')
 
-        return "\n".join(header) + "\n\n".join(lifted_blocks)
+        return '\n'.join(header) + '\n\n'.join(blocks)

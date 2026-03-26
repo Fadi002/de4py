@@ -55,9 +55,9 @@ class AppControl(QWidget):
         notif_grid = QGridLayout()
         notif_grid.setSpacing(5)
         notif_types = [
-            (tr(keys.COMMON_MSG_SUCCESS), "success"),
-            (tr(keys.COMMON_MSG_ERROR), "error"),
-            (tr(keys.COMMON_MSG_INFO), "info")
+            (tr(keys.MSG_SUCCESS), "success"),
+            (tr(keys.MSG_ERROR), "error"),
+            (tr(keys.MSG_INFO), "info")
         ]
         for i, (label, ntype) in enumerate(notif_types):
             btn = QPushButton(label)
