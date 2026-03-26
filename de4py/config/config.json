@@ -11,5 +11,8 @@
     "poll_interval": 2.0,
     "active_theme": null,
     "language": "en",
-    "transparent_ui": true
+    "transparent_ui": true,
+    "auto_update": true,
+    "update_channel": "stable",
+    "last_update_check": null
 }

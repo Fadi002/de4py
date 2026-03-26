@@ -81,6 +81,9 @@ def main():
     parser.add_argument("--test", action="store_true", help="Run internal tests")
     parser.add_argument("--about", action="store_true", help="Show project info and exit")
     parser.add_argument("--checksums-gen", action="store_true", help="Generate project checksums")
+    parser.add_argument("--update-check", action="store_true", help="Check for available updates")
+    parser.add_argument("--update", action="store_true", help="Download and install the latest update")
+    parser.add_argument("--rollback", action="store_true", help="Rollback to the previous version")
     args = parser.parse_args()
 
     if args.about:
@@ -93,6 +96,41 @@ def main():
         run_checksum_gen()
         return
 
+    # ── UpdateManager CLI commands ──────────────────────────────────
+    if args.update_check or args.update or args.rollback:
+        from de4py.update_manager import UpdateManager
+        mgr = UpdateManager(
+            current_version=settings.version,
+            channel=getattr(settings, 'update_channel', 'stable'),
+            auto_update=getattr(settings, 'auto_update', True),
+        )
+
+        if args.rollback:
+            if mgr.has_rollback_available():
+                print("[*] Rolling back to previous version...")
+                if mgr.rollback():
+                    print("[+] Rollback successful. Please restart de4py.")
+                else:
+                    print("[!] Rollback failed.")
+            else:
+                print("[!] No backup available for rollback.")
+            return
+
+        release = mgr.check()
+        if release:
+            print(f"[+] Update available: {release.version}")
+            if release.changelog:
+                print(f"    Changelog: {release.changelog[:200]}...")
+            if args.update:
+                print("[*] Downloading and installing update...")
+                if mgr.download_and_install(release):
+                    print("[+] Update installed. Please restart de4py.")
+                else:
+                    print("[!] Update failed. Use --rollback if needed.")
+        else:
+            print(f"[+] You are running the latest version ({settings.version})")
+        return
+
     # For any other mode, check dependencies first
     check_dependencies()
     
@@ -103,7 +141,7 @@ def main():
     from PySide6.QtGui import QIcon
     from de4py.ui.main_window import MainWindow
     from de4py.utils import rpc, sentry, setup_logging
-    from de4py.utils import tui, update
+    from de4py.utils import tui
     import signal
     import msvcrt
     
@@ -122,15 +160,20 @@ def main():
 
     logging.info("Starting de4py")
 
-    # Check for updates
+    # Check for updates using UpdateManager
     try:
-        if update.check_update():
-            logging.info("You are using the latest version")
-        else:
-            logging.warning("There's a new version. Are you sure you want to use this version?")
-            tui.fade_type('Answer [y/n]\n')
+        from de4py.update_manager import UpdateManager
+        mgr = UpdateManager(
+            current_version=settings.version,
+            channel=getattr(settings, 'update_channel', 'stable'),
+            auto_update=getattr(settings, 'auto_update', True),
+        )
+        release = mgr.auto_check()
+        if release:
+            logging.warning(f"Update available: {release.version}")
+            tui.fade_type('A new version is available. Continue anyway? [y/n]\n')
             if input(">>> ").lower() not in ('y', 'yes'):
-                logging.warning("Download it from here: https://github.com/Fadi002/de4py")
+                logging.warning(f"Download it from here: https://github.com/Fadi002/de4py/releases")
                 logging.warning("Press any key to exit...")
                 if _IS_WINDOWS:
                     while True:
@@ -139,6 +182,8 @@ def main():
                             break
                 rpc.KILL_THREAD = True
                 sys.exit(0)
+        else:
+            logging.info("You are using the latest version")
     except Exception as e:
         logging.error(f"Failed to check for updates: {e}")
     # Handle Modes
