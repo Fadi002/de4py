@@ -158,6 +158,10 @@ def custom_error(exc_type, exc_value, exc_traceback):
         traceback_lines.append(f"  File '{filename}', line {line_num}, in {func_name}\n    {line_code}")
     print("\n".join(traceback_lines))
     print(f"{Fore.RED}=== End of Traceback ==={Style.RESET_ALL}")
+    from de4py.config.config import settings
+    if not getattr(settings, 'telemetry', True):
+        return
+
     try:
         import sentry_sdk
         sentry_sdk.capture_exception(exc_value)

@@ -14,7 +14,8 @@ import logging
 ENABLED = True
 
 def init():
-    if not ENABLED:
+    from de4py.config.config import settings
+    if not ENABLED or not getattr(settings, 'telemetry', True):
         return
     try:
         import sentry_sdk
@@ -31,7 +32,8 @@ def init():
 
 @contextmanager
 def transaction(name, op):
-    if not ENABLED:
+    from de4py.config.config import settings
+    if not ENABLED or not getattr(settings, 'telemetry', True):
         yield None
         return
     import sentry_sdk
@@ -40,7 +42,8 @@ def transaction(name, op):
 
 @contextmanager
 def span(op, description=None):
-    if not ENABLED:
+    from de4py.config.config import settings
+    if not ENABLED or not getattr(settings, 'telemetry', True):
         yield None
         return
     import sentry_sdk
@@ -48,7 +51,8 @@ def span(op, description=None):
         yield s
 
 def breadcrumb(msg, category="app", level="info", **data):
-    if ENABLED:
+    from de4py.config.config import settings
+    if ENABLED and getattr(settings, 'telemetry', True):
         import sentry_sdk
         sentry_sdk.add_breadcrumb(
             message=msg,
@@ -58,11 +62,13 @@ def breadcrumb(msg, category="app", level="info", **data):
         )
 
 def set_user_context(user_id=None, email=None, username=None):
-    if ENABLED:
+    from de4py.config.config import settings
+    if ENABLED and getattr(settings, 'telemetry', True):
         import sentry_sdk
         sentry_sdk.set_user({"id": user_id, "email": email, "username": username})
 
 def set_extra_context(key, value):
-    if ENABLED:
+    from de4py.config.config import settings
+    if ENABLED and getattr(settings, 'telemetry', True):
         import sentry_sdk
         sentry_sdk.set_context(key, value)
