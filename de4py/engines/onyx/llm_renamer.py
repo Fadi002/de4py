@@ -236,6 +236,7 @@ class LLMRenamer:
             response = requests.post(GENERATE_URL, json=payload, timeout=180)
             response.raise_for_status()
             raw = response.json().get("response", "")
+            breakpoint()
             fixed_code = self._extract_python(raw)
             if fixed_code and self._is_valid_python(fixed_code):
                 print("[LLM] Syntax successfully fixed by LLM")
