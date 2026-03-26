@@ -74,21 +74,11 @@ class TelemetryClient:
         traceback_str: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> bool:
-        """
-        Report an error to the telemetry system.
-        
-        Args:
-            source: Error source category ("core", "ui", "cli", "integration", "plugin")
-            source_name: Specific component name (e.g., "pylingual", "deobfuscator")
-            severity: Error severity ("info", "warning", "error", "critical")
-            error_type: Exception type name (e.g., "ValueError", "ConnectionError")
-            error_message: Human-readable error message
-            traceback_str: Optional full traceback string
-            context: Optional additional context (action, file_hash, extra data)
+        """Report an error to the telemetry system."""
+        # Respect user opt-out
+        if not getattr(settings, 'telemetry', True):
+            return False
             
-        Returns:
-            True if report was sent successfully, False otherwise
-        """
         # Validate inputs
         if source not in TELEMETRY_SOURCES:
             source = "core"
@@ -143,38 +133,11 @@ def report_error(
     traceback_str: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
 ) -> bool:
-    """
-    Convenience function to report an error using a shared client instance.
-    
-    This is the recommended way to report errors from anywhere in the application.
-    
-    Args:
-        source: Error source ("core", "ui", "cli", "integration", "plugin")
-        source_name: Component name (e.g., "pylingual")
-        severity: Severity level ("info", "warning", "error", "critical")
-        error_type: Exception type (e.g., "ValueError")
-        error_message: Error description
-        traceback_str: Optional traceback
-        context: Optional additional context
+    """Report an error using a shared client instance."""
+    # Respect user opt-out
+    if not getattr(settings, 'telemetry', True):
+        return False
         
-    Returns:
-        True if sent successfully, False otherwise
-        
-    Example:
-        from de4py.api import report_error
-        
-        try:
-            do_something()
-        except Exception as e:
-            report_error(
-                source="core",
-                source_name="analyzer",
-                severity="error",
-                error_type=type(e).__name__,
-                error_message=str(e),
-                traceback_str=traceback.format_exc(),
-            )
-    """
     global _default_client
     
     if _default_client is None:
