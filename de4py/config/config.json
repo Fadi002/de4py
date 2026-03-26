@@ -14,5 +14,6 @@
     "transparent_ui": true,
     "auto_update": true,
     "update_channel": "stable",
-    "last_update_check": null
+    "last_update_check": null,
+    "github_repo": "Fadi002/de4py"
 }
