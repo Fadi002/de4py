@@ -179,15 +179,11 @@ def main():
                     print(f"[*] Download it from: https://github.com/Fadi002/de4py/releases")
                     if _IS_WINDOWS:
                         print("[*] Press any key to exit...")
-                        import msvcrt
                         while True:
                             if msvcrt.kbhit():
                                 msvcrt.getch()
                                 break
                     sys.exit(0)
-            else:
-                # Silently log to console if up to date
-                print(f"[+] You are running the latest version ({settings.version})\n")
         except Exception as e:
             print(f"[!] Auto-update check failed: {e}")
 
