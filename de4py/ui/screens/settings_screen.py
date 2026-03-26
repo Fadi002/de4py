@@ -17,7 +17,7 @@ from de4py.lang import tr, translation_manager
 from de4py.lang.keys import (
     SCREEN_TITLE_SETTINGS, SETTINGS_LANGUAGE, SETTINGS_RPC,
     SETTINGS_STEALTH, SETTINGS_PLUGINS, SETTINGS_RESTART_NOTE,
-    SETTINGS_TRANSPARENT_UI
+    SETTINGS_TRANSPARENT_UI, SETTINGS_AUTO_UPDATE, SETTINGS_UPDATE_CHANNEL
 )
 
 
@@ -35,7 +35,7 @@ class SettingsScreen(QWidget):
         
         frame = QFrame()
         frame.setObjectName("StyledFrame")
-        frame.setFixedSize(400, 300)
+        frame.setFixedSize(400, 380)
         
         frame_layout = QVBoxLayout(frame)
         frame_layout.setSpacing(15)
@@ -80,6 +80,25 @@ class SettingsScreen(QWidget):
         self.transparent_checkbox = QCheckBox(tr(SETTINGS_TRANSPARENT_UI))
         self.transparent_checkbox.stateChanged.connect(self._on_transparent_ui_changed)
         frame_layout.addWidget(self.transparent_checkbox)
+
+        # ── Update Settings ──────────────────────────────────────────
+        self.auto_update_checkbox = QCheckBox(tr(SETTINGS_AUTO_UPDATE))
+        self.auto_update_checkbox.stateChanged.connect(lambda s: self._update_config("auto_update", s == 2))
+        frame_layout.addWidget(self.auto_update_checkbox)
+
+        # Update Channel Selector
+        channel_layout = QHBoxLayout()
+        self.channel_label = QLabel(tr(SETTINGS_UPDATE_CHANNEL))
+        channel_layout.addWidget(self.channel_label)
+
+        self.channel_combo = QComboBox()
+        self.channel_combo.setObjectName("UpdateChannelSelector")
+        self.channel_combo.addItem("Stable", "stable")
+        self.channel_combo.addItem("Beta", "beta")
+        self.channel_combo.addItem("Dev", "dev")
+        self.channel_combo.currentIndexChanged.connect(self._change_update_channel)
+        channel_layout.addWidget(self.channel_combo)
+        frame_layout.addLayout(channel_layout)
         
         frame_layout.addStretch()
         
@@ -95,6 +114,11 @@ class SettingsScreen(QWidget):
             self._update_config("language", lang_code)
             translation_manager.set_language(lang_code)
 
+    def _change_update_channel(self, index):
+        channel = self.channel_combo.currentData()
+        if channel:
+            self._update_config("update_channel", channel)
+
     def retranslate_ui(self):
         """Update UI texts when language changes."""
         self.title_label.setText(tr(SCREEN_TITLE_SETTINGS))
@@ -103,6 +127,8 @@ class SettingsScreen(QWidget):
         self.stealth_checkbox.setText(tr(SETTINGS_STEALTH))
         self.plugins_checkbox.setText(tr(SETTINGS_PLUGINS))
         self.transparent_checkbox.setText(tr(SETTINGS_TRANSPARENT_UI))
+        self.auto_update_checkbox.setText(tr(SETTINGS_AUTO_UPDATE))
+        self.channel_label.setText(tr(SETTINGS_UPDATE_CHANNEL))
         self.note_label.setText(tr(SETTINGS_RESTART_NOTE))
 
     def _load_config(self):
@@ -111,17 +137,26 @@ class SettingsScreen(QWidget):
             self.stealth_checkbox.setChecked(settings.stealth_title)
             self.plugins_checkbox.setChecked(settings.load_plugins)
             self.transparent_checkbox.setChecked(settings.transparent_ui)
+            self.auto_update_checkbox.setChecked(getattr(settings, 'auto_update', True))
             
-            # Update combo box if setting changed externally
+            # Update language combo box
             idx = self.lang_combo.findData(settings.language)
             if idx >= 0 and idx != self.lang_combo.currentIndex():
                 self.lang_combo.blockSignals(True)
                 self.lang_combo.setCurrentIndex(idx)
                 self.lang_combo.blockSignals(False)
+
+            # Update channel combo box
+            channel = getattr(settings, 'update_channel', 'stable')
+            ch_idx = self.channel_combo.findData(channel)
+            if ch_idx >= 0 and ch_idx != self.channel_combo.currentIndex():
+                self.channel_combo.blockSignals(True)
+                self.channel_combo.setCurrentIndex(ch_idx)
+                self.channel_combo.blockSignals(False)
         except Exception:
             pass
 
-    def _update_config(self, key: str, value: bool):
+    def _update_config(self, key: str, value):
         try:
             if hasattr(settings, key):
                 setattr(settings, key, value)

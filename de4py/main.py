@@ -15,6 +15,9 @@ import argparse
 from de4py.config.config import settings
 __version__ = settings.version
 
+# Module-level store for the default QSS stylesheet
+DEFAULT_QSS = ""
+
 def check_dependencies():
     """Verify that all required libraries are installed."""
     REQUIRED_LIBS = {
@@ -49,6 +52,7 @@ def check_dependencies():
 
 def load_stylesheet(app):
     """Loads the dark theme QSS stylesheet."""
+    global DEFAULT_QSS
     from PySide6.QtCore import QFile, QTextStream
     theme_path = os.path.join(os.path.dirname(__file__), "ui", "themes", "dark_theme.qss")
     if os.path.exists(theme_path):
@@ -58,6 +62,7 @@ def load_stylesheet(app):
             qss = stream.readAll()
             app.setStyleSheet(qss)
             file.close()
+            DEFAULT_QSS = qss
             return qss
     return ""
 
@@ -160,32 +165,6 @@ def main():
 
     logging.info("Starting de4py")
 
-    # Check for updates using UpdateManager
-    try:
-        from de4py.update_manager import UpdateManager
-        mgr = UpdateManager(
-            current_version=settings.version,
-            channel=getattr(settings, 'update_channel', 'stable'),
-            auto_update=getattr(settings, 'auto_update', True),
-        )
-        release = mgr.auto_check()
-        if release:
-            logging.warning(f"Update available: {release.version}")
-            tui.fade_type('A new version is available. Continue anyway? [y/n]\n')
-            if input(">>> ").lower() not in ('y', 'yes'):
-                logging.warning(f"Download it from here: https://github.com/Fadi002/de4py/releases")
-                logging.warning("Press any key to exit...")
-                if _IS_WINDOWS:
-                    while True:
-                        if msvcrt.kbhit():
-                            msvcrt.getch()
-                            break
-                rpc.KILL_THREAD = True
-                sys.exit(0)
-        else:
-            logging.info("You are using the latest version")
-    except Exception as e:
-        logging.error(f"Failed to check for updates: {e}")
     # Handle Modes
     if args.test:
         with sentry.transaction("Test Session", "app.test"):

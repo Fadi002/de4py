@@ -19,7 +19,6 @@ import os
 from datetime import datetime, timezone
 from typing import Optional, Callable
 
-from .config import GITHUB_REPO, RAW_VERSION_URL, API_TIMEOUT, DOWNLOAD_TIMEOUT
 from .versioning import parse_version, is_newer, format_version_info
 from .github_api import (
     get_latest_release,
@@ -52,16 +51,21 @@ class UpdateManager:
     def __init__(
         self,
         current_version: str,
-        repo: str = GITHUB_REPO,
+        repo: Optional[str] = None,
         channel: str = "stable",
         auto_update: bool = True,
         base_dir: Optional[str] = None,
     ):
+        from de4py.config.config import settings
         self.current_version = current_version
-        self.repo = repo
+        self.repo = repo or getattr(settings, "github_repo", "Fadi002/de4py")
         self.channel = channel
         self.auto_update_enabled = auto_update
         self.base_dir = base_dir
+
+        from de4py.config.config import settings
+        self.api_timeout = getattr(settings, "api_timeout", 7)
+        self.download_timeout = getattr(settings, "download_timeout", 30)
 
     # ── Check ────────────────────────────────────────────────────────
 
@@ -80,14 +84,15 @@ class UpdateManager:
         # Primary: GitHub Releases API
         try:
             release = get_latest_release(
-                self.repo, channel=self.channel, timeout=API_TIMEOUT
+                self.repo, channel=self.channel, timeout=self.api_timeout
             )
         except GitHubAPIError:
             logger.info("Releases API unavailable, trying fallback...")
 
         # Fallback: raw version file
         if release is None:
-            raw_version = get_latest_version_raw(RAW_VERSION_URL, timeout=API_TIMEOUT)
+            from de4py.config.config import settings
+            raw_version = get_latest_version_raw(settings.version_url, timeout=self.api_timeout)
             if raw_version:
                 release = ReleaseInfo(version=raw_version.lstrip("Vv"))
 
@@ -132,7 +137,7 @@ class UpdateManager:
                 release.download_url,
                 dest,
                 progress_callback=progress_callback,
-                timeout=DOWNLOAD_TIMEOUT,
+                timeout=self.download_timeout,
             )
 
             # 2. Verify integrity (if SHA256 is available)
