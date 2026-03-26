@@ -1,5 +1,5 @@
 {
-    "version": "V3.1.0",
+    "version": "V3.1.1",
     "changelog_url": "https://raw.githubusercontent.com/Fadi002/de4py/main/INFO/changelog.json",
     "version_url": "https://raw.githubusercontent.com/Fadi002/de4py/main/INFO/version",
     "rpc": true,
