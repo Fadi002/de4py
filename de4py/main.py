@@ -111,7 +111,7 @@ def main():
             auto_update=settings.auto_update
         )
 
-    # 1. Handle explicit CLI update commands
+    # 1. Handle explicit CLI update commands (e.g. --update-check)
     if mgr and (args.update_check or args.update or args.rollback):
         if args.rollback:
             if mgr.has_rollback_available():
@@ -139,30 +139,6 @@ def main():
             print(f"[+] You are running the latest version ({settings.version})")
         return
 
-    # 2. Handle auto-update check (Startup)
-    if mgr and settings.auto_update and not any([args.test, args.cli]):
-        try:
-            release = mgr.auto_check()
-            if release:
-                print(f"\n[!] UPDATE AVAILABLE: {release.version}")
-                print("[?] A new version is available. Continue anyway? [y/n]")
-                choice = input(">>> ").lower()
-                if choice not in ('y', 'yes'):
-                    print(f"[*] Download it from: https://github.com/Fadi002/de4py/releases")
-                    if sys.platform == "win32":
-                        print("[*] Press any key to exit...")
-                        import msvcrt
-                        while True:
-                            if msvcrt.kbhit():
-                                msvcrt.getch()
-                                break
-                    sys.exit(0)
-            else:
-                # Silently log to console if up to date
-                print(f"[*] Version check: {settings.version} (Latest)")
-        except Exception as e:
-            print(f"[!] Auto-update check failed: {e}")
-
     # For any other mode, check dependencies first
     check_dependencies()
     
@@ -189,10 +165,33 @@ def main():
     tui.clear_console()
     print(tui.__BANNER__)
 
-
     logging.info("Starting de4py")
 
-    # Handle Modes
+    # 2. Handle auto-update check (Startup flow)
+    if mgr and settings.auto_update and not any([args.test, args.cli]):
+        try:
+            release = mgr.auto_check()
+            if release:
+                print(f"\n[!] UPDATE AVAILABLE: {release.version}")
+                print("[?] A new version is available. Continue anyway? [y/n]")
+                choice = input(">>> ").lower()
+                if choice not in ('y', 'yes'):
+                    print(f"[*] Download it from: https://github.com/Fadi002/de4py/releases")
+                    if _IS_WINDOWS:
+                        print("[*] Press any key to exit...")
+                        import msvcrt
+                        while True:
+                            if msvcrt.kbhit():
+                                msvcrt.getch()
+                                break
+                    sys.exit(0)
+            else:
+                # Silently log to console if up to date
+                print(f"[+] You are running the latest version ({settings.version})\n")
+        except Exception as e:
+            print(f"[!] Auto-update check failed: {e}")
+
+    # 3. Mode Steering (Test / CLI / GUI)
     if args.test:
         with sentry.transaction("Test Session", "app.test"):
             logging.info("Starting in Test mode...")
