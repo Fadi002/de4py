@@ -8,14 +8,12 @@
 # See the LICENSE file for details.
 
 """
-Main deobfuscation pipeline that orchestrates various static and LLM-based
-deobfuscation stages in a convergence loop.
+Main deobfuscation pipeline — Onyx engine.
 """
 
 import subprocess
 import shutil
 import psutil
-import textwrap
 from typing import Optional
 
 from de4py.engines.onyx.triage import TriageEngine, TriageResult
@@ -25,6 +23,7 @@ from de4py.engines.onyx.ast_cleaner import ASTCleaner
 from de4py.engines.onyx.flow_deobfuscator import FlowDeobfuscator
 from de4py.engines.onyx.match_case_deobfuscator import MatchCaseDeobfuscator
 from de4py.engines.onyx.lambda_normalizer import LambdaChainDeobfuscator
+from de4py.engines.onyx.proxy_cleaner import ProxyCleaner
 from de4py.engines.onyx.vm_lifter import VMLifter
 from de4py.engines.onyx.rule_renamer import RuleRenamer
 from de4py.engines.onyx.formatter import Formatter
@@ -56,11 +55,11 @@ class Pipeline:
         self.use_llm       = use_llm
         self.annotate      = annotate
         self.llm_threshold = llm_threshold
+        self.llm_config    = self._get_llm_config()
 
-        self.llm_config = self._get_llm_config()
         if self.use_llm:
-            tier, ram_gb, vram_gb = (self.llm_config[k] for k in ("tier","ram_gb","vram_gb"))
-            print(f"[Pipeline] HW Tier: {tier} (RAM:{ram_gb}GB VRAM:{vram_gb}GB)")
+            t, r, v = (self.llm_config[k] for k in ("tier","ram_gb","vram_gb"))
+            print(f"[Pipeline] HW Tier: {t} (RAM:{r}GB VRAM:{v}GB)")
             if self.llm_config["num_gpu"] == 0:
                 print("[Pipeline] CPU-only mode (num_gpu=0)")
 
@@ -71,6 +70,7 @@ class Pipeline:
         self.flow      = FlowDeobfuscator()
         self.match_sm  = MatchCaseDeobfuscator()
         self.lambda_n  = LambdaChainDeobfuscator()
+        self.proxy     = ProxyCleaner()
         self.vm_lifter = VMLifter()
         self.renamer   = RuleRenamer()
         self.formatter = Formatter()
@@ -83,20 +83,19 @@ class Pipeline:
         self.validator = Validator()
 
     def _get_llm_config(self) -> dict:
-        ram_gb  = round(psutil.virtual_memory().total / (1024 ** 3))
+        ram_gb = round(psutil.virtual_memory().total / (1024**3))
         vram_gb = 0
         try:
             if shutil.which("nvidia-smi"):
                 out = subprocess.check_output(
-                    ["nvidia-smi","--query-gpu=memory.total","--format=csv,noheader,nounits"],
-                    text=True)
+                    ["nvidia-smi","--query-gpu=memory.total","--format=csv,noheader,nounits"],text=True)
                 lines = [l.strip() for l in out.split("\n") if l.strip().isdigit()]
-                if lines: vram_gb = round(int(lines[0]) / 1024)
+                if lines: vram_gb = round(int(lines[0])/1024)
         except Exception:
             pass
-        if vram_gb < 2 or ram_gb < 8:   tier, ctx, batch = "Low",  512,  128
-        elif vram_gb < 4 or ram_gb < 16: tier, ctx, batch = "Mid",  1024, 256
-        else:                             tier, ctx, batch = "High", 4096, 512
+        if   vram_gb < 2 or ram_gb < 8:   tier,ctx,batch = "Low",  512, 128
+        elif vram_gb < 4 or ram_gb < 16:  tier,ctx,batch = "Mid",  1024,256
+        else:                              tier,ctx,batch = "High", 4096,512
         return {"tier":tier,"ram_gb":ram_gb,"vram_gb":vram_gb,
                 "num_ctx":ctx,"num_batch":batch,"num_gpu":0 if vram_gb<4 else -1}
 
@@ -106,7 +105,7 @@ class Pipeline:
         current         = source
         log             = []
 
-        # --- 0: Decompile .pyc ------------------------------------------------
+        # ── 0: Decompile .pyc ─────────────────────────────────────────────────
         if filename.endswith(".pyc"):
             print("[Pipeline] Decompiling .pyc...")
             try:
@@ -115,14 +114,14 @@ class Pipeline:
             except Exception as e:
                 log.append(f"decompiler_failed:{e}")
 
-        # --- 1: Triage --------------------------------------------------------
+        # ── 1: Triage ─────────────────────────────────────────────────────────
         print("[Pipeline] Triage...")
         triage = self.triage.analyze(current, filename)
         result.triage = triage
         log.append(f"triage:score={triage.score:.1f}:route={triage.route}")
-        print(f"[Pipeline] Score={triage.score:.1f}/10.0 Route={triage.route}")
+        print(f"[Pipeline] Score={triage.score:.1f}/10.0  Route={triage.route}")
 
-        # --- 2: VM Lifter -----------------------------------------------------
+        # ── 2: VM Lifter ──────────────────────────────────────────────────────
         if self.vm_lifter._has_vm_class_source(current):
             print("[Pipeline] VM bytecode detected — lifting...")
             prev = current
@@ -136,18 +135,33 @@ class Pipeline:
                 log.append(f"vm_lifter_failed:{e}")
                 print(f"[Pipeline] VM lifter error: {e}")
 
-        # --- 3: Multi-pass convergence loop -----------------------------------
-        print("[Pipeline] Starting convergence loop...")
-        for pass_num in range(1, 9):
-            changed = False
+        # ── 3: Pre-pass: state machine linearization on raw source ──────────────
+        # MUST run before any alias/constant folding — flow_deobfuscator inlines
+        # the state variable as a constant which prevents the simulator from tracing.
+        print("[Pipeline] Pre-pass: state machine linearization...")
+        prev = current
+        try:
+            current = self.match_sm.deobfuscate(current)
+            if current != prev:
+                log.append("match_sm_prepass")
+                print(f"[Pipeline] SM pre-pass: {_diff(prev, current)}")
+        except Exception as e:
+            current = prev
+            log.append(f"match_sm_prepass_failed:{e}")
 
-            for name, fn in [
+        # ── 4: Convergence loop ───────────────────────────────────────────────
+        print("[Pipeline] Starting convergence loop...")
+        for pass_num in range(1, 10):
+            changed = False
+            stages = [
+                ("proxy_cleaner",   lambda s: self.proxy.deobfuscate(s)),
                 ("string_decoder",  lambda s: self.decoder.decode_all(s)),
                 ("ast_cleaner",     lambda s: self.cleaner.clean(s)),
                 ("lambda_norm",     lambda s: self.lambda_n.deobfuscate(s)),
                 ("match_sm",        lambda s: self.match_sm.deobfuscate(s)),
                 ("flow_deobf",      lambda s: self.flow.deobfuscate(s)),
-            ]:
+            ]
+            for name, fn in stages:
                 prev = current
                 try:
                     current = fn(current)
@@ -158,12 +172,13 @@ class Pipeline:
                 except Exception as e:
                     current = prev
                     log.append(f"{name}_failed:{e}")
+                    print(f"[Pipeline]  Pass {pass_num} {name} error: {e}")
 
             if not changed:
                 print(f"[Pipeline] Converged at pass {pass_num}")
                 break
 
-        # --- 4: Rule rename ---------------------------------------------------
+        # ── 5: Rule rename ────────────────────────────────────────────────────
         if triage.route in ("rule_rename", "llm_rename"):
             prev = current
             try:
@@ -175,7 +190,7 @@ class Pipeline:
                 current = prev
                 log.append(f"rule_renamer_failed:{e}")
 
-        # --- 5: LLM rename ----------------------------------------------------
+        # ── 6: LLM rename ─────────────────────────────────────────────────────
         if (self.use_llm and self.llm is not None
                 and triage.route == "llm_rename"
                 and triage.score >= self.llm_threshold):
@@ -184,11 +199,12 @@ class Pipeline:
                 current = self.llm.process_file(current, annotate=self.annotate)
                 if current != prev:
                     log.append("llm_renamer")
+                    print("[Pipeline] LLM renaming complete")
             except Exception as e:
                 current = prev
                 log.append(f"llm_renamer_failed:{e}")
 
-        # --- 6: Final AST clean -----------------------------------------------
+        # ── 7: Final AST clean ────────────────────────────────────────────────
         prev = current
         try:
             current = self.cleaner.clean(current)
@@ -197,37 +213,43 @@ class Pipeline:
         except Exception:
             current = prev
 
-        # --- 7: Format --------------------------------------------------------
+        # ── 8: Format ─────────────────────────────────────────────────────────
         print("[Pipeline] Formatting...")
         prev = current
         try:
             current = self.formatter.format(current)
-            if current != prev: log.append("formatter")
+            if current != prev:
+                log.append("formatter")
         except Exception as e:
             current = prev
             log.append(f"formatter_failed:{e}")
 
-        # --- 8: Validate ------------------------------------------------------
+        # ── 9: Validate ───────────────────────────────────────────────────────
         print("[Pipeline] Validating...")
         validation = self.validator.validate(source, current)
-        
+
+        # LLM syntax fix attempt
         if not validation.syntax_ok and self.use_llm and self.llm is not None:
-            print(f"[Pipeline] FAILED: {validation.error}")
-            print("[Pipeline] Attempting LLM syntax correction...")
-            fixed = self.llm.fix_syntax(current, validation.error)
-            if fixed and self.validator.check_syntax_only(fixed)[0]:
-                print("[Pipeline] Correction successful!")
-                current = fixed
-                validation = self.validator.validate(source, current)
-                log.append("syntax_fixed_by_llm")
-            else:
-                print("[Pipeline] Correction failed.")
+            print(f"[Pipeline] Syntax error: {validation.error}")
+            print("[Pipeline] Attempting LLM syntax fix...")
+            try:
+                fixed = self.llm.fix_syntax(current, validation.error)
+                breakpoint()
+                if fixed and self.validator.check_syntax_only(fixed)[0]:
+                    print("[Pipeline] Syntax fix succeeded!")
+                    current = fixed
+                    validation = self.validator.validate(source, current)
+                    log.append("syntax_fixed_by_llm")
+                else:
+                    print("[Pipeline] Syntax fix failed.")
+            except Exception as e:
+                print(f"[Pipeline] LLM syntax fix error: {e}")
 
         result.validation = validation
-        
+
         if not validation.syntax_ok:
             log.append("validation_failed:kept_broken")
-            print("[Pipeline] WARNING: Syntax error remains. Returning broken code.")
+            print("[Pipeline] WARNING: Syntax error remains. Returning best-effort result.")
         else:
             print("[Pipeline] PASSED")
             for w in (validation.warnings or []):
@@ -239,7 +261,6 @@ class Pipeline:
 
 
 def _diff(before: str, after: str) -> str:
-    """Calculate character difference and reduction percentage."""
     d = len(before) - len(after)
     p = abs(d) / max(len(before), 1) * 100
     return f"{'↓' if d>0 else '↑'}{abs(d)} chars ({p:.1f}%)"

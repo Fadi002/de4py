@@ -40,6 +40,7 @@ class FlowDeobfuscator:
             tree = self._remove_bogus_try_except(tree)
             tree = self._fold_redundant_var_chains(tree)
             tree = self._resolve_getattr_string_calls(tree)
+            tree = self._inline_const_functions(tree)
 
             ast.fix_missing_locations(tree)
             after = ast.unparse(tree)
@@ -349,6 +350,21 @@ class FlowDeobfuscator:
         return tree
 
 
+    def _inline_const_functions(self, tree: ast.Module) -> ast.Module:
+        """
+        Inline zero-arg constant functions:
+          def foo(): return 42
+          x = foo() + foo()  →  x = 42 + 42
+        Then remove the (now-unused) function definitions.
+        """
+        inliner = _ConstFnInliner()
+        inliner.collect(tree)
+        if not inliner.fn_values:
+            return tree
+        tree = inliner.visit(tree)
+        tree = inliner.remove_defs(tree)
+        return tree
+
 # --- Helpers ------------------------------------------------------------------
 
 _SAFE_NODE_TYPES = (
@@ -383,3 +399,41 @@ def _is_safe_block(stmts: List[ast.stmt]) -> bool:
             if isinstance(node, (ast.Raise, ast.Assert)):
                 return False
     return True
+
+
+# ─── Zero-arg constant function inliner ─────────────────────────────────────
+
+class _ConstFnInliner(ast.NodeTransformer):
+    """
+    Collect module-level functions that take no args and return a single constant.
+    Inline all calls to those functions with their return value, then remove the defs.
+    """
+
+    def __init__(self):
+        self.fn_values: Dict[str, Any] = {}
+
+    def collect(self, tree: ast.Module) -> None:
+        for node in tree.body:
+            if (isinstance(node, ast.FunctionDef)
+                    and not node.args.args
+                    and not node.args.vararg
+                    and not node.args.kwonlyargs
+                    and len(node.body) == 1
+                    and isinstance(node.body[0], ast.Return)
+                    and isinstance(node.body[0].value, ast.Constant)):
+                self.fn_values[node.name] = node.body[0].value.value
+
+    def visit_Call(self, node: ast.Call) -> ast.expr:
+        self.generic_visit(node)
+        if (isinstance(node.func, ast.Name)
+                and node.func.id in self.fn_values
+                and not node.args and not node.keywords):
+            return ast.Constant(value=self.fn_values[node.func.id])
+        return node
+
+    def remove_defs(self, tree: ast.Module) -> ast.Module:
+        tree.body = [
+            n for n in tree.body
+            if not (isinstance(n, ast.FunctionDef) and n.name in self.fn_values)
+        ]
+        return tree
