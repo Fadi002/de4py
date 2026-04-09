@@ -16,7 +16,9 @@ import shutil
 import sys
 import time
 import psutil
-from typing import Optional
+import threading
+import gc
+from typing import Optional, Callable
 
 from de4py.engines.onyx.triage import TriageEngine, TriageResult
 from de4py.engines.onyx.decompiler import Decompiler
@@ -106,21 +108,12 @@ class Pipeline:
         result.original = source
         current         = source
         log             = []
+        return self._run_inner(result, current, log, source, filename)
 
-        # Bump recursion limit for deeply-nested ASTs; restore on exit
-        _old_limit = sys.getrecursionlimit()
-        try:
-            sys.setrecursionlimit(max(_old_limit, 9999999999999999999))
-        except Exception:
-            pass
-
-        try:
-            return self._run_inner(result, current, log, source, filename)
-        finally:
-            try:
-                sys.setrecursionlimit(_old_limit)
-            except Exception:
-                pass
+    def _run_stage(self, name: str, fn: Callable[[str], str], source: str) -> str:
+        if name not in _THREADED_STAGE_NAMES:
+            return fn(source)
+        return _run_source_transform_in_thread(name, fn, source)
 
     def _run_inner(self, result: 'PipelineResult', current: str, log: list,
                    source: str, filename: str) -> 'PipelineResult':
@@ -172,7 +165,7 @@ class Pipeline:
         print("[Pipeline] Pre-pass: state machine linearization...")
         prev = current
         try:
-            current = self.match_sm.deobfuscate(current)
+            current = self._run_stage("match_sm_prepass", self.match_sm.deobfuscate, current)
         except Exception as e:
             current = prev
             log.append(f"match_sm_prepass_failed:{e}")
@@ -197,7 +190,7 @@ class Pipeline:
             for name, fn in stages:
                 prev = current
                 try:
-                    current = fn(current)
+                    current = self._run_stage(name, fn, current)
                 except Exception as e:
                     current = prev
                     log.append(f"{name}_failed:{e}")
@@ -243,7 +236,7 @@ class Pipeline:
         # ── 7: Final AST clean ────────────────────────────────────────────────
         prev = current
         try:
-            current = self.cleaner.clean(current)
+            current = self._run_stage("ast_cleaner_final", self.cleaner.clean, current)
             if current != prev:
                 log.append("ast_cleaner_final")
         except Exception:
@@ -307,6 +300,63 @@ class Pipeline:
         result.cleaned = current
         result.log     = log
         return result
+
+
+
+class _StageThreadError(RuntimeError):
+    """Raised when a threaded stage fails inside the worker thread."""
+
+
+_THREADED_STAGE_NAMES = {
+    "match_sm_prepass",
+    "ast_cleaner",
+    "match_sm",
+    "proxy_cleaner",
+    "string_decoder",
+    "lambda_norm",
+    "flow_deobf",
+    "ast_cleaner2",
+    "ast_cleaner_final",
+}
+
+_STAGE_THREAD_STACK_BYTES = 64 * 1024 * 1024
+
+
+def _run_source_transform_in_thread(name: str, fn: Callable[[str], str], source: str) -> str:
+    result_box = {"value": source, "error": None}
+
+    def _worker() -> None:
+        try:
+            result_box["value"] = fn(source)
+        except Exception as exc:
+            result_box["error"] = exc
+
+    old_stack = None
+    stack_applied = False
+    try:
+        try:
+            old_stack = threading.stack_size()
+            threading.stack_size(_STAGE_THREAD_STACK_BYTES)
+            stack_applied = True
+        except (ValueError, RuntimeError):
+            old_stack = None
+            stack_applied = False
+
+        thread = threading.Thread(target=_worker, name=f"onyx-{name}", daemon=True)
+        thread.start()
+        thread.join()
+
+        if result_box["error"] is not None:
+            raise _StageThreadError(f"{name} worker failed: {result_box['error']}")
+
+        return result_box["value"]
+    finally:
+        if stack_applied and old_stack is not None:
+            try:
+                threading.stack_size(old_stack)
+            except (ValueError, RuntimeError):
+                pass
+        gc.collect()
 
 
 def _log(msg: str) -> None:

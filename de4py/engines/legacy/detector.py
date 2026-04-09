@@ -8,7 +8,6 @@
 # See the LICENSE file for details.
 
 import re
-import traceback
 
 # Lazy wrappers to avoid importing all engines at startup
 
@@ -50,7 +49,7 @@ obfuscators = [
     ("wodx", re.compile(r'(?:__NO_NO){23}'), run_wodx),
     ("BlankOBF", re.compile(r"import\s*base64,\s*lzma;\s*exec\(compile\(lzma\.decompress\(base64\.b64decode\(b'([A-Za-z0-9+/=]+)'\)\)\s*,\s*\"<string>\"\s*,\s*\"exec\"\)\)"), run_BlankOBF),
     ("Hyperion", re.compile(r'__obfuscator__\s*=\s*[\'\"]\s*Hyperion\s*[\'\"]'), run_Hyperion),
-    ('jawbreaker', re.compile(r'([a-zA-Z_]\w{3})\s*=\s*([^;]+);'), run_jawbreaker),
+    #('jawbreaker', re.compile(r'([a-zA-Z_]\w{3})\s*=\s*([^;]+);'), run_jawbreaker),
     ('freecodingtools', re.compile(r"^_\s*=\s*lambda\s+__\s*:\s*__import__\('zlib'\)\.decompress\(__import__\('base64'\)\.b64decode\(__\[::-1]\)\);exec\(\(\_\)"), run_freecodingtools),
     ('devtool', re.compile(r'\b(magic|love|god|destiny|joy|trust)\b'), run_devtool)
 ]
