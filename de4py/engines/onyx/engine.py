@@ -9,7 +9,6 @@
 
 import os
 import sys
-import traceback
 from de4py.core.interfaces import Deobfuscator
 from de4py.engines.onyx.pipeline import Pipeline
 
@@ -75,9 +74,7 @@ class OnyxAlpha(Deobfuscator):
         except KeyboardInterrupt:
             raise  # let the user cancel
         except Exception as e:
-            tb = traceback.format_exc()
             print(f"[Onyx] FATAL: Unhandled pipeline error: {e}")
-            print(tb)
             return (
                 f"# de4py Onyx-Alpha: Internal error\n"
                 f"# {type(e).__name__}: {e}\n"
