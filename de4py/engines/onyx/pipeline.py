@@ -13,6 +13,8 @@ Main deobfuscation pipeline — Onyx engine.
 
 import subprocess
 import shutil
+import sys
+import time
 import psutil
 from typing import Optional
 
@@ -105,9 +107,27 @@ class Pipeline:
         current         = source
         log             = []
 
+        # Bump recursion limit for deeply-nested ASTs; restore on exit
+        _old_limit = sys.getrecursionlimit()
+        try:
+            sys.setrecursionlimit(max(_old_limit, 9999999999999999999))
+        except Exception:
+            pass
+
+        try:
+            return self._run_inner(result, current, log, source, filename)
+        finally:
+            try:
+                sys.setrecursionlimit(_old_limit)
+            except Exception:
+                pass
+
+    def _run_inner(self, result: 'PipelineResult', current: str, log: list,
+                   source: str, filename: str) -> 'PipelineResult':
+
         # ── 0: Decompile .pyc ─────────────────────────────────────────────────
         if filename.endswith(".pyc"):
-            print("[Pipeline] Decompiling .pyc...")
+            _log("[Pipeline] Decompiling .pyc...")
             try:
                 current = self.decompiler.decompile(filename)
                 log.append("decompiler")
@@ -115,25 +135,36 @@ class Pipeline:
                 log.append(f"decompiler_failed:{e}")
 
         # ── 1: Triage ─────────────────────────────────────────────────────────
-        print("[Pipeline] Triage...")
-        triage = self.triage.analyze(current, filename)
+        _log("[Pipeline] Triage...")
+        try:
+            triage = self.triage.analyze(current, filename)
+        except Exception as e:
+            _log(f"[Pipeline] Triage crashed: {e} — using defaults")
+            from de4py.engines.onyx.triage import TriageResult
+            triage = TriageResult(score=5.0, route="rule_rename",
+                                 flags=[f"triage_crash:{e}"])
         result.triage = triage
         log.append(f"triage:score={triage.score:.1f}:route={triage.route}")
-        print(f"[Pipeline] Score={triage.score:.1f}/10.0  Route={triage.route}")
+        _log(f"[Pipeline] Score={triage.score:.1f}/10.0  Route={triage.route}")
 
         # ── 2: VM Lifter ──────────────────────────────────────────────────────
-        if self.vm_lifter._has_vm_class_source(current):
+        try:
+            has_vm = self.vm_lifter._has_vm_class_source(current)
+        except Exception:
+            has_vm = False
+        if has_vm:
             print("[Pipeline] VM bytecode detected — lifting...")
             prev = current
             try:
                 lifted = self.vm_lifter.deobfuscate(current)
+            except Exception as e:
+                log.append(f"vm_lifter_failed:{e}")
+                _log(f"[Pipeline] VM lifter error: {e}")
+            else:
                 if lifted != prev:
                     current = lifted
                     log.append("vm_lifter")
-                    print(f"[Pipeline] VM lift: {_diff(prev, current)}")
-            except Exception as e:
-                log.append(f"vm_lifter_failed:{e}")
-                print(f"[Pipeline] VM lifter error: {e}")
+                    _log(f"[Pipeline] VM lift: {_diff(prev, current)}")
 
         # ── 3: Pre-pass: state machine linearization on raw source ──────────────
         # MUST run before any alias/constant folding — flow_deobfuscator inlines
@@ -142,40 +173,43 @@ class Pipeline:
         prev = current
         try:
             current = self.match_sm.deobfuscate(current)
-            if current != prev:
-                log.append("match_sm_prepass")
-                print(f"[Pipeline] SM pre-pass: {_diff(prev, current)}")
         except Exception as e:
             current = prev
             log.append(f"match_sm_prepass_failed:{e}")
+        else:
+            if current != prev:
+                log.append("match_sm_prepass")
+                _log(f"[Pipeline] SM pre-pass: {_diff(prev, current)}")
 
         # ── 4: Convergence loop ───────────────────────────────────────────────
         print("[Pipeline] Starting convergence loop...")
         for pass_num in range(1, 10):
             changed = False
             stages = [
+                ("ast_cleaner",     lambda s: self.cleaner.clean(s)),   # state-machine linearize first
+                ("match_sm",        lambda s: self.match_sm.deobfuscate(s)),
                 ("proxy_cleaner",   lambda s: self.proxy.deobfuscate(s)),
                 ("string_decoder",  lambda s: self.decoder.decode_all(s)),
-                ("ast_cleaner",     lambda s: self.cleaner.clean(s)),
                 ("lambda_norm",     lambda s: self.lambda_n.deobfuscate(s)),
-                ("match_sm",        lambda s: self.match_sm.deobfuscate(s)),
                 ("flow_deobf",      lambda s: self.flow.deobfuscate(s)),
+                ("ast_cleaner2",    lambda s: self.cleaner.clean(s)),   # clean up after flow
             ]
             for name, fn in stages:
                 prev = current
                 try:
                     current = fn(current)
-                    if current != prev:
-                        log.append(f"pass{pass_num}:{name}")
-                        changed = True
-                        print(f"[Pipeline]  Pass {pass_num} {name}: {_diff(prev, current)}")
                 except Exception as e:
                     current = prev
                     log.append(f"{name}_failed:{e}")
-                    print(f"[Pipeline]  Pass {pass_num} {name} error: {e}")
+                    _log(f"[Pipeline]  Pass {pass_num} {name} error: {e}")
+                else:
+                    if current != prev:
+                        log.append(f"pass{pass_num}:{name}")
+                        changed = True
+                        _log(f"[Pipeline]  Pass {pass_num} {name}: {_diff(prev, current)}")
 
             if not changed:
-                print(f"[Pipeline] Converged at pass {pass_num}")
+                _log(f"[Pipeline] Converged at pass {pass_num}")
                 break
 
         # ── 5: Rule rename ────────────────────────────────────────────────────
@@ -183,12 +217,13 @@ class Pipeline:
             prev = current
             try:
                 current = self.renamer.rename(current)
-                if current != prev:
-                    log.append("rule_renamer")
-                    print(f"[Pipeline] Rule rename: {_diff(prev, current)}")
             except Exception as e:
                 current = prev
                 log.append(f"rule_renamer_failed:{e}")
+            else:
+                if current != prev:
+                    log.append("rule_renamer")
+                    _log(f"[Pipeline] Rule rename: {_diff(prev, current)}")
 
         # ── 6: LLM rename ─────────────────────────────────────────────────────
         if (self.use_llm and self.llm is not None
@@ -197,12 +232,13 @@ class Pipeline:
             prev = current
             try:
                 current = self.llm.process_file(current, annotate=self.annotate)
-                if current != prev:
-                    log.append("llm_renamer")
-                    print("[Pipeline] LLM renaming complete")
             except Exception as e:
                 current = prev
                 log.append(f"llm_renamer_failed:{e}")
+            else:
+                if current != prev:
+                    log.append("llm_renamer")
+                    _log("[Pipeline] LLM renaming complete")
 
         # ── 7: Final AST clean ────────────────────────────────────────────────
         prev = current
@@ -214,7 +250,7 @@ class Pipeline:
             current = prev
 
         # ── 8: Format ─────────────────────────────────────────────────────────
-        print("[Pipeline] Formatting...")
+        _log("[Pipeline] Formatting...")
         prev = current
         try:
             current = self.formatter.format(current)
@@ -225,42 +261,156 @@ class Pipeline:
             log.append(f"formatter_failed:{e}")
 
         # ── 9: Validate ───────────────────────────────────────────────────────
-        print("[Pipeline] Validating...")
+        _log("[Pipeline] Validating...")
         validation = self.validator.validate(source, current)
 
-        # LLM syntax fix attempt
-        if not validation.syntax_ok and self.use_llm and self.llm is not None:
-            print(f"[Pipeline] Syntax error: {validation.error}")
-            print("[Pipeline] Attempting LLM syntax fix...")
+        # Syntax fix attempt — AST-based structural repair first, LLM as last resort
+        if not validation.syntax_ok:
+            _log(f"[Pipeline] Syntax error: {validation.error}")
+            _log("[Pipeline] Attempting AST structural repair...")
             try:
-                fixed = self.llm.fix_syntax(current, validation.error)
-                breakpoint()
-                if fixed and self.validator.check_syntax_only(fixed)[0]:
-                    print("[Pipeline] Syntax fix succeeded!")
-                    current = fixed
-                    validation = self.validator.validate(source, current)
-                    log.append("syntax_fixed_by_llm")
-                else:
-                    print("[Pipeline] Syntax fix failed.")
+                fixed = _ast_structural_repair(current)
             except Exception as e:
-                print(f"[Pipeline] LLM syntax fix error: {e}")
+                _log(f"[Pipeline] AST repair crashed: {e}")
+                fixed = None
+            if fixed and self.validator.check_syntax_only(fixed)[0]:
+                _log("[Pipeline] AST repair succeeded!")
+                current = fixed
+                validation = self.validator.validate(source, current)
+                log.append("syntax_fixed_by_ast_repair")
+            elif self.use_llm and self.llm is not None:
+                _log("[Pipeline] AST repair insufficient — trying LLM syntax fix...")
+                try:
+                    fixed = self.llm.fix_syntax(current, validation.error)
+                    if fixed and self.validator.check_syntax_only(fixed)[0]:
+                        _log("[Pipeline] LLM syntax fix succeeded!")
+                        current = fixed
+                        validation = self.validator.validate(source, current)
+                        log.append("syntax_fixed_by_llm")
+                    else:
+                        _log("[Pipeline] LLM syntax fix failed.")
+                except Exception as e:
+                    _log(f"[Pipeline] LLM syntax fix error: {e}")
+            else:
+                _log("[Pipeline] No syntax fix available.")
 
         result.validation = validation
 
         if not validation.syntax_ok:
             log.append("validation_failed:kept_broken")
-            print("[Pipeline] WARNING: Syntax error remains. Returning best-effort result.")
+            _log("[Pipeline] WARNING: Syntax error remains. Returning best-effort result.")
         else:
-            print("[Pipeline] PASSED")
+            _log("[Pipeline] PASSED")
             for w in (validation.warnings or []):
-                print(f"[Pipeline]  Warning: {w}")
+                _log(f"[Pipeline]  Warning: {w}")
 
         result.cleaned = current
         result.log     = log
         return result
 
 
+def _log(msg: str) -> None:
+    """Print a log message, ignoring encoding errors on Windows consoles."""
+    try:
+        print(msg)
+    except (UnicodeEncodeError, OSError):
+        try:
+            print(msg.encode('ascii', errors='replace').decode('ascii'))
+        except Exception:
+            pass
+
+
 def _diff(before: str, after: str) -> str:
-    d = len(before) - len(after)
-    p = abs(d) / max(len(before), 1) * 100
-    return f"{'↓' if d>0 else '↑'}{abs(d)} chars ({p:.1f}%)"
+    try:
+        d = len(before) - len(after)
+        p = abs(d) / max(len(before), 1) * 100
+        arrow = "-" if d > 0 else "+"
+        return f"{arrow}{abs(d)} chars ({p:.1f}%)"
+    except Exception:
+        return "(diff unavailable)"
+
+
+def _ast_structural_repair(source: str) -> str:
+    """
+    Repair syntax errors caused by deobfuscation transforms.
+    Primary fix: 'expected an indented block after X on line N' -> insert pass.
+    Falls back to: AST empty-body insertion, bad-line strip, truncation.
+    """
+    import ast as _ast, re as _re
+
+    def _ok(s):
+        try: _ast.parse(s); return True
+        except SyntaxError: return False
+
+    def _err(s):
+        try: _ast.parse(s); return None
+        except SyntaxError as e: return e
+
+    def _insert_pass(s, e):
+        if not e.msg or 'expected an indented block' not in e.msg:
+            return s
+        m = _re.search(r'on line (\d+)', e.msg)
+        header_lineno = int(m.group(1)) if m else max(1, (e.lineno or 2) - 1)
+        lines = s.splitlines(keepends=True)
+        idx = header_lineno - 1
+        if idx < 0 or idx >= len(lines):
+            return s
+        h = lines[idx]
+        indent = len(h) - len(h.lstrip())
+        new_lines = lines[:idx + 1] + [' ' * (indent + 4) + 'pass\n'] + lines[idx + 1:]
+        return ''.join(new_lines)
+
+    def _fix_ast_bodies(s):
+        try: tree = _ast.parse(s)
+        except SyntaxError: return s
+        changed = False
+        for node in _ast.walk(tree):
+            for field in ('body', 'orelse', 'finalbody'):
+                val = getattr(node, field, None)
+                if isinstance(val, list) and not val:
+                    if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef,
+                                         _ast.ClassDef, _ast.If, _ast.While,
+                                         _ast.For, _ast.With, _ast.Try,
+                                         _ast.ExceptHandler)) and field == 'body':
+                        val.append(_ast.Pass())
+                        changed = True
+        if not changed:
+            return s
+        try:
+            _ast.fix_missing_locations(tree)
+            return _ast.unparse(tree)
+        except Exception:
+            return s
+
+    def _strip_line(s, e):
+        lines = s.splitlines(keepends=True)
+        idx = (e.lineno or 1) - 1
+        if 0 <= idx < len(lines):
+            c = ''.join(lines[:idx] + lines[idx + 1:])
+            if _ok(c): return c
+        return s
+
+    def _truncate(s):
+        lines = s.splitlines(keepends=True)
+        for end in range(len(lines), max(0, len(lines) - 40), -1):
+            c = ''.join(lines[:end])
+            if _ok(c): return c
+        return s
+
+    result = source
+    for _ in range(10):
+        if _ok(result):
+            return result
+        e = _err(result)
+        prev = result
+        result = _insert_pass(result, e)
+        if result != prev: continue
+        result = _fix_ast_bodies(result)
+        if result != prev: continue
+        result = _strip_line(result, e)
+        if result != prev: continue
+        result = _truncate(result)
+        if result != prev: continue
+        break
+
+    return result if _ok(result) else source

@@ -26,14 +26,20 @@ class StringDecoder:
     MAX_PASSES = 10
 
     def decode_all(self, source: str) -> str:
-        for _ in range(self.MAX_PASSES):
-            decoded = self._single_pass(source)
-            if decoded == source:
-                break
-            source = decoded
+        try:
+            for _ in range(self.MAX_PASSES):
+                decoded = self._single_pass(source)
+                if decoded == source:
+                    break
+                source = decoded
+        except RecursionError:
+            pass  # return whatever we have so far
+        except Exception:
+            pass  # return whatever we have so far
         return source
 
     def _single_pass(self, source: str) -> str:
+        source = self._resolve_import_aliases_for_decoding(source)
         source = self._unwrap_eval_exec(source)
         source = self._decode_base64_calls(source)
         source = self._decode_base64_dynamic_import(source)
@@ -58,12 +64,50 @@ class StringDecoder:
         source = self._decode_reversed_string(source)
         source = self._decode_int_hex_literal(source)
         source = self._fold_adjacent_string_literals(source)
+        source = self._decode_chained_compress_b64(source)
+        source = self._fold_repr_and_builtins(source)
+        source = self._fold_chr_arithmetic_lists(source)
+        source = self._decode_named_string_ops(source)
         source = self._decode_encode_decode_roundtrip(source)
+        return source
+
+    # ── Import alias pre-resolution ──────────────────────────────────────────
+
+    def _resolve_import_aliases_for_decoding(self, source: str) -> str:
+        """
+        Resolve common import aliases so that base64/zlib/codecs decode patterns
+        are recognized regardless of the alias used.
+        E.g.: import base64 as _b  →  replace _b with base64 in the source.
+        """
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return source
+
+        alias_map = {}
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.asname and alias.name in ('base64', 'zlib', 'bz2', 'lzma', 'codecs', 'binascii'):
+                        alias_map[alias.asname] = alias.name
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    if alias.asname:
+                        alias_map[alias.asname] = alias.name
+
+        if not alias_map:
+            return source
+
+        # Simple token-level replacement: only replace whole-word matches
+        import re as _re
+        for old, new in alias_map.items():
+            source = _re.sub(r'\b' + _re.escape(old) + r'\b', new, source)
         return source
 
     # ── eval / exec unwrapping ────────────────────────────────────────────────
 
     def _unwrap_eval_exec(self, source: str) -> str:
+        # Pattern 1: eval/exec("literal string")
         pattern = re.compile(
             r'(?:eval|exec)\s*\(\s*'
             r'(?:'
@@ -83,7 +127,24 @@ class StringDecoder:
             except Exception:
                 pass
             return m.group(0)
-        return pattern.sub(replace_match, source)
+        source = pattern.sub(replace_match, source)
+
+        # Pattern 2: eval(compile("literal", ...)) or exec(compile("literal", ...))
+        pattern2 = re.compile(
+            r'(?:eval|exec)\s*\(\s*compile\s*\(\s*'
+            r'("(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')'
+            r'\s*,\s*[^)]+\)\s*\)'
+        )
+        def replace_compile(m):
+            try:
+                val = ast.literal_eval(m.group(1))
+                if isinstance(val, str):
+                    return val
+            except Exception:
+                pass
+            return m.group(0)
+        source = pattern2.sub(replace_compile, source)
+        return source
 
     # ── Base64 ───────────────────────────────────────────────────────────────
 
@@ -445,32 +506,269 @@ class StringDecoder:
             return m.group(0)
         return pattern.sub(d, source)
 
-    def _fold_adjacent_string_literals(self, source: str) -> str:
+    def _decode_chained_compress_b64(self, source: str) -> str:
+        """
+        Handle chained patterns like:
+          exec(zlib.decompress(base64.b64decode(b"...")))
+          exec(zlib.decompress(base64.b64decode(payload)))
+        where payload is assigned a bytes literal nearby.
+        Decodes the payload and replaces the exec with the decoded source.
+        """
+        import zlib as _zlib, base64 as _b64
         try:
-            ast.parse(source)
+            tree = ast.parse(source)
         except SyntaxError:
             return source
-        pattern = re.compile(
-            r'(?<![a-zA-Z0-9_\)])'
-            r'(["\'])([^"\'\\]*(?:\\.[^"\'\\]*)*)\1'
-            r'\s+'
-            r'(["\'])([^"\'\\]*(?:\\.[^"\'\\]*)*)\3'
-        )
-        def d(m):
+
+        # Collect known bytes variable assignments
+        bytes_vars: dict = {}
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Assign)
+                    and len(node.targets) == 1
+                    and isinstance(node.targets[0], ast.Name)
+                    and isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, bytes)):
+                bytes_vars[node.targets[0].id] = node.value.value
+
+        def try_get_bytes(arg_node) -> bytes:
+            """Extract bytes from a node: literal or known variable."""
+            if isinstance(arg_node, ast.Constant) and isinstance(arg_node.value, bytes):
+                return arg_node.value
+            if isinstance(arg_node, ast.Name) and arg_node.id in bytes_vars:
+                return bytes_vars[arg_node.id]
+            return None
+
+        def try_decode_chain(arg_node):
+            """Try to decode a possibly chained base64+compress call to a string."""
+            # zlib.decompress(inner) or bz2.decompress(inner) or lzma.decompress(inner)
+            if (isinstance(arg_node, ast.Call)
+                    and isinstance(arg_node.func, ast.Attribute)
+                    and arg_node.func.attr == 'decompress'
+                    and len(arg_node.args) == 1):
+                inner = arg_node.args[0]
+                # The inner might be base64.b64decode(...)
+                inner_bytes = try_decode_inner(inner)
+                if inner_bytes is not None:
+                    mod_name = None
+                    if isinstance(arg_node.func.value, ast.Name):
+                        mod_name = arg_node.func.value.id
+                    try:
+                        if mod_name in ('zlib', None):
+                            return _zlib.decompress(inner_bytes).decode('utf-8', errors='replace')
+                        elif mod_name == 'bz2':
+                            import bz2 as _bz2
+                            return _bz2.decompress(inner_bytes).decode('utf-8', errors='replace')
+                    except Exception:
+                        pass
+            return None
+
+        def try_decode_inner(arg_node) -> bytes:
+            """Try to get bytes from a b64decode call or literal."""
+            raw = try_get_bytes(arg_node)
+            if raw is not None:
+                return raw
+            # base64.b64decode(...)
+            if (isinstance(arg_node, ast.Call)
+                    and isinstance(arg_node.func, ast.Attribute)
+                    and arg_node.func.attr == 'b64decode'
+                    and len(arg_node.args) == 1):
+                inner = try_get_bytes(arg_node.args[0])
+                if inner is not None:
+                    try:
+                        return _b64.b64decode(inner)
+                    except Exception:
+                        pass
+            return None
+
+        class ChainedDecoder(ast.NodeTransformer):
+            def visit_Expr(self, node):
+                self.generic_visit(node)
+                # exec(chain) or eval(chain)
+                if (isinstance(node.value, ast.Call)
+                        and isinstance(node.value.func, ast.Name)
+                        and node.value.func.id in ('exec', 'eval')
+                        and len(node.value.args) == 1):
+                    decoded = try_decode_chain(node.value.args[0])
+                    if decoded and decoded.strip():
+                        # Replace exec(chain) with the decoded source text
+                        return ast.parse(decoded).body if decoded.strip() else node
+                return node
+
+        try:
+            new_tree = ChainedDecoder().visit(tree)
+            ast.fix_missing_locations(new_tree)
+            return ast.unparse(new_tree)
+        except Exception:
+            return source
+
+    def _fold_repr_and_builtins(self, source: str) -> str:
+        """
+        Fold:
+          repr("literal")        -> "\'literal\'"
+          str(constant)          -> "string_of_constant"
+          len("literal")         -> N
+          bool(0) / bool(1)      -> False / True
+        These are pure-constant calls safe to evaluate statically.
+        """
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return source
+
+        SAFE_ZERO_ENV = {
+            '__builtins__': {},
+            'repr': repr, 'str': str, 'len': len, 'bool': bool,
+            'int': int, 'float': float, 'abs': abs, 'hex': hex,
+            'oct': oct, 'bin': bin, 'chr': chr, 'ord': ord,
+        }
+        FOLDABLE_FUNCS = {'repr', 'str', 'len', 'bool', 'int', 'float',
+                          'abs', 'hex', 'oct', 'bin', 'chr', 'ord'}
+
+        class ReprFolder(ast.NodeTransformer):
+            def visit_Call(self, node):
+                self.generic_visit(node)
+                if (isinstance(node.func, ast.Name)
+                        and node.func.id in FOLDABLE_FUNCS
+                        and len(node.args) == 1
+                        and not node.keywords):
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Constant):
+                        try:
+                            result = eval(
+                                compile(ast.Expression(body=node), '<fold>', 'eval'),
+                                SAFE_ZERO_ENV
+                            )
+                            if isinstance(result, (str, int, float, bool, type(None))):
+                                return ast.Constant(value=result)
+                        except Exception:
+                            pass
+                return node
+
+        tree = ReprFolder().visit(tree)
+        ast.fix_missing_locations(tree)
+        try:
+            return ast.unparse(tree)
+        except Exception:
+            return source
+
+    def _fold_chr_arithmetic_lists(self, source: str) -> str:
+        """
+        Fold chr/int arithmetic inside list literals so that:
+          [0x51 ^ 17, 0x60 ^ 4, ...]  ->  [64, 92, ...]  (already done by ASTCleaner)
+          ''.join(chr(x) for x in [64, 92, ...])  ->  '@\\'...  (done by FlowDeobf)
+        This pass handles the case where constants haven't been folded yet by
+        evaluating arithmetic expressions inside list/tuple literals.
+        """
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return source
+
+        SAFE_OPS = (ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Mod,
+                    ast.BitXor, ast.BitAnd, ast.BitOr, ast.LShift, ast.RShift)
+
+        class ArithFolder(ast.NodeTransformer):
+            def visit_BinOp(self, node):
+                self.generic_visit(node)
+                if (isinstance(node.op, SAFE_OPS)
+                        and isinstance(node.left, ast.Constant)
+                        and isinstance(node.right, ast.Constant)
+                        and isinstance(node.left.value, (int, float))
+                        and isinstance(node.right.value, (int, float))):
+                    try:
+                        result = eval(compile(ast.Expression(body=node), '<arith>', 'eval'),
+                                      {'__builtins__': {}})
+                        return ast.Constant(value=result)
+                    except Exception:
+                        pass
+                return node
+
+        tree = ArithFolder().visit(tree)
+        ast.fix_missing_locations(tree)
+        try:
+            return ast.unparse(tree)
+        except Exception:
+            return source
+
+    def _decode_named_string_ops(self, source: str) -> str:
+        """Fold simple string method calls on literals using AST: 'hi'.upper() -> 'HI'."""
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return source
+
+        SAFE_METHODS = {'upper', 'lower', 'strip', 'lstrip', 'rstrip', 'title', 'capitalize', 'swapcase'}
+
+        class StringMethodFolder(ast.NodeTransformer):
+            def visit_Call(self, node):
+                self.generic_visit(node)
+                if (isinstance(node.func, ast.Attribute)
+                        and node.func.attr in SAFE_METHODS
+                        and isinstance(node.func.value, ast.Constant)
+                        and isinstance(node.func.value.value, str)
+                        and not node.args and not node.keywords):
+                    try:
+                        return ast.Constant(value=getattr(node.func.value.value, node.func.attr)())
+                    except Exception:
+                        pass
+                if (isinstance(node.func, ast.Attribute)
+                        and node.func.attr == 'replace'
+                        and isinstance(node.func.value, ast.Constant)
+                        and isinstance(node.func.value.value, str)
+                        and len(node.args) == 2
+                        and all(isinstance(a, ast.Constant) and isinstance(a.value, str) for a in node.args)
+                        and not node.keywords):
+                    try:
+                        return ast.Constant(value=node.func.value.value.replace(node.args[0].value, node.args[1].value))
+                    except Exception:
+                        pass
+                return node
+
+        tree = StringMethodFolder().visit(tree)
+        ast.fix_missing_locations(tree)
+        try:
+            return ast.unparse(tree)
+        except Exception:
+            return source
+
+
+    def _fold_adjacent_string_literals(self, source: str) -> str:
+        """
+        Use AST to fold only genuinely-constant adjacent BinOp Add of string literals.
+        Avoids regex that incorrectly merges strings across + operators.
+        """
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return source
+
+        class ImplicitStrFolder(ast.NodeTransformer):
+            def visit_BinOp(self, node):
+                self.generic_visit(node)
+                if (isinstance(node.op, ast.Add)
+                        and isinstance(node.left, ast.Constant)
+                        and isinstance(node.left.value, str)
+                        and isinstance(node.right, ast.Constant)
+                        and isinstance(node.right.value, str)):
+                    return ast.Constant(value=node.left.value + node.right.value)
+                return node
+
+        changed = True
+        while changed:
+            before = ast.unparse(tree)
+            tree = ImplicitStrFolder().visit(tree)
+            ast.fix_missing_locations(tree)
             try:
-                v1 = ast.literal_eval(f'{m.group(1)}{m.group(2)}{m.group(1)}')
-                v2 = ast.literal_eval(f'{m.group(3)}{m.group(4)}{m.group(3)}')
-                if isinstance(v1, str) and isinstance(v2, str):
-                    return repr(v1+v2)
+                if ast.unparse(tree) == before:
+                    changed = False
             except Exception:
-                pass
-            return m.group(0)
-        for _ in range(5):
-            prev = source
-            source = pattern.sub(d, source)
-            if source == prev:
                 break
-        return source
+
+        try:
+            return ast.unparse(tree)
+        except Exception:
+            return source
+
 
     def _decode_encode_decode_roundtrip(self, source: str) -> str:
         pattern = re.compile(

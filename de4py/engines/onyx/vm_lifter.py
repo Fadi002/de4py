@@ -373,23 +373,29 @@ class VMLifter:
         return '\n'.join(parts)
 
     def deobfuscate(self, source: str) -> str:
-        table    = self._extract_vm_class(source)
-        payloads = self._extract_payloads(source)
-        if not payloads:
+        try:
+            table    = self._extract_vm_class(source)
+            payloads = self._extract_payloads(source)
+            if not payloads:
+                return source
+
+            header = [
+                '# ' + '═'*60,
+                '# VM BYTECODE — LIFTED TO PYTHON (dynamic opcode extraction)',
+                '# ' + '═'*60,
+                '',
+            ]
+            blocks = []
+            for payload_bytes, var_name in payloads:
+                try:
+                    data = pickle.loads(payload_bytes)
+                    blocks.append(self._lift_data(data, var_name, table or _VMOpcodeTable()))
+                except Exception as e:
+                    blocks.append(f'# Could not lift {var_name!r}: {e}')
+
+            return '\n'.join(header) + '\n\n'.join(blocks)
+        except RecursionError:
+            return source
+        except Exception:
             return source
 
-        header = [
-            '# ' + '═'*60,
-            '# VM BYTECODE — LIFTED TO PYTHON (dynamic opcode extraction)',
-            '# ' + '═'*60,
-            '',
-        ]
-        blocks = []
-        for payload_bytes, var_name in payloads:
-            try:
-                data = pickle.loads(payload_bytes)
-                blocks.append(self._lift_data(data, var_name, table or _VMOpcodeTable()))
-            except Exception as e:
-                blocks.append(f'# Could not lift {var_name!r}: {e}')
-
-        return '\n'.join(header) + '\n\n'.join(blocks)

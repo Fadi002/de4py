@@ -204,7 +204,21 @@ class LLMRenamer:
         return "".join(source_lines)
 
     def fix_syntax(self, code: str, error_msg: str) -> str:
-        """Attempt to fix syntax errors using the LLM."""
+        """
+        Attempt to fix syntax errors.
+        First tries fast AST-based structural repair, then falls back to LLM.
+        """
+        # Fast path: try AST structural repair first (no LLM needed)
+        repaired = self._ast_repair(code)
+        if repaired and repaired != code:
+            try:
+                import ast as _ast
+                _ast.parse(repaired)
+                print("[LLM] Syntax fixed by AST repair (no LLM needed)")
+                return repaired
+            except SyntaxError:
+                pass
+
         if not self.available:
             return code
             
@@ -236,7 +250,6 @@ class LLMRenamer:
             response = requests.post(GENERATE_URL, json=payload, timeout=180)
             response.raise_for_status()
             raw = response.json().get("response", "")
-            breakpoint()
             fixed_code = self._extract_python(raw)
             if fixed_code and self._is_valid_python(fixed_code):
                 print("[LLM] Syntax successfully fixed by LLM")
@@ -249,6 +262,54 @@ class LLMRenamer:
             return code
 
     # --- Source extraction ----------------------------------------------------
+
+    def _ast_repair(self, source: str) -> str:
+        """Fast AST-based structural repair: fix empty bodies, strip bad lines."""
+        import ast as _ast
+
+        def _fix_empty(src):
+            try:
+                tree = _ast.parse(src)
+                changed = False
+                for node in _ast.walk(tree):
+                    for field in ('body', 'orelse', 'finalbody'):
+                        val = getattr(node, field, None)
+                        if isinstance(val, list) and not val:
+                            needs = isinstance(node, (
+                                _ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef,
+                                _ast.If, _ast.While, _ast.For, _ast.With,
+                                _ast.Try, _ast.ExceptHandler,
+                            ))
+                            if needs and field == 'body':
+                                val.append(_ast.Pass())
+                                changed = True
+                if changed:
+                    _ast.fix_missing_locations(tree)
+                    return _ast.unparse(tree)
+            except Exception:
+                pass
+            return src
+
+        result = _fix_empty(source)
+        try:
+            _ast.parse(result)
+            return result
+        except SyntaxError as e:
+            err_lineno = getattr(e, 'lineno', 1) or 1
+
+        # Strip the offending line
+        lines = source.splitlines(keepends=True)
+        idx = err_lineno - 1
+        if 0 <= idx < len(lines):
+            candidate = ''.join(lines[:idx] + lines[idx+1:])
+            candidate = _fix_empty(candidate)
+            try:
+                _ast.parse(candidate)
+                return candidate
+            except SyntaxError:
+                pass
+
+        return source
 
     def _collect_top_level_functions(
         self, tree: ast.Module, source: str
@@ -315,6 +376,13 @@ class LLMRenamer:
             print(
                 f"[LLM] Structural reject: all return statements removed "
                 f"(original had {orig_returns})"
+            )
+            return False
+        # Allow minor return count variance (LLM may collapse dead branches)
+        if orig_returns > 0 and new_returns > 0 and abs(orig_returns - new_returns) > orig_returns:
+            print(
+                f"[LLM] Structural reject: return count changed too much "
+                f"({orig_returns} → {new_returns})"
             )
             return False
 
@@ -394,27 +462,69 @@ class LLMRenamer:
         if not raw or not raw.strip():
             return None
 
+        # Try ```python ... ``` blocks first
         if "```python" in raw:
             parts = raw.split("```python")
             if len(parts) > 1:
                 code = parts[1].split("```")[0].strip()
-                return code if code else None
+                if code:
+                    return self._clean_extracted(code)
 
+        # Try ``` ... ``` blocks
         if "```" in raw:
             parts = raw.split("```")
             if len(parts) > 1:
                 code = parts[1].strip()
-                if code.startswith("python\n"):
-                    code = code[7:]
-                return code if code else None
+                if code.lower().startswith("python"):
+                    code = code[code.index("\n")+1:] if "\n" in code else code[6:]
+                code = code.strip()
+                if code:
+                    return self._clean_extracted(code)
 
         stripped = raw.strip()
 
+        # Remove common LLM preambles
+        preamble_patterns = [
+            "Here is the renamed", "Here's the renamed", "Here is the fixed",
+            "Here's the fixed", "The fixed code", "Renamed function:",
+            "Fixed code:", "Here is the corrected",
+        ]
+        for pat in preamble_patterns:
+            if stripped.lower().startswith(pat.lower()):
+                idx = stripped.find("\n")
+                if idx != -1:
+                    stripped = stripped[idx+1:].strip()
+
         valid_starts = ("def ", "async def ", "class ", "import ", "from ", "#", "@")
         if any(stripped.startswith(s) for s in valid_starts):
-            return stripped
+            return self._clean_extracted(stripped)
+
+        # Last resort: find the first def/class line
+        for i, line in enumerate(stripped.splitlines()):
+            if line.strip().startswith(("def ", "async def ", "class ")):
+                return self._clean_extracted("\n".join(stripped.splitlines()[i:]))
 
         return None
+
+    def _clean_extracted(self, code: str) -> Optional[str]:
+        """Remove trailing non-code lines (explanations after the function body)."""
+        if not code or not code.strip():
+            return None
+        lines = code.splitlines()
+        # Find last non-empty line that is valid Python continuation
+        # Strategy: try progressively shorter versions until it parses
+        for end in range(len(lines), 0, -1):
+            candidate = "\n".join(lines[:end]).strip()
+            if not candidate:
+                continue
+            try:
+                import ast as _ast
+                _ast.parse(candidate)
+                return candidate
+            except SyntaxError:
+                continue
+        # Return original if nothing parses
+        return code.strip() or None
 
     def _is_valid_python(self, source: str) -> bool:
         """Return True if source parses as valid Python"""

@@ -60,10 +60,13 @@ _SAFE_ENV: Dict[str, Any] = {
 
 
 def _try_eval(node: ast.expr, env: Dict[str, Any]) -> Tuple[bool, Any]:
+    import warnings as _warnings
     try:
         merged = {**_SAFE_ENV, **env}
         code = compile(ast.Expression(body=copy.deepcopy(node)), '<proxy>', 'eval')
-        return True, eval(code, {'__builtins__': _SAFE_ENV}, merged)
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("ignore")
+            return True, eval(code, {'__builtins__': _SAFE_ENV}, merged)
     except Exception:
         return False, None
 
@@ -86,29 +89,35 @@ def _val_to_ast(val: Any) -> Optional[ast.expr]:
 class ProxyCleaner:
 
     def deobfuscate(self, source: str) -> str:
-        source = self._normalize_unicode(source)
+        try:
+            source = self._normalize_unicode(source)
+        except Exception:
+            pass  # continue with un-normalized source
+
         try:
             tree = ast.parse(source)
         except SyntaxError:
             return source
 
-        for _ in range(8):
-            before = ast.unparse(tree)
-            env = self._collect_env(tree)
-            if env:
-                tree = self._inline(tree, env)
-                tree = self._remove_assignments(tree, set(env.keys()))
-            tree = self._strip_builtins(tree)
-            tree = self._fold_calls(tree, env)
-            ast.fix_missing_locations(tree)
-            try:
-                if ast.unparse(tree) == before:
-                    break
-            except Exception:
-                break
-
         try:
+            for _ in range(8):
+                before = ast.unparse(tree)
+                env = self._collect_env(tree)
+                if env:
+                    tree = self._inline(tree, env)
+                    tree = self._remove_assignments(tree, set(env.keys()))
+                tree = self._strip_builtins(tree)
+                tree = self._fold_calls(tree, env)
+                ast.fix_missing_locations(tree)
+                try:
+                    if ast.unparse(tree) == before:
+                        break
+                except Exception:
+                    break
+
             return ast.unparse(tree)
+        except RecursionError:
+            return source
         except Exception:
             return source
 
@@ -159,7 +168,36 @@ class ProxyCleaner:
 
     # ── Collect proxy environment ─────────────────────────────────────────────
 
+    def _find_state_machine_vars(self, tree: ast.Module) -> set:
+        """
+        Detect names used as state variables in while-True dispatcher loops.
+        These must NOT be inlined as constants.
+        """
+        state_vars = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.While):
+                continue
+            # while True: or while 1:
+            if not (isinstance(node.test, ast.Constant) and node.test.value):
+                continue
+            # Check if body contains if-chains with `name == constant` comparisons
+            for stmt in node.body:
+                if isinstance(stmt, ast.If):
+                    test = stmt.test
+                    if (isinstance(test, ast.Compare)
+                            and len(test.ops) == 1
+                            and isinstance(test.ops[0], ast.Eq)
+                            and isinstance(test.left, ast.Name)
+                            and test.comparators
+                            and isinstance(test.comparators[0], ast.Constant)
+                            and isinstance(test.comparators[0].value, int)):
+                        state_vars.add(test.left.id)
+        return state_vars
+
     def _collect_env(self, tree: ast.Module) -> Dict[str, Any]:
+        # Don't inline state machine variables
+        protected = self._find_state_machine_vars(tree)
+
         env: Dict[str, Any] = {}
         for stmt in tree.body:
             if not isinstance(stmt, ast.Assign):
@@ -170,6 +208,8 @@ class ProxyCleaner:
 
             # Simple: name = expr
             if isinstance(t, ast.Name):
+                if t.id in protected:
+                    continue
                 ok, val = _try_eval(stmt.value, env)
                 if ok and self._worthy(val):
                     env[t.id] = val
@@ -180,13 +220,22 @@ class ProxyCleaner:
                 vals  = stmt.value.elts
                 if len(names) == len(vals) == len(t.elts):
                     for name, vnode in zip(names, vals):
+                        if name in protected:
+                            continue
                         ok, val = _try_eval(vnode, env)
                         if ok and self._worthy(val):
                             env[name] = val
         return env
 
     def _worthy(self, val: Any) -> bool:
-        return val is not None and isinstance(val, (int, float, bool, str, bytes, type)) or callable(val)
+        # Only inline primitive constants — never inline callables/types as they break syntax
+        if isinstance(val, bool):
+            return True
+        if isinstance(val, (int, float, str, bytes)):
+            return True
+        if val is None:
+            return True
+        return False
 
     # ── Inline proxy values ───────────────────────────────────────────────────
 
@@ -253,7 +302,8 @@ class ProxyCleaner:
             def visit_Call(self, node):
                 self.generic_visit(node)
                 ok, result = _try_eval(node, env)
-                if ok and isinstance(result, (int, float, bool, str, bytes)):
+                # Only fold to primitive constants — never fold to types/callables
+                if ok and isinstance(result, (int, float, bool, str, bytes, type(None))) and not callable(result):
                     return ast.Constant(value=result)
                 return node
 
