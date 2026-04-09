@@ -8,6 +8,8 @@
 # See the LICENSE file for details.
 
 import os
+import sys
+import traceback
 from de4py.core.interfaces import Deobfuscator
 from de4py.engines.onyx.pipeline import Pipeline
 
@@ -28,7 +30,7 @@ class OnyxAlpha(Deobfuscator):
     def deobfuscate(self, file_path: str) -> str:
         if not os.path.exists(file_path):
             return f"Error: File not found: {file_path}"
-            
+
         try:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 source = f.read()
@@ -39,28 +41,56 @@ class OnyxAlpha(Deobfuscator):
             try:
                 from de4py.engines.onyx.feeder import feed_sample_bg
                 feed_sample_bg(file_path)
-            except:pass
+            except Exception:
+                pass
         
         import threading
         threading.Thread(target=_feed, daemon=True).start()
 
         filename = os.path.basename(file_path)
         
-        # Build the pipeline
-        pipeline = Pipeline(
-            use_llm=True,
-            llm_model="qwen2.5-coder:1.5b",
-            llm_threshold=7.0
-        )
-        
-        result = pipeline.run(source, filename=filename)
+        # Build the pipeline — wrapped in a top-level guard so the app never crashes
+        try:
+            pipeline = Pipeline(
+                use_llm=True,
+                llm_model="qwen2.5-coder:1.5b",
+                llm_threshold=7.0
+            )
+            
+            result = pipeline.run(source, filename=filename)
+        except RecursionError:
+            print("[Onyx] FATAL: RecursionError — source is too deeply nested")
+            return (
+                f"# de4py Onyx-Alpha: RecursionError\n"
+                f"# The source code is too deeply nested for safe processing.\n"
+                f"# Original code preserved below:\n\n{source}"
+            )
+        except MemoryError:
+            print("[Onyx] FATAL: MemoryError — source is too large")
+            return (
+                f"# de4py Onyx-Alpha: MemoryError\n"
+                f"# The system ran out of memory while processing.\n"
+                f"# Original code preserved below:\n\n{source}"
+            )
+        except KeyboardInterrupt:
+            raise  # let the user cancel
+        except Exception as e:
+            tb = traceback.format_exc()
+            print(f"[Onyx] FATAL: Unhandled pipeline error: {e}")
+            print(tb)
+            return (
+                f"# de4py Onyx-Alpha: Internal error\n"
+                f"# {type(e).__name__}: {e}\n"
+                f"# Original code preserved below:\n\n{source}"
+            )
         
         # Build the output text shown in the UI
-        # We always return the deobfuscated code. No original code diffs in the UI text
-        # to ensure the user gets just the cleaned code to copy/paste if they want.
-        
         if not result.success:
-            return f"de4py Onyx-Alpha failed (Syntax Error in output)\n{'-'*40}\nLog: {result.log}\n{'-'*40}\nOriginal code preserved:\n\n{result.original}"
+            return (
+                f"de4py Onyx-Alpha failed (Syntax Error in output)\n{'-'*40}\n"
+                f"Log: {result.log}\n{'-'*40}\n"
+                f"Original code preserved:\n\n{result.original}"
+            )
             
         header = [
             f"# Cleaned by de4py Onyx-Alpha",

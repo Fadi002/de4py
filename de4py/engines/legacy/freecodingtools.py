@@ -9,7 +9,7 @@
 
 import zlib, base64, re
 def freecodingtools(filepath):
-        lol = open(filepath, 'r').read()
+        lol = open(filepath, 'r', encoding='utf-8', errors='ignore').read()
         def decode_data(data):
             return zlib.decompress(base64.b64decode(data[::-1]))
         try:

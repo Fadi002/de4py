@@ -58,7 +58,7 @@ obfuscators = [
 
 def detect_obfuscator(file_path):
     try:
-        with open(file_path, 'r', encoding='utf8') as f:
+        with open(file_path, 'r', encoding='utf8', errors='ignore') as f:
             file_data = f.read()
     except Exception as e:
         return f"Failed to read file: {e}"

@@ -9,11 +9,11 @@
     "api_base_url": "https://de4py-api.vercel.app",
     "api_timeout": 700,
     "poll_interval": 2.0,
-    "active_theme": null,
+    "active_theme": "Catppuccin Mocha",
     "language": "en",
     "transparent_ui": true,
     "auto_update": true,
-    "update_channel": "beta",
+    "update_channel": "stable",
     "last_update_check": null,
     "github_repo": "Fadi002/de4py",
     "telemetry": true

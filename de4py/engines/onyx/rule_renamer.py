@@ -306,13 +306,27 @@ NEVER_RENAME: Set[str] = {
 # --- Pattern detection --------------------------------------------------------
 
 MANGLED_PATTERNS = [
-    re.compile(r'^[a-zA-Z]\d{1,3}$'),          # a1, b99, Z12
-    re.compile(r'^[a-zA-Z]{1,2}$'),             # a, ab (but single letter math vars are ok)
-    re.compile(r'^[OIl1]{3,}$'),                # OOIl11lI
-    re.compile(r'^_{3,}\w+'),                   # ___var, ____x
-    re.compile(r'^[A-Z][a-z][A-Z][a-z]$'),     # AbCd style
-    re.compile(r'^l[0-9O]+$'),                  # l0, lO, lO0
-    re.compile(r'^[a-z]{1,2}\d{2,}$'),          # ab12, z99
+    re.compile(r'^[a-zA-Z]\d{1,3}$'),              # a1, b99, Z12
+    re.compile(r'^[a-zA-Z]{1,2}$'),                 # a, ab (but single letter math vars are ok)
+    re.compile(r'^[OIl1]{3,}$'),                    # OOIl11lI — zero/one confusables
+    re.compile(r'^[O0][O0][O0]+\w*$'),             # OO0O0O style
+    re.compile(r'^_{3,}\w+'),                       # ___var, ____x
+    re.compile(r'^[A-Z][a-z][A-Z][a-z]$'),         # AbCd style
+    re.compile(r'^l[0-9O]+$'),                      # l0, lO, lO0
+    re.compile(r'^[a-z]{1,2}\d{2,}$'),              # ab12, z99
+    re.compile(r'^[a-z]{2,4}__$'),                  # gvs__, dva__, cvf__
+    re.compile(r'^[a-z]{1,3}v[a-z]__$'),            # xvx__ pattern
+    re.compile(r'^[a-zA-Z][a-zA-Z0-9]{4,}__$'),    # longer __-suffix names
+    re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]{0,3}v[a-zA-Z0-9_]{1,3}__$'),
+    # Random obfuscated names: 3+ consonant clusters with digits
+    re.compile(r'^[a-z]{2,5}\d+[a-z]{2,5}$'),      # ab12cd, zpk3pg2
+    re.compile(r'^[a-z]{2,6}_[a-z]{3,8}$'),         # ors8odw, suyfet (short_word style when both parts random)
+    re.compile(r'^[a-z]\d[a-z]{2,4}\d[a-z]{1,4}$'),# u3vd2, j0tmc pattern
+    re.compile(r'^[a-z]{2,4}\d{1,3}[a-z]{2,4}\d{1,4}$'), # xm7uo4zhy0d2 style
+    re.compile(r'^[a-z]{1,4}\d{1,2}[a-z]{1,4}\d{1,2}[a-z]{1,4}$'),  # mixed digit-letter
+    re.compile(r'[0-9]{2,}[a-z]{2,}[0-9]'),          # contains 2+ digits total in middle
+    re.compile(r'^[a-z]{2,8}\d{4,}$'),              # snlgaimd + long digit run
+    re.compile(r'^[a-z]{1,3}\d{3,4}[a-z]{2,5}$'),  # u3vd2_nusnh prefix part
 ]
 
 
@@ -344,20 +358,22 @@ class RuleRenamer:
         except SyntaxError:
             return source
 
-        # Pass 1: collect rename decisions
-        collector = _NameCollector(self._rename_map, self._counters)
-        collector.visit(tree)
-
-        if not self._rename_map:
-            return source
-
-        # Pass 2: apply renames
-        applier = _NameApplier(self._rename_map)
-        tree    = applier.visit(tree)
-        ast.fix_missing_locations(tree)
-
         try:
+            # Pass 1: collect rename decisions
+            collector = _NameCollector(self._rename_map, self._counters)
+            collector.visit(tree)
+
+            if not self._rename_map:
+                return source
+
+            # Pass 2: apply renames
+            applier = _NameApplier(self._rename_map)
+            tree    = applier.visit(tree)
+            ast.fix_missing_locations(tree)
+
             return ast.unparse(tree)
+        except RecursionError:
+            return source
         except Exception:
             return source
 
@@ -467,8 +483,18 @@ class _NameCollector(ast.NodeVisitor):
                     self._map[generator.target.id] = self._fresh(iter_name)
         self.generic_visit(node)
 
-    visit_SetComp    = visit_ListComp
+    visit_SetComp      = visit_ListComp
     visit_GeneratorExp = visit_ListComp
+
+    def visit_Lambda(self, node: ast.Lambda):
+        """Rename lambda parameters if they are mangled."""
+        for arg in node.args.args:
+            if is_mangled(arg.arg) and arg.arg not in self._map:
+                self._map[arg.arg] = self._fresh('param')
+        for arg in (node.args.vararg, node.args.kwarg):
+            if arg and is_mangled(arg.arg) and arg.arg not in self._map:
+                self._map[arg.arg] = self._fresh('param')
+        self.generic_visit(node)
 
     def visit_DictComp(self, node: ast.DictComp):
         for generator in node.generators:
@@ -654,6 +680,9 @@ class _NameCollector(ast.NodeVisitor):
         return "ctx_manager"
 
     def _fresh(self, base: str) -> str:
+        # Never assign a name that is in NEVER_RENAME (e.g. 'getattr', 'setattr')
+        if base in NEVER_RENAME:
+            base = base + "_ref"
         n = self._counters.get(base, 0)
         self._counters[base] = n + 1
         return base if n == 0 else f"{base}_{n}"

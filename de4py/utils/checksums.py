@@ -61,7 +61,7 @@ def generate_checksums(directory, hash_algorithm="sha256"):
     return checksums
 
 def save_checksums_to_json(checksums, output_json="checksums.json"):
-    with open(output_json, 'w') as json_file:
+    with open(output_json, 'w', encoding='utf-8') as json_file:
         json.dump(checksums, json_file, indent=4) # Changed indent to 4 for consistency
 
 def main():

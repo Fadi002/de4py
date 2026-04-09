@@ -57,7 +57,8 @@ class Decompiler:
             result = subprocess.run(
                 [sys.executable, "-m", "decompile3", path],
                 capture_output=True,
-                text=True,
+                encoding='utf-8',
+                errors='ignore',
                 timeout=60,
             )
             if result.returncode == 0 and result.stdout.strip():
@@ -74,7 +75,8 @@ class Decompiler:
             result = subprocess.run(
                 ["pycdc", path],
                 capture_output=True,
-                text=True,
+                encoding='utf-8',
+                errors='ignore',
                 timeout=60,
             )
             if result.returncode == 0 and result.stdout.strip():
@@ -91,7 +93,8 @@ class Decompiler:
             result = subprocess.run(
                 [sys.executable, "-m", "uncompyle6", path],
                 capture_output=True,
-                text=True,
+                encoding='utf-8',
+                errors='ignore',
                 timeout=60,
             )
             if result.returncode == 0 and result.stdout.strip():

@@ -25,7 +25,7 @@ def _try_eval_const(node: ast.expr) -> Tuple[bool, object]:
     try:
         result = eval(
             compile(ast.Expression(body=node), "<eval>", "eval"),
-            {"__builtins__": {"chr": chr, "ord": ord, "len": len}},
+            {"__builtins__": {"chr": chr, "ord": ord, "len": len, "str": str, "int": int, "bool": bool, "abs": abs, "min": min, "max": max, "sum": sum, "range": range, "list": list, "tuple": tuple, "dict": dict, "set": set, "bytes": bytes, "bytearray": bytearray, "type": type, "isinstance": isinstance, "getattr": getattr, "hasattr": hasattr, "map": map, "filter": filter, "zip": zip, "enumerate": enumerate, "reversed": reversed, "sorted": sorted}},
         )
         return True, result
     except Exception:
@@ -200,11 +200,14 @@ class LambdaNormalizer(ast.NodeTransformer):
     ) -> Optional[List[ast.stmt]]:
         """
         Convert a chain of walrus expressions into assignments if safe.
-        Returns list of Assign nodes or None if not all extractable.
+        Also handles non-walrus expressions that have side effects by keeping them as Expr stmts.
+        Returns list of stmts or None if nothing extractable.
         """
         stmts = []
+        has_walrus = False
         for val in values:
             if isinstance(val, ast.NamedExpr):
+                has_walrus = True
                 stmts.append(
                     ast.Assign(
                         targets=[val.target],
@@ -214,12 +217,20 @@ class LambdaNormalizer(ast.NodeTransformer):
                     )
                 )
             elif isinstance(val, ast.Constant):
-                pass  # skip bare True/False/None used as sentinels
+                pass  # skip bare True/False/None/... sentinels
             elif isinstance(val, ast.Name):
                 pass  # skip bare variable references
-            else:
-                return None  # complex expression — don't extract
-        return stmts if stmts else None
+            elif isinstance(val, ast.Call):
+                # Keep calls as expression statements (they may have side effects)
+                stmts.append(ast.Expr(value=val, lineno=getattr(val, 'lineno', 1), col_offset=getattr(val, 'col_offset', 0)))
+            elif isinstance(val, ast.BoolOp):
+                # Nested BoolOp — try to recurse
+                sub = self._extract_walrus_chain(val.values)
+                if sub:
+                    has_walrus = True
+                    stmts.extend(sub)
+            # else: skip other complex expressions as sentinels
+        return stmts if (stmts and has_walrus) else None
 
     # --- NamedExpr in non-statement contexts -----------------------------------
 
@@ -362,6 +373,102 @@ def _normalize_percent_format(source: str) -> str:
     return source
 
 
+# --- Top-level BoolOp / walrus statement deobfuscator -----------------------
+
+class _TopLevelBoolOpFlattener(ast.NodeTransformer):
+    """
+    Flattens top-level expression statements that are BoolOp chains
+    used purely for their walrus side effects, e.g.:
+        (x := expr) and (y := expr2) and some_call() or ...
+    Converts them into sequential assignments / call statements.
+    """
+
+    def _flatten_boolop(self, values: list) -> list:
+        stmts = []
+        for v in values:
+            if isinstance(v, ast.NamedExpr):
+                stmts.append(ast.Assign(
+                    targets=[v.target],
+                    value=v.value,
+                    lineno=getattr(v, 'lineno', 1),
+                    col_offset=getattr(v, 'col_offset', 0),
+                ))
+            elif isinstance(v, ast.BoolOp):
+                stmts.extend(self._flatten_boolop(v.values))
+            elif isinstance(v, ast.Call):
+                stmts.append(ast.Expr(
+                    value=v,
+                    lineno=getattr(v, 'lineno', 1),
+                    col_offset=getattr(v, 'col_offset', 0),
+                ))
+            elif isinstance(v, ast.Constant):
+                pass  # sentinel values — skip
+            elif isinstance(v, ast.Name):
+                pass  # bare variable reads — skip
+            elif isinstance(v, ast.Tuple) and not v.elts:
+                pass  # empty tuple () sentinel — skip
+            elif isinstance(v, ast.Dict) and not v.keys:
+                pass  # empty dict {} sentinel — skip
+            elif isinstance(v, ast.List) and not v.elts:
+                pass  # empty list [] sentinel — skip
+            else:
+                # Unknown expression — keep as Expr stmt
+                stmts.append(ast.Expr(
+                    value=v,
+                    lineno=getattr(v, 'lineno', 1),
+                    col_offset=getattr(v, 'col_offset', 0),
+                ))
+        return stmts
+
+    def _has_walrus(self, node: ast.expr) -> bool:
+        """Return True if the expression contains any walrus operators."""
+        return any(isinstance(n, ast.NamedExpr) for n in ast.walk(node))
+
+    def visit_Expr(self, node: ast.Expr):
+        self.generic_visit(node)
+        if isinstance(node.value, ast.BoolOp) and self._has_walrus(node.value):
+            stmts = self._flatten_boolop(node.value.values)
+            if stmts:
+                return stmts
+        return node
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        self.generic_visit(node)
+        new_body = []
+        for stmt in node.body:
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.BoolOp) and self._has_walrus(stmt.value):
+                flattened = self._flatten_boolop(stmt.value.values)
+                new_body.extend(flattened)
+            else:
+                new_body.append(stmt)
+        node.body = new_body
+        return node
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+
+def _flatten_walrus_boolops(source: str) -> str:
+    """Pre-pass: flatten top-level/function-level walrus BoolOp chains."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return source
+    for _ in range(5):
+        before = ast.unparse(tree)
+        flattener = _TopLevelBoolOpFlattener()
+        tree = flattener.visit(tree)
+        ast.fix_missing_locations(tree)
+        try:
+            if ast.unparse(tree) == before:
+                break
+        except Exception:
+            break
+    try:
+        return ast.unparse(tree)
+    except Exception:
+        return source
+
+
 # --- Public API ---------------------------------------------------------------
 
 class LambdaChainDeobfuscator:
@@ -369,12 +476,20 @@ class LambdaChainDeobfuscator:
     def deobfuscate(self, source: str) -> str:
         """
         Apply all lambda/walrus/string normalization passes.
-        Returns cleaned source.
+        Returns cleaned source, or the original source on any failure.
         """
-        # Phase 1: text-level pre-processing
-        source = _preprocess_string_escapes(source)
-        source = _normalize_percent_format(source)
+        try:
+            # Phase 1: text-level pre-processing
+            source = _preprocess_string_escapes(source)
+            source = _normalize_percent_format(source)
 
-        # Phase 2: AST normalization (multi-pass)
-        normalizer = LambdaNormalizer()
-        return normalizer.normalize(source)
+            # Phase 1b: Flatten walrus BoolOp chains (challenge.py style)
+            source = _flatten_walrus_boolops(source)
+
+            # Phase 2: AST normalization (multi-pass)
+            normalizer = LambdaNormalizer()
+            return normalizer.normalize(source)
+        except RecursionError:
+            return source
+        except Exception:
+            return source
