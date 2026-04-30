@@ -189,7 +189,7 @@ class ModalOverlay(QWidget):
         try:
             return GlassBlurCache.capture(
                 top_window, exclude_widget=self,
-                blur_radius=28, downsample_divisor=2, force_refresh=True,
+                blur_radius=28, downsample_divisor=2, force_refresh=False,
             )
         finally:
             self._lock_events = False

@@ -29,7 +29,7 @@ class DampedSpring:
 
 
 def spring_responsive(initial: float = 0.0) -> DampedSpring:
-    return DampedSpring(300, 26, 1.0, initial)
+    return DampedSpring(420, 34, 1.0, initial)
 
 
 def spring_gentle(initial: float = 0.0) -> DampedSpring:
@@ -41,7 +41,7 @@ def spring_heavy(initial: float = 0.0) -> DampedSpring:
 
 
 def spring_settle(initial: float = 0.0) -> DampedSpring:
-    return DampedSpring(200, 30, 1.0, initial)
+    return DampedSpring(250, 35, 1.0, initial)
 
 
 class FramePacer:

@@ -171,7 +171,7 @@ class TOSDialog(QWidget):
                 exclude_widget=self,
                 blur_radius=28,
                 downsample_divisor=2,
-                force_refresh=True,
+                force_refresh=False,
             )
         finally:
             self._lock_events = False

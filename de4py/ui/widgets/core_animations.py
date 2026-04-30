@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QPushButton, QGraphicsDropShadowEffect, QStackedWidget,
-    QWidget, QGraphicsOpacityEffect, QCheckBox
+    QWidget, QGraphicsOpacityEffect, QCheckBox, QFrame
 )
 from PySide6.QtCore import (
     Qt, QPropertyAnimation, QEasingCurve, Property,
@@ -22,7 +22,7 @@ from PySide6.QtGui import QColor, QCursor, QPainter, QBrush, QPen, QIcon, QPixma
 
 from de4py.utils import sentry
 from de4py.ui.motion.material import MaterialState, MaterialPainter
-from de4py.ui.motion.spring import InertiaChain, spring_responsive, spring_settle
+from de4py.ui.motion.spring import InertiaChain, spring_responsive, spring_settle, DampedSpring, FramePacer
 
 
 class AnimatedButton(QPushButton):
@@ -382,66 +382,211 @@ class AnimatedCheckBox(QCheckBox):
              painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self.text())
 
 
-class AnimatedStackedWidget(QStackedWidget):
+class AnimatedStackedWidget(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._anim_group = None
+        from PySide6.QtWidgets import QSizePolicy
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._widgets = []
+        self._current_index = -1
+        
         self._is_animating = False
-        self._pending_index = None
-
-    def fade_to_index(self, index):
-        if index == self.currentIndex():
+        self._old_pixmap = None
+        self._new_pixmap = None
+        self._target_index = -1
+        self._direction = 1  # 1 for forward (push), -1 for backward
+        
+        from PySide6.QtCore import QVariantAnimation, QEasingCurve
+        self._anim = QVariantAnimation(self)
+        self._anim.setDuration(260)
+        self._anim.setStartValue(0.0)
+        self._anim.setEndValue(1.0)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutQuint)
+        self._anim.valueChanged.connect(self._on_anim_tick)
+        self._anim.finished.connect(self._stop_animation)
+        self._t = 0.0
+        
+    def addWidget(self, widget):
+        self.insertWidget(len(self._widgets), widget)
+        return len(self._widgets) - 1
+        
+    def insertWidget(self, index, widget):
+        widget.setParent(self)
+        widget.hide()
+        self._widgets.insert(index, widget)
+        if self._current_index >= index:
+            self._current_index += 1
+        if self._current_index == -1:
+            self.setCurrentIndex(0)
+            
+    def removeWidget(self, widget):
+        if widget in self._widgets:
+            idx = self._widgets.index(widget)
+            self._widgets.remove(widget)
+            widget.setParent(None)
+            if self._current_index == idx:
+                self._current_index = -1
+                if self._widgets:
+                    self.setCurrentIndex(max(0, idx - 1))
+            elif self._current_index > idx:
+                self._current_index -= 1
+                
+    def widget(self, index):
+        if 0 <= index < len(self._widgets):
+            return self._widgets[index]
+        return None
+        
+    def sizeHint(self):
+        if 0 <= self._current_index < len(self._widgets):
+            return self._widgets[self._current_index].sizeHint()
+        return super().sizeHint()
+        
+    def minimumSizeHint(self):
+        if 0 <= self._current_index < len(self._widgets):
+            return self._widgets[self._current_index].minimumSizeHint()
+        return super().minimumSizeHint()
+        
+    def currentWidget(self):
+        return self.widget(self._current_index)
+        
+    def count(self):
+        return len(self._widgets)
+        
+    def currentIndex(self):
+        return self._current_index
+        
+    def setCurrentIndex(self, index):
+        if index < 0 or index >= len(self._widgets) or index == self._current_index:
             return
-
+            
         if self._is_animating:
-            if self._anim_group:
-                self._anim_group.stop()
-            self._is_animating = False
-
-        current_widget = self.currentWidget()
-        next_widget = self.widget(index)
-
-        if not current_widget or not next_widget:
+            self._stop_animation()
+            
+        if 0 <= self._current_index < len(self._widgets):
+            self._widgets[self._current_index].hide()
+            
+        self._current_index = index
+        w = self._widgets[index]
+        w.setGeometry(self.rect())
+        w.show()
+        
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Always sync geometry to child, even during animation, 
+        # so layout updates (like sidebar close) sync properly!
+        if 0 <= self._current_index < len(self._widgets):
+            self._widgets[self._current_index].setGeometry(self.rect())
+            
+    def fade_to_index(self, index):
+        if index < 0 or index >= len(self._widgets) or index == self._current_index:
+            return
+            
+        if self._is_animating:
+            self._stop_animation()
+            
+        old_widget = self.widget(self._current_index)
+        new_widget = self.widget(index)
+        
+        if not old_widget or not new_widget:
             self.setCurrentIndex(index)
             return
-
-        with sentry.span("ui.transition", description=f"Index {self.currentIndex()} → {index}"):
-            next_widget.setVisible(True)
-
-            current_effect = QGraphicsOpacityEffect(current_widget)
-            next_effect = QGraphicsOpacityEffect(next_widget)
-            current_widget.setGraphicsEffect(current_effect)
-            next_widget.setGraphicsEffect(next_effect)
-
-            next_effect.setOpacity(0)
-
-            self._anim_group = QParallelAnimationGroup(self)
-
-            inherited_v = InertiaChain.instance().pop(0.4)
-            dur = max(160, int(250 - abs(inherited_v) * 40))
-
-            anim_out = QPropertyAnimation(current_effect, b"opacity")
-            anim_out.setDuration(dur)
-            anim_out.setStartValue(1)
-            anim_out.setEndValue(0)
-            anim_out.setEasingCurve(QEasingCurve.Type.InQuad)
-
-            anim_in = QPropertyAnimation(next_effect, b"opacity")
-            anim_in.setDuration(dur)
-            anim_in.setStartValue(0)
-            anim_in.setEndValue(1)
-            anim_in.setEasingCurve(QEasingCurve.Type.OutCubic)
-
-            self._anim_group.addAnimation(anim_out)
-            self._anim_group.addAnimation(anim_in)
-
-            def on_finished():
-                self.setCurrentIndex(index)
-                current_widget.setGraphicsEffect(None)
-                next_widget.setGraphicsEffect(None)
-                current_widget.setVisible(False)
-                self._is_animating = False
-
-            self._anim_group.finished.connect(on_finished)
-            self._is_animating = True
-            self._anim_group.start()
+            
+        self._target_index = index
+        self._direction = 1 if index > self._current_index else -1
+        
+        # Lock input globally on this container during transition
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        
+        # Predict the target width (when sidebar auto-closes, the container becomes the full window width)
+        target_w = self.window().width()
+        target_h = self.height()
+        new_widget.setGeometry(0, 0, target_w, target_h)
+        new_widget.ensurePolished()
+        
+        with sentry.span("ui.transition.snapshot", description=f"Snapshot index {self._current_index} → {index}"):
+            self._old_pixmap = old_widget.grab()
+            self._new_pixmap = new_widget.grab()
+        
+        # Hide actual widgets to prevent layout interference
+        old_widget.hide()
+        new_widget.hide()
+        
+        # Setup animation
+        self._is_animating = True
+        self._t = 0.0
+        self._anim.start()
+        
+    def _stop_animation(self):
+        self._is_animating = False
+        self._old_pixmap = None
+        self._new_pixmap = None
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+        
+        if self._target_index != -1:
+            idx = self._target_index
+            self._target_index = -1
+            self.setCurrentIndex(idx)
+            
+    def _on_anim_tick(self, value):
+        self._t = value
+        self.update()
+            
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self._is_animating or not self._old_pixmap or not self._new_pixmap:
+            return
+            
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        
+        # Value moves from 0.0 to 1.0
+        t = self._t
+        w = self.width()
+        
+        if self._direction == 1:  # Push Forward
+            # Old page: shifts left (-15%), fades out, scales slightly down
+            old_x = -w * 0.15 * t
+            old_scale = 1.0 - (0.02 * t)
+            old_opacity = 1.0 - t
+            
+            # New page: comes from right (+15%), fades in
+            new_x = w * 0.15 * (1.0 - t)
+            new_scale = 1.0
+            new_opacity = t
+            
+            # Draw old first (underneath)
+            self._draw_pixmap(painter, self._old_pixmap, old_x, 0, old_scale, old_opacity)
+            # Draw new on top
+            self._draw_pixmap(painter, self._new_pixmap, new_x, 0, new_scale, new_opacity)
+            
+        else:  # Back Transition
+            # Old page: shifts right (+100%), fades out
+            old_x = w * t
+            old_scale = 1.0
+            old_opacity = 1.0 - t
+            
+            # New page: comes from left (-15%), scales 0.96 -> 1.0, fades in
+            new_x = -w * 0.15 * (1.0 - t)
+            new_scale = 0.96 + (0.04 * t)
+            new_opacity = t
+            
+            # Draw new first (underneath)
+            self._draw_pixmap(painter, self._new_pixmap, new_x, 0, new_scale, new_opacity)
+            # Draw old on top
+            self._draw_pixmap(painter, self._old_pixmap, old_x, 0, old_scale, old_opacity)
+            
+    def _draw_pixmap(self, painter, pixmap, x, y, scale, opacity):
+        painter.save()
+        painter.setOpacity(max(0.0, min(1.0, opacity)))
+        
+        if scale != 1.0:
+            cx = x + self.width() / 2.0
+            cy = y + self.height() / 2.0
+            painter.translate(cx, cy)
+            painter.scale(scale, scale)
+            painter.translate(-cx, -cy)
+            
+        # Draw natively without stretching to preserve crispness and aspect ratio
+        painter.drawPixmap(int(x), int(y), pixmap)
+        painter.restore()

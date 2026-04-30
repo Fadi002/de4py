@@ -18,14 +18,15 @@ from PySide6.QtWidgets import QWidget, QGraphicsOpacityEffect, QGraphicsScale
 
 from de4py.ui.motion.spring import FramePacer
 from de4py.ui.motion.material import MaterialState, set_wake_callback
+from de4py.ui.motion.registry import AnimationRegistry
 
 
 class MotionManager(QObject):
-    DURATION_MICRO = 150
-    DURATION_PRESS = 85
-    DURATION_SPRING = 240
-    DURATION_SLIDE = 320
-    DURATION_TRANSITION = 260
+    DURATION_MICRO = 130
+    DURATION_PRESS = 50
+    DURATION_SPRING = 220
+    DURATION_SLIDE = 300
+    DURATION_TRANSITION = 240
 
     EASE_STANDARD = QEasingCurve.Type.OutCubic
     EASE_HEAVY = QEasingCurve.Type.OutQuart
@@ -93,38 +94,22 @@ class MotionManager(QObject):
 
     @staticmethod
     def stop_animations(target: QObject):
-        if target in MotionManager._active_animations:
-            group = MotionManager._active_animations[target]
-            if group.state() == QAbstractAnimation.Running:
-                group.stop()
-            del MotionManager._active_animations[target]
+        AnimationRegistry.instance().cancel_all(target)
 
     @staticmethod
-    def _register_animation(target: QObject, anim_group: QParallelAnimationGroup):
-        MotionManager.stop_animations(target)
-        MotionManager._active_animations[target] = anim_group
-
-        def cleanup():
-            if target in MotionManager._active_animations:
-                if MotionManager._active_animations[target] == anim_group:
-                    del MotionManager._active_animations[target]
-
-        anim_group.finished.connect(cleanup)
-        anim_group.start(QAbstractAnimation.DeleteWhenStopped)
+    def _start_animation(anim: QPropertyAnimation):
+        anim.start()
 
     @staticmethod
     def animate_scale(target: QObject, start: float, end: float, duration: int = DURATION_MICRO, easing=EASE_STANDARD):
         prop_name = b"scale_factor"
         if target.metaObject().indexOfProperty("scale_factor") != -1:
-             anim = QPropertyAnimation(target, prop_name)
+             anim = AnimationRegistry.instance().get_or_create(target, prop_name)
              anim.setDuration(duration)
              anim.setStartValue(start)
              anim.setEndValue(end)
              anim.setEasingCurve(easing)
-
-             group = QParallelAnimationGroup()
-             group.addAnimation(anim)
-             MotionManager._register_animation(target, group)
+             anim.start()
              return
 
         scale_transform = None
@@ -143,44 +128,38 @@ class MotionManager(QObject):
                         target.rect().center().y()
                     )
 
-            anim = QPropertyAnimation(scale_transform, b"xScale")
+            anim = AnimationRegistry.instance().get_or_create(scale_transform, b"xScale")
             anim.setDuration(duration)
             anim.setStartValue(start)
             anim.setEndValue(end)
             anim.setEasingCurve(easing)
 
-            anim_y = QPropertyAnimation(scale_transform, b"yScale")
+            anim_y = AnimationRegistry.instance().get_or_create(scale_transform, b"yScale")
             anim_y.setDuration(duration)
             anim_y.setStartValue(start)
             anim_y.setEndValue(end)
             anim_y.setEasingCurve(easing)
 
-            group = QParallelAnimationGroup()
-            group.addAnimation(anim)
-            group.addAnimation(anim_y)
-            MotionManager._register_animation(target, group)
+            anim.start()
+            anim_y.start()
 
 
     @staticmethod
     def animate_sidebar_width(target: QWidget, start: int, end: int, duration=DURATION_SLIDE, easing=EASE_HEAVY):
-        group = QParallelAnimationGroup()
-
-        anim_min = QPropertyAnimation(target, b"minimumWidth")
+        anim_min = AnimationRegistry.instance().get_or_create(target, b"minimumWidth")
         anim_min.setDuration(duration)
         anim_min.setStartValue(start)
         anim_min.setEndValue(end)
         anim_min.setEasingCurve(easing)
 
-        anim_max = QPropertyAnimation(target, b"maximumWidth")
+        anim_max = AnimationRegistry.instance().get_or_create(target, b"maximumWidth")
         anim_max.setDuration(duration)
         anim_max.setStartValue(start)
         anim_max.setEndValue(end)
         anim_max.setEasingCurve(easing)
 
-        group.addAnimation(anim_min)
-        group.addAnimation(anim_max)
-
-        MotionManager._register_animation(target, group)
+        anim_min.start()
+        anim_max.start()
 
     @staticmethod
     def animate_opacity_fade(target: QWidget, start: float, end: float, duration=DURATION_TRANSITION):
@@ -189,12 +168,10 @@ class MotionManager(QObject):
             effect = QGraphicsOpacityEffect(target)
             target.setGraphicsEffect(effect)
 
-        anim = QPropertyAnimation(effect, b"opacity")
+        anim = AnimationRegistry.instance().get_or_create(effect, b"opacity")
         anim.setDuration(duration)
         anim.setStartValue(start)
         anim.setEndValue(end)
         anim.setEasingCurve(MotionManager.EASE_FADE)
 
-        group = QParallelAnimationGroup()
-        group.addAnimation(anim)
-        MotionManager._register_animation(target, group)
+        anim.start()

@@ -119,6 +119,16 @@ class NotificationWidget(QFrame):
         self._pos_spring_y.target = y
         self._pos_spring_y.velocity = 0
         self.move(int(x), int(y))
+        
+        # Pre-calculate overlay path for paintEvent
+        from PySide6.QtGui import QPainterPath
+        self._clip_path = QPainterPath()
+        rect = self.rect()
+        bw = float(self._border_width)
+        inset = bw / 2.0
+        overlay_rect = rect.adjusted(math.ceil(inset), math.ceil(inset),
+                                     -math.ceil(inset), -math.ceil(inset))
+        self._clip_path.addRoundedRect(overlay_rect, self._corner_radius, self._corner_radius)
 
     def tick_position(self, dt: float) -> bool:
         self._pos_spring_x.tick(dt)
@@ -141,12 +151,9 @@ class NotificationWidget(QFrame):
                                      -math.ceil(inset), -math.ceil(inset))
 
         if self._blur_pixmap and not self._blur_pixmap.isNull() and self.parent():
-            from PySide6.QtGui import QPainterPath
-            path = QPainterPath()
-            path.addRoundedRect(overlay_rect, radius, radius)
-
             painter.save()
-            painter.setClipPath(path)
+            if hasattr(self, '_clip_path'):
+                painter.setClipPath(self._clip_path)
 
             global_pos = self.mapTo(self.parent(), QPoint(0, 0))
             src = QRect(global_pos, self.size())

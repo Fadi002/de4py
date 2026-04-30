@@ -61,9 +61,6 @@ QTextBrowser#ChangelogContent {
 QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
     background-color: rgba(24, 28, 36, 0.40);
 }
-QFrame#StyledFrame:hover, QFrame#PluginCard:hover {
-    background-color: rgba(26, 31, 40, 0.48);
-}
 QFrame#ModeSelectorFrame {
     background-color: rgba(24, 28, 36, 0.40);
 }

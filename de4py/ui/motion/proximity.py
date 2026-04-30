@@ -36,9 +36,26 @@ class ProximityTracker(QObject):
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.MouseMove:
             pos = event.globalPosition()
+            
+            # Adaptive threshold calculation based on time
+            from PySide6.QtCore import QElapsedTimer
+            if not hasattr(self, '_vel_timer'):
+                self._vel_timer = QElapsedTimer()
+                self._vel_timer.start()
+            
+            dt = self._vel_timer.elapsed() / 1000.0
+            self._vel_timer.restart()
+            
             dx = pos.x() - self._last_pos.x()
             dy = pos.y() - self._last_pos.y()
-            if dx * dx + dy * dy > 4:
+            
+            velocity = (dx * dx + dy * dy) ** 0.5 / max(dt, 0.001)
+            
+            # Fast movement -> higher threshold (skip frames for stability)
+            # Slow movement -> lower threshold (capture fine details)
+            threshold_sq = 36 if velocity > 1000 else 9
+            
+            if dx * dx + dy * dy > threshold_sq:
                 self._last_pos = pos
                 self._broadcast(pos)
         return False
