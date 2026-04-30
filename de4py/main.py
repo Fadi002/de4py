@@ -206,6 +206,11 @@ def main():
             return
 
     # Default: GUI Mode
+    from PySide6.QtCore import Qt
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+
     with sentry.transaction("GUI Session", "app.gui"):
         sentry.breadcrumb("GUI Application starting", category="lifecycle")
         logging.info("Starting in GUI mode...")

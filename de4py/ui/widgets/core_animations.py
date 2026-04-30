@@ -397,11 +397,13 @@ class AnimatedStackedWidget(QFrame):
         self._direction = 1  # 1 for forward (push), -1 for backward
         
         from PySide6.QtCore import QVariantAnimation, QEasingCurve
+        from de4py.ui.motion.manager import MotionManager
+        
         self._anim = QVariantAnimation(self)
-        self._anim.setDuration(260)
+        self._anim.setDuration(MotionManager.DURATION_SLIDE)
         self._anim.setStartValue(0.0)
         self._anim.setEndValue(1.0)
-        self._anim.setEasingCurve(QEasingCurve.Type.OutQuint)
+        self._anim.setEasingCurve(MotionManager.EASE_HEAVY)
         self._anim.valueChanged.connect(self._on_anim_tick)
         self._anim.finished.connect(self._stop_animation)
         self._t = 0.0
@@ -495,7 +497,7 @@ class AnimatedStackedWidget(QFrame):
         self._direction = 1 if index > self._current_index else -1
         
         # Lock input globally on this container during transition
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         
         # Predict the target width (when sidebar auto-closes, the container becomes the full window width)
         target_w = self.window().width()
@@ -506,14 +508,21 @@ class AnimatedStackedWidget(QFrame):
         with sentry.span("ui.transition.snapshot", description=f"Snapshot index {self._current_index} → {index}"):
             self._old_pixmap = old_widget.grab()
             self._new_pixmap = new_widget.grab()
+            
+            # Explicitly force High-DPI awareness on grabbed pixmaps
+            dpr = self.devicePixelRatioF()
+            self._old_pixmap.setDevicePixelRatio(dpr)
+            self._new_pixmap.setDevicePixelRatio(dpr)
         
         # Hide actual widgets to prevent layout interference
         old_widget.hide()
         new_widget.hide()
         
         # Setup animation
+        from de4py.ui.motion.manager import MotionManager
         self._is_animating = True
         self._t = 0.0
+        self._anim.setDuration(MotionManager.DURATION_SLIDE) # Sync with sidebar
         self._anim.start()
         
     def _stop_animation(self):
@@ -537,8 +546,9 @@ class AnimatedStackedWidget(QFrame):
             return
             
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         
         # Value moves from 0.0 to 1.0
         t = self._t
@@ -588,5 +598,6 @@ class AnimatedStackedWidget(QFrame):
             painter.translate(-cx, -cy)
             
         # Draw natively without stretching to preserve crispness and aspect ratio
-        painter.drawPixmap(int(x), int(y), pixmap)
+        # Use QPointF to prevent subpixel jitter/blur during translation
+        painter.drawPixmap(QPointF(x, y), pixmap)
         painter.restore()

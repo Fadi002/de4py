@@ -70,12 +70,6 @@ QFrame#NotificationFrame {
 QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
     background-color: rgba(24, 28, 36, 0.5);
 }
-QLineEdit:hover, QTextEdit:hover, QPlainTextEdit:hover {
-    background-color: rgba(27, 32, 42, 0.65);
-}
-QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
-    background-color: rgba(30, 36, 46, 0.9);
-}
 """
 
 class MainWindow(QMainWindow):
