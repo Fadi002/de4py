@@ -188,9 +188,10 @@ class DynamicBlurEventFilter(QObject):
         self.window = win
         self.blur_color = color
         self.force_dark = force_dark
-        self._timer = QTimer()
+        self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(50)
+        self._timer.setTimerType(Qt.TimerType.PreciseTimer)
         self._timer.timeout.connect(self._apply)
     
     def update_params(self, color, force_dark):
@@ -198,6 +199,7 @@ class DynamicBlurEventFilter(QObject):
         self.force_dark = force_dark
         self._apply()
 
+    def eventFilter(self, obj, event):
         if event.type() in (QEvent.Type.Resize, QEvent.Type.Move, QEvent.Type.WindowActivate, QEvent.Type.WindowDeactivate):
             self._timer.start()
         return False

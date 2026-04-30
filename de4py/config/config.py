@@ -13,8 +13,6 @@ import os
 import logging
 from typing import Optional, Dict, Any
 
-PROJECT_SIGNATURE = "de4py-core-signature-7f3a91"
-
 @dataclass
 class Settings:
     version: str = "V3.1.1"

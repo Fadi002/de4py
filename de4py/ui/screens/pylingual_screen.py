@@ -16,17 +16,17 @@ from dataclasses import dataclass
 
 from PySide6.QtWidgets import (
     QSplitter, QApplication, QTextBrowser, QFileDialog,
-    QGraphicsBlurEffect, QGraphicsScene, QGraphicsPixmapItem, 
     QGraphicsOpacityEffect, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QPushButton, QTextEdit, QCheckBox, QScrollArea, QFrame,
     QProgressBar,
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QSize, Signal, QRectF, Property
-from PySide6.QtGui import QColor, QPainter, QPixmap
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QSize, Signal, Property
+from PySide6.QtGui import QColor, QPainter
 
 from de4py.ui.workers.pylingual_worker import PyLingualWorker
 from de4py.lang import tr
 from de4py.utils import sentry
+from de4py.ui.widgets.glass_utils import GlassBlurCache
 from de4py.lang.keys import (
     SCREEN_TITLE_PYLINGUAL, PYLINGUAL_OFFLINE, PYLINGUAL_ONLINE,
     PYLINGUAL_SELECT_FILE, PYLINGUAL_EXECUTE, PYLINGUAL_COPY,
@@ -64,6 +64,7 @@ class TOSDialog(QWidget):
         
         self._blurred_bg = None
         self._lock_events = False
+        self._fade_target = None
         self._setup_ui()
         self._setup_animation()
 
@@ -127,18 +128,24 @@ class TOSDialog(QWidget):
         self.setGraphicsEffect(self.effect)
         self.anim = QPropertyAnimation(self.effect, b"opacity")
         self.anim.setDuration(300)
-        self.anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.anim.finished.connect(self._on_fade_finished)
 
     def fade_in(self):
+        self.anim.stop()
+        self._fade_target = "visible"
         self.show()
-        self.anim.setStartValue(0)
-        self.anim.setEndValue(1)
+        self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.anim.setStartValue(self.effect.opacity())
+        self.anim.setEndValue(1.0)
         self.anim.start()
 
     def fade_out(self):
-        self.anim.setStartValue(1)
-        self.anim.setEndValue(0)
-        self.anim.finished.connect(self.hide)
+        self.anim.stop()
+        self._fade_target = "hidden"
+        self.anim.setStartValue(self.effect.opacity())
+        self.anim.setEndValue(0.0)
+        self.anim.setEasingCurve(QEasingCurve.Type.InCubic)
         self.anim.start()
 
     def _on_accept(self):
@@ -156,39 +163,18 @@ class TOSDialog(QWidget):
         top_window = self.window()
         if not top_window or self._lock_events:
             return None
-        
+
         self._lock_events = True
-        super().hide()
-        
-        screen = top_window.screen()
-        if not screen:
-            screen = QApplication.primaryScreen()
-            
-        snapshot = screen.grabWindow(
-            top_window.winId(),
-            0, 0, top_window.width(), top_window.height()
-        )
-        
-        super().show()
-        self._lock_events = False
-        
-        blur_effect = QGraphicsBlurEffect()
-        blur_effect.setBlurRadius(25) 
-        
-        scene = QGraphicsScene()
-        item = QGraphicsPixmapItem(snapshot)
-        item.setGraphicsEffect(blur_effect)
-        scene.addItem(item)
-        
-        blurred_pixmap = QPixmap(snapshot.size())
-        blurred_pixmap.fill(Qt.transparent)
-        
-        painter = QPainter(blurred_pixmap)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        scene.render(painter, QRectF(blurred_pixmap.rect()), QRectF(snapshot.rect()))
-        painter.end()
-        
-        return blurred_pixmap
+        try:
+            return GlassBlurCache.capture(
+                top_window,
+                exclude_widget=self,
+                blur_radius=28,
+                downsample_divisor=2,
+                force_refresh=True,
+            )
+        finally:
+            self._lock_events = False
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -201,9 +187,15 @@ class TOSDialog(QWidget):
         if not self._lock_events:
             self._blurred_bg = None
 
+    def _on_fade_finished(self):
+        if self._fade_target == "hidden":
+            self.hide()
+        self._fade_target = None
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         
         if self._blurred_bg:
             painter.drawPixmap(self.rect(), self._blurred_bg)
@@ -223,8 +215,8 @@ class ModernToggle(QWidget):
         self._thumb_pos = 3
         
         self._anim = QPropertyAnimation(self, b"thumb_pos")
-        self._anim.setDuration(200)
-        self._anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self._anim.setDuration(180)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
 
     def get_thumb_pos(self):
         return self._thumb_pos
@@ -254,6 +246,7 @@ class ModernToggle(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         
         # Draw background
         color = QColor(self._active_color) if self._checked else QColor("#333333")

@@ -25,6 +25,7 @@ from de4py.lang.keys import (
 class SettingsScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._loading_config = False
         self._setup_ui()
         self._load_config()
 
@@ -117,12 +118,16 @@ class SettingsScreen(QWidget):
         layout.addWidget(frame)
 
     def _change_language(self, index):
+        if self._loading_config:
+            return
         lang_code = self.lang_combo.currentData()
         if lang_code:
             self._update_config("language", lang_code)
             translation_manager.set_language(lang_code)
 
     def _change_update_channel(self, index):
+        if self._loading_config:
+            return
         channel = self.channel_combo.currentData()
         if channel:
             self._update_config("update_channel", channel)
@@ -141,7 +146,21 @@ class SettingsScreen(QWidget):
         self.note_label.setText(tr(SETTINGS_RESTART_NOTE))
 
     def _load_config(self):
+        self._loading_config = True
         try:
+            widgets = (
+                self.rpc_checkbox,
+                self.stealth_checkbox,
+                self.plugins_checkbox,
+                self.transparent_checkbox,
+                self.auto_update_checkbox,
+                self.telemetry_checkbox,
+                self.lang_combo,
+                self.channel_combo,
+            )
+            for widget in widgets:
+                widget.blockSignals(True)
+
             self.rpc_checkbox.setChecked(settings.rpc)
             self.stealth_checkbox.setChecked(settings.stealth_title)
             self.plugins_checkbox.setChecked(settings.load_plugins)
@@ -151,22 +170,33 @@ class SettingsScreen(QWidget):
             
             # Update language combo box
             idx = self.lang_combo.findData(settings.language)
-            if idx >= 0 and idx != self.lang_combo.currentIndex():
-                self.lang_combo.blockSignals(True)
+            if idx >= 0:
                 self.lang_combo.setCurrentIndex(idx)
-                self.lang_combo.blockSignals(False)
 
             # Update channel combo box
             channel = getattr(settings, 'update_channel', 'stable')
             ch_idx = self.channel_combo.findData(channel)
-            if ch_idx >= 0 and ch_idx != self.channel_combo.currentIndex():
-                self.channel_combo.blockSignals(True)
+            if ch_idx >= 0:
                 self.channel_combo.setCurrentIndex(ch_idx)
-                self.channel_combo.blockSignals(False)
         except Exception:
             pass
+        finally:
+            for widget in (
+                self.rpc_checkbox,
+                self.stealth_checkbox,
+                self.plugins_checkbox,
+                self.transparent_checkbox,
+                self.auto_update_checkbox,
+                self.telemetry_checkbox,
+                self.lang_combo,
+                self.channel_combo,
+            ):
+                widget.blockSignals(False)
+            self._loading_config = False
 
     def _update_config(self, key: str, value):
+        if self._loading_config:
+            return
         try:
             if hasattr(settings, key):
                 setattr(settings, key, value)
@@ -175,6 +205,8 @@ class SettingsScreen(QWidget):
             pass
 
     def _on_transparent_ui_changed(self, state):
+        if self._loading_config:
+            return
         enabled = (state == 2)
         self._update_config("transparent_ui", enabled)
         

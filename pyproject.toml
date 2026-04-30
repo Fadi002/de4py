@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "de4py"
-version = "2.2.4"
+version = "3.1.1"
 dependencies = [
     "PySide6",
     "requests",

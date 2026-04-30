@@ -470,7 +470,7 @@ QLabel#SidebarTitle {
 }
 QPushButton#NavButton {
     background-color: transparent;
-    color: #ffffff;
+    color: #ABB2BF;
     border: none;
     text-align: left;
     padding-left: 20px;
@@ -505,7 +505,7 @@ QScrollArea#ChangelogArea, QScrollArea#ChangelogArea > QWidget > QWidget {
 QTextBrowser#ChangelogContent {
     background-color: transparent;
     border: none;
-    color: #e6edf3;
+    color: #ABB2BF;
 }
 """
 

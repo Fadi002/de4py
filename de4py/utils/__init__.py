@@ -7,18 +7,22 @@
 #
 # See the LICENSE file for details.
 
-from .tui import setup_logging, clear_console, fade_type, __BANNER__
-from .pathgen import gen_path
+"""
+de4py.utils — Shared utilities package.
 
-# Legacy compatibility — UpdateManager is now in de4py.update_manager
-def check_update():
-    """Legacy wrapper. Use de4py.update_manager.UpdateManager instead."""
-    from de4py.update_manager.updater import UpdateManager
-    from de4py.config.config import settings
-    mgr = UpdateManager(
-        current_version=settings.version,
-        channel=getattr(settings, 'update_channel', 'stable'),
-        auto_update=getattr(settings, 'auto_update', True),
-    )
-    release = mgr.check()
-    return release is None  # True = up to date (matches old behavior)
+Submodules:
+    logging     — File + console log setup
+    errors      — Global exception hook (call errors.install() to activate)
+    sentry      — Sentry SDK integration
+    rpc         — Discord Rich Presence
+    tui         — Console display (banners, formatting, animations)
+    fs          — Filesystem helpers: temp paths + checksum generation
+    shell       — Native process injection helpers (pyshell)
+    test        — Diagnostic self-test
+"""
+
+# Commonly imported symbols re-exported for convenience.
+from .logging import setup_logging                                      # noqa: F401
+from .errors import custom_error                                        # noqa: F401
+from .tui import clear_console, fade_type, __BANNER__                   # noqa: F401
+from .fs import gen_path                                                # noqa: F401

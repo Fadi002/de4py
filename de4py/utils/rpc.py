@@ -40,7 +40,7 @@ def _rpc_loop():
             break
 
 
-def start_RPC():
+def start_rpc():
     global RPC
     try:
         from pypresence import Presence
@@ -50,4 +50,5 @@ def start_RPC():
         t.start()
     except Exception as e:
         logging.debug(f"RPC connection failed: {e}")
+
 

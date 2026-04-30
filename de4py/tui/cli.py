@@ -18,7 +18,8 @@ from de4py.engines.analyzers import (
     all_strings_lookup,
 )
 from de4py.config.config import settings
-from de4py.utils import tui, rpc, update, custom_error, fade_type
+from de4py.utils import tui, rpc, update, fade_type
+from de4py.utils.errors import custom_error
 from de4py._meta import PROJECT_SIGNATURE
 from colorama import Fore, Style
 import socket
@@ -70,7 +71,7 @@ def home_tab():
     elif choice == "analyzer":
         analyzer_tab()
     elif choice == "about":
-        from de4py.about import print_about
+        from de4py._meta import print_about
         print_about()
     elif choice == "neofetch":
         neofetch()
@@ -309,7 +310,7 @@ def cupdate() -> None:
 def banner():
     tui.draw_line()
     print(
-        tui.water(
+        tui.apply_gradient_coloring(
             tui.align('''
      888              d8888                    
      888             d8P888                    
@@ -359,7 +360,7 @@ def start():
         f"{colorama.Fore.CYAN}Welcome to de4py type {colorama.Style.RESET_ALL}help {colorama.Fore.CYAN}to get the commands that you can use\n"
     )
     if settings.rpc:
-        rpc.start_RPC()
+        rpc.start_rpc()
     while 1:
         home_tab()
 

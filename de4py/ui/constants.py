@@ -51,9 +51,6 @@ FRAME_RADIUS = 10
 FRAME_BORDER = 2
 INPUT_RADIUS = 10
 
-# Animation [DEPRECATED - Moved to MotionManager]
-# Kept briefly to prevent immediate ImportErrors until full migration
-ANIM_DURATION_NORMAL = 200
 
 # Window
 WINDOW_WIDTH = 1024

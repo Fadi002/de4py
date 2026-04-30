@@ -127,11 +127,8 @@ class De4pyTester:
         self.log_result("Integrity", "File Checksums", success, "\n".join(mismatched))
 
     def calculate_checksum(self, file_path):
-        hasher = hashlib.sha256()
-        with open(file_path, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                hasher.update(chunk)
-        return hasher.hexdigest()
+        from de4py.utils.fs import calculate_checksum
+        return calculate_checksum(file_path)
 
     def generate_checksums(self, excludes=None):
         if excludes is None:

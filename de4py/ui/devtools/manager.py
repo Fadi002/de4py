@@ -86,7 +86,5 @@ def init_devtools(app: QApplication):
     dev_mode = str(os.getenv("DEV_MODE", "")).lower()
     if dev_mode not in ("1", "true", "on", "yes"):
         return None
-        
-    assert dev_mode in ("1", "true", "on", "yes"), "SAFETY: DevTools loaded in production environment!"
-    
+
     return DeveloperMenuManager(app)

@@ -7,15 +7,36 @@
 #
 # See the LICENSE file for details.
 
-# sentry.py - sentry_sdk moved to local scope
+"""
+Sentry SDK integration for error monitoring and performance tracing.
+
+All functions check the telemetry kill-switch before calling into sentry_sdk,
+ensuring complete user opt-out when settings.telemetry is False.
+"""
+
 from contextlib import contextmanager
 import logging
 
 ENABLED = True
 
+# Cached reference — avoids re-importing settings on every call.
+_settings = None
+
+
+def _get_settings():
+    global _settings
+    if _settings is None:
+        from de4py.config.config import settings
+        _settings = settings
+    return _settings
+
+
+def _is_active():
+    return ENABLED and getattr(_get_settings(), 'telemetry', True)
+
+
 def init():
-    from de4py.config.config import settings
-    if not ENABLED or not getattr(settings, 'telemetry', True):
+    if not _is_active():
         return
     try:
         import sentry_sdk
@@ -27,32 +48,31 @@ def init():
             profile_session_sample_rate=0.15
         )
     except Exception as e:
-        import logging
         logging.warning(f"Sentry initialization failed: {e}")
+
 
 @contextmanager
 def transaction(name, op):
-    from de4py.config.config import settings
-    if not ENABLED or not getattr(settings, 'telemetry', True):
+    if not _is_active():
         yield None
         return
     import sentry_sdk
     with sentry_sdk.start_transaction(name=name, op=op) as t:
         yield t
 
+
 @contextmanager
 def span(op, description=None):
-    from de4py.config.config import settings
-    if not ENABLED or not getattr(settings, 'telemetry', True):
+    if not _is_active():
         yield None
         return
     import sentry_sdk
     with sentry_sdk.start_span(op=op, description=description) as s:
         yield s
 
+
 def breadcrumb(msg, category="app", level="info", **data):
-    from de4py.config.config import settings
-    if ENABLED and getattr(settings, 'telemetry', True):
+    if _is_active():
         import sentry_sdk
         sentry_sdk.add_breadcrumb(
             message=msg,
@@ -61,14 +81,14 @@ def breadcrumb(msg, category="app", level="info", **data):
             data=data
         )
 
+
 def set_user_context(user_id=None, email=None, username=None):
-    from de4py.config.config import settings
-    if ENABLED and getattr(settings, 'telemetry', True):
+    if _is_active():
         import sentry_sdk
         sentry_sdk.set_user({"id": user_id, "email": email, "username": username})
 
+
 def set_extra_context(key, value):
-    from de4py.config.config import settings
-    if ENABLED and getattr(settings, 'telemetry', True):
+    if _is_active():
         import sentry_sdk
         sentry_sdk.set_context(key, value)

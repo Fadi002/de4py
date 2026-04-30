@@ -14,6 +14,7 @@ Translation Manager
 import os
 import json
 import logging
+from functools import lru_cache
 from typing import Dict, Any, Optional
 from datetime import datetime
 
@@ -31,10 +32,6 @@ class TranslationManager(QObject):
         language_changed(str): Emitted when language is changed, with new language code
     """
     
-    # Signal emitted when language changes (new_language_code)
-    language_changed = Signal(str)
-    
-    # Signal emitted when language changes (new_language_code)
     language_changed = Signal(str)
     
     _instance: Optional['TranslationManager'] = None
@@ -54,6 +51,7 @@ class TranslationManager(QObject):
         self._current_lang = "en"
         self._translations: Dict[str, Any] = {}
         self._fallback_translations: Dict[str, Any] = {}
+        self._available_languages: Optional[Dict[str, str]] = None
         self._locale = QLocale(QLocale.Language.English)
         
         # Determine locales directory path
@@ -82,12 +80,21 @@ class TranslationManager(QObject):
         fallback_path = os.path.join(self._locales_dir, "en.json")
         try:
             if os.path.exists(fallback_path):
-                with open(fallback_path, 'r', encoding='utf-8') as f:
-                    self._fallback_translations = json.load(f)
+                self._fallback_translations = self._load_json_file(fallback_path)
                 logger.debug("Loaded English fallback translations")
         except Exception as e:
             logger.error(f"Failed to load fallback translations: {e}")
             self._fallback_translations = {}
+
+    @staticmethod
+    @lru_cache(maxsize=64)
+    def _load_json_file(file_path: str) -> Dict[str, Any]:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+
+    @staticmethod
+    def _normalize_lang_code(lang_code: str) -> str:
+        return lang_code.lower().replace("_", "-")
     
     def load_language(self, lang_code: str) -> bool:
         """
@@ -99,26 +106,19 @@ class TranslationManager(QObject):
         Returns:
             True if loaded successfully, False otherwise
         """
-        lang_file = os.path.join(self._locales_dir, f"{lang_code}.json")
+        normalized_lang_code = self._normalize_lang_code(lang_code)
+        lang_file = os.path.join(self._locales_dir, f"{normalized_lang_code}.json")
         
         try:
             if os.path.exists(lang_file):
-                with open(lang_file, 'r', encoding='utf-8') as f:
-                    self._translations = json.load(f)
-                logger.info(f"Loaded translations for: {lang_code}")
+                self._translations = self._load_json_file(lang_file)
+                logger.info(f"Loaded translations for: {normalized_lang_code}")
             else:
                 logger.warning(f"Translation file not found: {lang_file}")
-                # Fallback to English if not found, but keep code if it's English
-                if lang_code != "en":
-                     self._translations = self._fallback_translations.copy()
-                     # Try to see if it's just missing file but maybe valid code?
-                     # No, if file missing, we revert to fallback content but what about current_lang?
-                     # Let's fallback gracefully.
-                else:
-                    self._translations = self._fallback_translations.copy()
+                self._translations = self._fallback_translations.copy()
             
-            self._current_lang = lang_code
-            self._update_locale(lang_code)
+            self._current_lang = normalized_lang_code
+            self._update_locale(normalized_lang_code)
             return True
             
         except json.JSONDecodeError as e:
@@ -161,8 +161,8 @@ class TranslationManager(QObject):
             "fr": QLocale(QLocale.Language.French, QLocale.Country.France),
             "de": QLocale(QLocale.Language.German, QLocale.Country.Germany),
             "ru": QLocale(QLocale.Language.Russian, QLocale.Country.Russia),
-            "zh_cn": QLocale(QLocale.Language.Chinese, QLocale.Country.China),
-            "zh_tw": QLocale(QLocale.Language.Chinese, QLocale.Country.Taiwan),
+            "zh-cn": QLocale(QLocale.Language.Chinese, QLocale.Country.China),
+            "zh-tw": QLocale(QLocale.Language.Chinese, QLocale.Country.Taiwan),
             "pt": QLocale(QLocale.Language.Portuguese, QLocale.Country.Portugal),
             "ja": QLocale(QLocale.Language.Japanese, QLocale.Country.Japan),
             "ko": QLocale(QLocale.Language.Korean, QLocale.Country.RepublicOfKorea),
@@ -385,6 +385,9 @@ class TranslationManager(QObject):
         Returns:
             Dict mapping language codes to display names (e.g., {'en': 'English'})
         """
+        if self._available_languages is not None:
+            return dict(self._available_languages)
+
         available = {}
         try:
             if not os.path.exists(self._locales_dir):
@@ -396,11 +399,9 @@ class TranslationManager(QObject):
                     file_path = os.path.join(self._locales_dir, filename)
                     
                     try:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                            # Use LANG_NAME if available, else code
-                            lang_name = data.get("LANG_NAME", lang_code)
-                            available[lang_code] = lang_name
+                        data = self._load_json_file(file_path)
+                        lang_name = data.get("LANG_NAME", lang_code)
+                        available[lang_code] = lang_name
                     except Exception:
                         # Skip malformed files
                         continue
@@ -410,5 +411,6 @@ class TranslationManager(QObject):
         # Ensure at least English is present if fallback loaded
         if "en" not in available and self._fallback_translations:
             available["en"] = "English"
-            
-        return available
+
+        self._available_languages = available
+        return dict(available)

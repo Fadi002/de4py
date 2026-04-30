@@ -7,11 +7,53 @@
 #
 # See the LICENSE file for details.
 
-# type: ignore
-import ast
-import string
+"""
+Erebus deobfuscator — consolidated from the original 3-file sub-package.
+
+Provides: Deobfuscator, Result (deobfuscation runner), unwrap (blob extractor).
+"""
+
+from ast import NodeTransformer, parse, unparse
 from ast import unparse
+from functools import reduce
+from operator import add
 from typing import Any, Dict, List
+from typing import Any, Dict, Tuple, Type
+from typing import List
+import ast
+import logging
+import string
+import zlib
+
+
+# ── Blob Unwrapper ──────────────────────────────────────────────────────────
+
+logger = logging.getLogger(__name__)
+
+
+class BlobFinder(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.blobs: List[bytes] = []
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        if type(node.value) is bytes:
+            self.blobs.append(node.value)
+
+    def find_blobs(self, node: ast.AST) -> List[bytes]:
+        self.visit(node)
+        return self.blobs
+
+
+def unwrap(code: str) -> str:
+    """Find the actual code as a blob of obfuscated code"""
+    tree = ast.parse(code)
+    blobs = BlobFinder().find_blobs(tree)
+    blob = reduce(add, blobs)
+    logger.info(f"Found blob of length {len(blob)}")
+    return zlib.decompress(blob).decode()
+
+
+# ── AST Transformers ─────────────────────────────────────────────────────────
 
 CONSTANTS = (
     ast.Name,
@@ -256,3 +298,70 @@ class RemoveFromBuiltins(ast.NodeTransformer):
         if node.module == "builtins":
             return ast.Module(body=[], type_ignores=[])
         return super().generic_visit(node)
+
+
+# ── Deobfuscator ─────────────────────────────────────────────────────────────
+
+class Result:
+    def __init__(self, code: str, passes: int, variables: Dict[str, Any]) -> None:
+        self.code = code
+        self.passes = passes
+        self.variables = variables
+
+    def add_variables(self) -> None:
+        code = "\n".join(
+            [f"{name} = {unparse(value)}" for name, value in self.variables.items()]
+        )
+        self.code = f"{code}\n{self.code}"
+
+
+class Deobfuscator:
+    TRANSFORMERS: Tuple[Type[NodeTransformer], ...] = (
+        StringSubscriptSimple,
+        GlobalsToVarAccess,
+        InlineConstants,
+        DunderImportRemover,
+        GetattrConstructRemover,
+        BuiltinsAccessRemover,
+        Dehexlify,
+        UselessCompile,
+        UselessEval,
+        ExecTransformer,
+        UselessLambda,
+        RemoveFromBuiltins,
+    )
+
+    AFTER_TRANSFORMERS: Tuple[Type[NodeTransformer], ...] = (
+        LambdaCalls,
+        EmptyIf,
+    )
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        self.tree = parse(code)
+
+    def deobfuscate(self) -> Result:
+        passes = 0
+        code = self.code
+        while True:
+            for transformer in self.TRANSFORMERS:
+                try:
+                    self.tree = transformer().visit(self.tree)
+                except Exception as e:
+                    transformer_name = transformer.__name__
+                    logging.warning(f"Transformer {transformer_name} failed with {e}")
+            # If nothing changed after a full pass, we're done
+            if (result := unparse(self.tree)) == code:
+                for transformer in self.AFTER_TRANSFORMERS:
+                    try:
+                        self.tree = transformer().visit(self.tree)
+                    except Exception as e:
+                        transformer_name = transformer.__name__
+                        logging.warning(
+                            f"Transformer {transformer_name} failed with {e}"
+                        )
+                    code = unparse(self.tree)
+                break
+            code = result
+            passes += 1
+        return Result(code, passes, constants)

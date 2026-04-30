@@ -53,6 +53,7 @@ class DebugOverlay(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
 
         if self.show_boundaries:
             self._draw_boundaries(painter)
@@ -82,6 +83,7 @@ class DebugOverlay(QWidget):
         
         # Background
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(0, 0, 0, 180))
         painter.drawRoundedRect(x, y, width, height, 4, 4)
@@ -95,7 +97,9 @@ class DebugOverlay(QWidget):
             
         painter.setPen(color)
         from PySide6.QtGui import QFont
-        painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        font = QFont("Segoe UI", 9, QFont.Weight.Bold)
+        font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
+        painter.setFont(font)
         painter.drawText(QRect(x, y, width, height), Qt.AlignmentFlag.AlignCenter, fps_text)
 
     def _draw_highlights(self, painter):

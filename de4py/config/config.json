@@ -13,8 +13,8 @@
     "language": "en",
     "transparent_ui": true,
     "auto_update": true,
-    "update_channel": "stable",
+    "update_channel": "dev",
     "last_update_check": null,
     "github_repo": "Fadi002/de4py",
-    "telemetry": true
+    "telemetry": false
 }

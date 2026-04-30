@@ -7,11 +7,24 @@
 #
 # See the LICENSE file for details.
 
-import os, logging, time, shutil, sys, datetime, platform
-from colorama import Fore, Style, AnsiToWin32, init
-from traceback import extract_tb, format_exc
-from logging.handlers import TimedRotatingFileHandler
+"""
+Console display utilities for de4py CLI.
+
+Handles: banner rendering, terminal formatting, animated text output,
+and the neofetch-style side-by-side layout helper.
+"""
+
+import os
+import sys
+import time
+import shutil
+from colorama import Fore, Style, init
+
 init()
+
+
+# ── Banner ───────────────────────────────────────────────────────────────────
+
 __RAW_BANNER__ = '''
 ██████╗ ███████╗██╗  ██╗██████╗ ██╗   ██╗
 ██╔══██╗██╔════╝██║  ██║██╔══██╗╚██╗ ██╔╝
@@ -19,6 +32,88 @@ __RAW_BANNER__ = '''
 ██║  ██║██╔══╝  ╚════██║██╔═══╝   ╚██╔╝  
 ██████╔╝███████╗     ██║██║        ██║   
 ╚═════╝ ╚══════╝     ╚═╝╚═╝        ╚═╝'''
+
+
+def apply_gradient_coloring(text):
+    """Apply a blue-to-green vertical gradient to multi-line text."""
+    os.system("")
+    faded = ""
+    green = 10
+    for line in text.splitlines():
+        faded += f"\033[38;2;0;{green};255m{line}\033[0m\n"
+        if green != 255:
+            green += 15
+            if green > 255:
+                green = 255
+    return faded
+
+__BANNER__ = apply_gradient_coloring(__RAW_BANNER__)
+
+
+# ── Console Helpers ──────────────────────────────────────────────────────────
+
+def clear_console():
+    """Clear the terminal screen."""
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+
+def fade_type(text):
+    """Print text with a typewriter animation effect."""
+    for c in text:
+        print(c, end='', flush=True)
+        time.sleep(0.009)
+
+
+def draw_line():
+    """Draw a full-width colored separator line."""
+    terminal_width = shutil.get_terminal_size().columns
+    line = Fore.CYAN + "-" * terminal_width + Style.RESET_ALL
+    print(line)
+
+
+def align(text: str) -> str:
+    """
+    Center-align multi-line text in the terminal, preserving ANSI color codes.
+    credits: https://github.com/SirDank/dankware/blob/main/dankware/__init__.py
+    """
+    width = shutil.get_terminal_size().columns
+    aligned = text
+    for _ in tuple(vars(Fore).values()) + tuple(vars(Style).values()):
+        aligned = aligned.replace(_, '')
+
+    text = text.splitlines()
+    aligned = aligned.splitlines()
+    for _ in range(len(aligned)):
+        aligned[_] = aligned[_].center(width).replace(aligned[_], text[_])
+    return str('\n'.join(aligned) + Style.RESET_ALL)
+
+
+def loading_animation(text, loops=2):
+    """Show a spinning loading indicator in the terminal."""
+    frames = ['\\', '|', '/', '-']
+    for _ in range(loops):
+        for frame in frames:
+            line = f"{Fore.CYAN}{text} {Style.RESET_ALL}[{Fore.CYAN}{frame}{Style.RESET_ALL}]" + Style.RESET_ALL
+            print(line, end='\r')
+            time.sleep(0.2)
+
+
+def clear_line():
+    """Clear the current terminal line."""
+    sys.stdout.write("\033[K")
+    sys.stdout.flush()
+
+
+def linux_prompt(tab="~"):
+    """Display a styled prompt line."""
+    sys.stdout.write(
+        f"{Fore.GREEN}de4py@{Fore.CYAN}{os.getenv('Username')}{Style.RESET_ALL} "
+        f"{Fore.GREEN}{tab}/ {Style.RESET_ALL}$ "
+    )
+    sys.stdout.flush()
+
+
+# ── Neofetch-style Layout ────────────────────────────────────────────────────
 
 windows_logo = f"""{Fore.CYAN}                                ..,
 {Fore.CYAN}                    ....,,:;+ccllll
@@ -41,154 +136,14 @@ windows_logo = f"""{Fore.CYAN}                                ..,
 {Fore.CYAN}                       ````''*::cll
 {Fore.CYAN}                                 ``{Style.RESET_ALL}"""
 
-def water(text):
-    os.system(""); faded = ""
-    green = 10
-    for line in text.splitlines():
-        faded += (f"\033[38;2;0;{green};255m{line}\033[0m\n")
-        if not green == 255:
-            green += 15
-            if green > 255:
-                green = 255
-    return faded
-
-__BANNER__ = water(__RAW_BANNER__)
-
-def clear_console():os.system('cls' if os.name == 'nt' else 'clear')
-
-_logging_initialized = False
-
-def setup_logging():
-    global _logging_initialized
-    if _logging_initialized:
-        return
-    
-    logs_dir = 'logs'
-    if not os.path.exists(logs_dir):
-        os.makedirs(logs_dir)
-    
-    log_level = logging.INFO
-    logging_format = "%(levelname)s - %(message)s"
-    
-    log_filename = os.path.join(logs_dir, f'de4py-logs-{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.log')
-    file_handler = TimedRotatingFileHandler(filename=log_filename)
-    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    file_handler.setFormatter(file_formatter)
-    
-    # Configure root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(log_level)
-    
-    # Remove existing handlers to avoid duplicates if called multiple times despite guard
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
-        
-    root_logger.addHandler(ColorizingStreamHandler())
-    root_logger.addHandler(file_handler)
-    
-    logging.info(f"System Architecture: {platform.architecture()[0]}, OS: {platform.platform()}, Python Version: {platform.python_version()}")
-    _logging_initialized = True
-
-class ColorizingStreamHandler(logging.StreamHandler):
-    def emit(self, record):
-        message = self.format(record)
-        if record.levelno == logging.INFO:
-            colored_message = f"{Fore.LIGHTBLUE_EX}{message}{Style.RESET_ALL}"
-        elif record.levelno == logging.WARNING:
-            colored_message = f"{Fore.YELLOW}{message}{Style.RESET_ALL}"
-        elif record.levelno == logging.ERROR or record.levelno == logging.CRITICAL:
-            colored_message = f"{Fore.RED}{message}{Style.RESET_ALL}"
-        else:
-            colored_message = message
-        print(colored_message)
-
-def fade_type(text):
-     for c in text:
-        print(c,end='',flush=True)
-        time.sleep(0.009)
-
-def align(text: str) -> str: 
-    """
-    credits : https://github.com/SirDank/dankware/blob/main/dankware/__init__.py
-    """
-    width = shutil.get_terminal_size().columns
-    aligned = text
-    for _ in tuple(vars(Fore).values()) + tuple(vars(Style).values()):
-        aligned = aligned.replace(_,'')
-    
-    text = text.splitlines()
-    aligned = aligned.splitlines()
-    for _ in range(len(aligned)):
-        aligned[_] = aligned[_].center(width).replace(aligned[_],text[_])
-    return str('\n'.join(aligned) + Style.RESET_ALL)
-
-def draw_line():
-    terminal_width = shutil.get_terminal_size().columns
-    line = Fore.CYAN + "-" * terminal_width + Style.RESET_ALL
-    print(line)
-
-
-def loading_animation(text, loops=2):
-    frames = ['\\', '|', '/', '-']
-    for _ in range(loops):
-        for frame in frames:
-            line = f"{Fore.CYAN}{text} {Style.RESET_ALL}[{Fore.CYAN}{frame}{Style.RESET_ALL}]" + Style.RESET_ALL
-            print(line, end='\r')
-            time.sleep(0.2)
-
-def clear_line():
-    sys.stdout.write("\033[K")
-    sys.stdout.flush()
-
-def linux_prompt(tab="~"):
-    sys.stdout.write(f"{Fore.GREEN}de4py@{Fore.CYAN}{os.getenv('Username')}{Style.RESET_ALL} {Fore.GREEN}{tab}/ {Style.RESET_ALL}$ ")
-    sys.stdout.flush()
-
-
-
-def custom_error(exc_type, exc_value, exc_traceback):
-    if issubclass(exc_type, KeyboardInterrupt):
-        return
-    print(f"{Fore.RED}=== Start Traceback ==={Style.RESET_ALL}")
-    print(f"{Fore.RED}Error Type:{Style.RESET_ALL} {exc_type.__name__}")
-    print(f"{Fore.RED}Error Message:{Style.RESET_ALL} {exc_value}")
-    print(f"{Fore.RED}Traceback:{Style.RESET_ALL}")
-    traceback_lines = []
-    for filename, line_num, func_name, line_code in extract_tb(exc_traceback):
-        traceback_lines.append(f"  File '{filename}', line {line_num}, in {func_name}\n    {line_code}")
-    print("\n".join(traceback_lines))
-    print(f"{Fore.RED}=== End of Traceback ==={Style.RESET_ALL}")
-    from de4py.config.config import settings
-    if not getattr(settings, 'telemetry', True):
-        return
-
-    try:
-        import sentry_sdk
-        sentry_sdk.capture_exception(exc_value)
-    except:
-        pass
-
-    try:
-        from de4py.api.telemetry import report_error
-        report_error(
-            source="core",
-            source_name="global_exception",
-            severity="critical",
-            error_type=exc_type.__name__,
-            error_message=str(exc_value),
-            traceback_str="\n".join(traceback_lines)
-        )
-    except Exception as e:
-        logging.debug(f"Failed to send telemetry: {e}")
-
-
 
 class Add:
     """
+    Side-by-side text layout helper for neofetch-style output.
     CREDITS: https://github.com/billythegoat356/pystyle/blob/main/pystyle/__init__.py
-    1 function:
-        Add()           |           allow you to add a text to another, and even center it
     """
+
+    @staticmethod
     def Add(banner1, banner2, spaces=0, center=False):
         if center:
             split1 = len(banner1.splitlines())
@@ -200,14 +155,14 @@ class Add:
             else:
                 spaces = 0
         if spaces > max(len(banner1.splitlines()), len(banner2.splitlines())):
-            # raise Banner.MaximumSpaces(spaces)
             spaces = max(len(banner1.splitlines()), len(banner2.splitlines()))
+
         ban1 = banner1.splitlines()
         ban2 = banner2.splitlines()
         ban1count = len(ban1)
         ban2count = len(ban2)
-        size = Add._length(ban1)
-        ban1 = Add._edit(ban1, size)
+        size = Add._longest_line_length(ban1)
+        ban1 = Add._pad_lines(ban1, size)
         ban1line = 0
         ban2line = 0
         text = ''
@@ -228,19 +183,28 @@ class Add:
             ban1line += 1
             ban2line += 1
         return text
-    """ ! developper area ! """
+
     class MaximumSpaces(Exception):
         def __init__(self, spaces: str):
             super().__init__(f"Too much spaces [{spaces}].")
-    def _length(ban1):
-        bigestline = 0
 
-        for line in ban1:
-            if len(line) > bigestline:
-                bigestline = len(line)
-        return bigestline
+    @staticmethod
+    def _longest_line_length(lines):
+        longest = 0
+        for line in lines:
+            if len(line) > longest:
+                longest = len(line)
+        return longest
 
-    def _edit(ban1, size):
-        return [line + (size - len(line)) * " " for line in ban1]
+    @staticmethod
+    def _pad_lines(lines, size):
+        return [line + (size - len(line)) * " " for line in lines]
 
-sys.excepthook = custom_error
+
+# ── Legacy Compatibility ─────────────────────────────────────────────────────
+# Exception hook and logging are in their dedicated modules (errors.py / logging.py).
+# Re-exported here so `from de4py.utils import tui; tui.custom_error` still works.
+# NOTE: the exception hook is no longer installed as a side effect of importing this
+# module — call errors.install() explicitly in main.py instead.
+from de4py.utils.errors import custom_error, install as install_excepthook  # noqa: F401, E402
+from de4py.utils.logging import setup_logging, ColorizingStreamHandler  # noqa: F401, E402

@@ -63,7 +63,6 @@ class UpdateManager:
         self.auto_update_enabled = auto_update
         self.base_dir = base_dir
 
-        from de4py.config.config import settings
         self.api_timeout = getattr(settings, "api_timeout", 7)
         self.download_timeout = getattr(settings, "download_timeout", 30)
 

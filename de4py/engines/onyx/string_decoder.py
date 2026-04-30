@@ -52,7 +52,9 @@ class StringDecoder:
         source = self._decode_chr_chains(source)
         source = self._decode_join_chr_list(source)
         source = self._decode_join_chr_map(source)
-        source = self._decode_xor_zip(source)           # NEW: ''.join(chr(x^y) for x,y in zip([...],[...]))
+        source = self._decode_xor_zip(source)
+        source = self._decode_xor_chr_list(source)
+        source = self._decode_map_lambda_offset_chr(source)
         source = self._decode_xor_byte_arrays(source)
         source = self._decode_xor_comprehension(source)
         source = self._decode_zlib(source)
@@ -387,6 +389,37 @@ class StringDecoder:
 
         source = p2.sub(d2, source)
         return source
+
+    def _decode_xor_chr_list(self, source: str) -> str:
+        pattern = re.compile(
+            r'["\']["\']\.join\s*\(\s*chr\s*\(\s*\w+\s*\^\s*(\d+)\s*\)\s+for\s+\w+\s+in\s+'
+            r'\[([0-9,\s]+)\]\s*\)'
+        )
+        def d(m):
+            try:
+                key  = int(m.group(1))
+                nums = [int(x.strip()) for x in m.group(2).split(',') if x.strip()]
+                r    = ''.join(chr(n ^ key) for n in nums)
+                return repr(r) if r.isprintable() else m.group(0)
+            except Exception:
+                return m.group(0)
+        return pattern.sub(d, source)
+
+    def _decode_map_lambda_offset_chr(self, source: str) -> str:
+        pattern = re.compile(
+            r'["\']["\']\.join\s*\(\s*map\s*\(\s*lambda\s+(\w+)\s*:\s*chr\s*\(\s*\1\s*([+-])\s*(\d+)\s*\)\s*'
+            r',\s*\[([0-9,\s]+)\]\s*\)\s*\)'
+        )
+        def d(m):
+            try:
+                op     = m.group(2)
+                offset = int(m.group(3))
+                nums   = [int(x.strip()) for x in m.group(4).split(',') if x.strip()]
+                r = ''.join(chr(n - offset if op == '-' else n + offset) for n in nums)
+                return repr(r) if r.isprintable() else m.group(0)
+            except Exception:
+                return m.group(0)
+        return pattern.sub(d, source)
 
     # ── XOR byte arrays ───────────────────────────────────────────────────────
 

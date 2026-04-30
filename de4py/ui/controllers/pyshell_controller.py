@@ -8,7 +8,7 @@
 # See the LICENSE file for details.
 
 import os
-from de4py.utils.dlls import shell
+from de4py.utils import shell
 
 
 HANDLE = None

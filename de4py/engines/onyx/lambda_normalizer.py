@@ -20,6 +20,25 @@ from typing import List, Optional, Dict, Tuple, Union
 
 # --- Helpers ------------------------------------------------------------------
 
+def _is_const_like_node(node: ast.expr) -> bool:
+    """True for nodes that evaluate to a constant value: scalars, list/tuple of scalars."""
+    if isinstance(node, ast.Constant):
+        return True
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return all(_is_const_like_node(e) for e in node.elts)
+    if isinstance(node, ast.Dict):
+        return all(
+            _is_const_like_node(k) and _is_const_like_node(v)
+            for k, v in zip(node.keys, node.values) if k is not None
+        )
+    return False
+
+
+def _is_inlineable_value(node: ast.expr) -> bool:
+    """Values safe to propagate across statements: constants, const collections, lambdas."""
+    return _is_const_like_node(node) or isinstance(node, ast.Lambda)
+
+
 def _try_eval_const(node: ast.expr) -> Tuple[bool, object]:
     """Safely evaluate a node if it's a pure constant expression."""
     try:
@@ -95,7 +114,7 @@ class LambdaNormalizer(ast.NodeTransformer):
                 return body
 
             # Constant-arg, pure body: (lambda x: x+1)(5)  →  6
-            if all(isinstance(a, ast.Constant) for a in node.args):
+            if all(_is_const_like_node(a) for a in node.args):
                 ok, val = _try_eval_const(node)
                 if ok:
                     self.changes += 1
@@ -312,8 +331,8 @@ class LambdaNormalizer(ast.NodeTransformer):
                 if _is_lambda_identity(lam) and len(node.args) == 1:
                     self.changes += 1
                     return node.args[0]
-                # constant args
-                if all(isinstance(a, ast.Constant) for a in node.args):
+                # constant args (scalars or const collections)
+                if all(_is_const_like_node(a) for a in node.args):
                     ok, val = _try_eval_const(node)
                     if ok and isinstance(val, (str, int, float, bool, type(None))):
                         self.changes += 1
@@ -469,6 +488,58 @@ def _flatten_walrus_boolops(source: str) -> str:
         return source
 
 
+# --- Cross-statement constant propagation ------------------------------------
+
+class _ConstantPropagator(ast.NodeTransformer):
+    """
+    Inline single-assignment constants/lambdas at module scope.
+    Enables IIFE chains that reference earlier name bindings to be evaluated
+    by the LambdaNormalizer in subsequent passes.
+    """
+
+    def __init__(self, env: dict):
+        self._env = env
+
+    def visit_Name(self, node: ast.Name) -> ast.expr:
+        if isinstance(node.ctx, ast.Load) and node.id in self._env:
+            return copy.deepcopy(self._env[node.id])
+        return node
+
+
+def _collect_propagation_env(stmts: list) -> dict:
+    counts: dict = {}
+    values: dict = {}
+    for stmt in stmts:
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+            t = stmt.targets[0]
+            if isinstance(t, ast.Name):
+                counts[t.id] = counts.get(t.id, 0) + 1
+                values[t.id] = stmt.value
+    return {
+        name: val
+        for name, val in values.items()
+        if counts.get(name, 0) == 1 and _is_inlineable_value(val)
+    }
+
+
+def _propagate_constants(source: str) -> str:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return source
+
+    env = _collect_propagation_env(tree.body)
+    if not env:
+        return source
+
+    new_tree = _ConstantPropagator(env).visit(tree)
+    ast.fix_missing_locations(new_tree)
+    try:
+        return ast.unparse(new_tree)
+    except Exception:
+        return source
+
+
 # --- Public API ---------------------------------------------------------------
 
 class LambdaChainDeobfuscator:
@@ -479,17 +550,21 @@ class LambdaChainDeobfuscator:
         Returns cleaned source, or the original source on any failure.
         """
         try:
-            # Phase 1: text-level pre-processing
             source = _preprocess_string_escapes(source)
             source = _normalize_percent_format(source)
-
-            # Phase 1b: Flatten walrus BoolOp chains (challenge.py style)
             source = _flatten_walrus_boolops(source)
 
-            # Phase 2: AST normalization (multi-pass)
-            normalizer = LambdaNormalizer()
-            return normalizer.normalize(source)
+            for _ in range(6):
+                prev = source
+                source = _propagate_constants(source)
+                normalizer = LambdaNormalizer()
+                source = normalizer.normalize(source)
+                if source == prev:
+                    break
+
+            return source
         except RecursionError:
             return source
         except Exception:
             return source
+

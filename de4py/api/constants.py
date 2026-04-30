@@ -12,7 +12,7 @@ De4py API Constants
 Defines all API endpoints, rate limits, and error codes.
 """
 
-PROJECT_SIGNATURE = "de4py-core-signature-7f3a91"
+from de4py._meta import PROJECT_SIGNATURE
 
 # =============================================================================
 # API Endpoints

@@ -134,7 +134,7 @@ Example:
     pyshell.execute_python_file('/path/to/python/file.py')
 
     # Detach the shell from the target process
-    pyshell.deattach()
+    pyshell.detach()
 
 Methods:
     - show_hidden_console(self) -> bool:
@@ -158,7 +158,7 @@ Methods:
     - remove_exit_function(self) -> bool:
         Removes the exit function from the target process.
 
-    - deattach(self) -> bool:
+    - detach(self) -> bool:
         Detaches the shell from the target process.
 
     - pyshell_gui(self) -> bool:
@@ -172,18 +172,12 @@ from typing import Optional, List, Tuple, Callable, Dict
 import sys, os
 sys.dont_write_bytecode = True
 _DE4PY_FILES_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-from de4py.utils import dlls
+from de4py.utils import shell as _shell_utils
 from de4py.engines.legacy.detector import detect_obfuscator, obfuscators
 from de4py.engines.analyzers import detect_packer, get_file_hashs, unpack_file, sus_strings_lookup, all_strings_lookup
 import json, psutil, random, string
 
-def _gen_path(d=None):
-    random_filename = ''.join(random.choice(string.ascii_letters) for i in range(random.randint(10, 15)))+'.txt'
-    # _DE4PY_FILES_PATH is already defined as the root of the 'de4py' package (module level).
-    # The user wants the absolute root (one level up from de4py module).
-    root = os.path.abspath(os.path.join(_DE4PY_FILES_PATH, '..'))
-    file_path = os.path.join(root, random_filename)
-    return os.path.abspath(file_path), random_filename
+from de4py.utils.fs import gen_path as _gen_path
 
 
 class Analyzer:
@@ -306,7 +300,7 @@ class Pyshell:
         Initializes a new instance of the Pyshell class with the specified process PID and binaries path.
         """
         self.process_pid = process_pid
-        self.binaries_path = os.path.join(_DE4PY_FILES_PATH, 'utils', 'dlls')
+        self.binaries_path = os.path.join(_DE4PY_FILES_PATH, 'utils', 'dlls')  # native binaries dir
         self.PYSHELL_HANDLE: Optional[int] = None
         self._is_pid_alive(self.process_pid)
 
@@ -334,7 +328,7 @@ class Pyshell:
         Reads a message from the target process via a named pipe.
         """
         if self.PYSHELL_HANDLE is None:
-            return False
+            return ""
         self._is_pid_alive(self.process_pid)
         message = os.read(self.PYSHELL_HANDLE, 1024).decode()
         return message
@@ -344,7 +338,7 @@ class Pyshell:
         Shows the hidden console of the target process.
         """
         self._is_pid_alive(self.process_pid)
-        return dlls.shell.show_console(pid=self.process_pid, bp=self.binaries_path)
+        return _shell_utils.show_console(pid=self.process_pid, bp=self.binaries_path)
 
     def inject(self) -> bool:
         """
@@ -352,7 +346,7 @@ class Pyshell:
         """
         self._is_pid_alive(self.process_pid)
         if self.PYSHELL_HANDLE is None:
-            injector_status = dlls.shell.inject_shell(str(self.process_pid), self.binaries_path)
+            injector_status = _shell_utils.inject_shell(str(self.process_pid), self.binaries_path)
             if injector_status[1]:
                 self.PYSHELL_HANDLE = injector_status[0]
                 return True
@@ -364,7 +358,7 @@ class Pyshell:
         """
         self._is_pid_alive(self.process_pid)
         if self.PYSHELL_HANDLE is None:
-            injector_status = dlls.shell.stealth_inject_shell(str(self.process_pid), self.binaries_path)
+            injector_status = _shell_utils.stealth_inject_shell(str(self.process_pid), self.binaries_path)
             if injector_status[1]:
                 self.PYSHELL_HANDLE = injector_status[0]
                 return True
@@ -412,15 +406,15 @@ class Pyshell:
         self._write_to_pipe("delExit")
         return True
 
-    def deattach(self) -> bool:
+    def detach(self) -> bool:
         """
         Detaches the shell from the target process.
         """
         if self.PYSHELL_HANDLE is None:
             return False
         self._is_pid_alive(self.process_pid)
-        self.PYSHELL_HANDLE = None
         self._write_to_pipe("DeattachDLL")
+        self.PYSHELL_HANDLE = None
         return True
 
     def pyshell_gui(self) -> bool:
