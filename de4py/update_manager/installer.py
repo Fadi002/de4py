@@ -22,7 +22,7 @@ import logging
 import os
 import shutil
 import zipfile
-from typing import Optional
+from typing import Optional, Dict, Iterable
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,24 @@ logger = logging.getLogger(__name__)
 class InstallError(Exception):
     """Raised when update installation fails."""
     pass
+
+
+MANAGED_ROOT_ITEMS = (
+    "de4py",
+    "INFO",
+    "plugins",
+    "samples",
+    "Pictures",
+    "main.py",
+    "requirements.txt",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+    "FAQ.md",
+    "CONTRIBUTING.md",
+    "crowdin.yml",
+    ".gitattributes",
+)
 
 
 def get_update_dirs(base_dir: Optional[str] = None) -> dict:
@@ -112,6 +130,46 @@ def stage_update(zip_path: str, base_dir: Optional[str] = None) -> str:
         raise InstallError(f"Failed to stage update: {e}") from e
 
 
+def _copy_path(src: str, dest: str) -> None:
+    if os.path.isdir(src):
+        shutil.copytree(src, dest, dirs_exist_ok=True)
+    else:
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copy2(src, dest)
+
+
+def _remove_path(path: str) -> None:
+    if not os.path.exists(path):
+        return
+    if os.path.isdir(path):
+        shutil.rmtree(path)
+    else:
+        os.remove(path)
+
+
+def _detect_payload_root(staging_dir: str) -> str:
+    repo_candidate = os.path.join(staging_dir, "de4py")
+    if os.path.isdir(os.path.join(repo_candidate, "de4py")):
+        return repo_candidate
+    return staging_dir
+
+
+def _iter_payload_items(payload_root: str) -> Iterable[str]:
+    seen = set()
+    for item in MANAGED_ROOT_ITEMS:
+        item_path = os.path.join(payload_root, item)
+        if os.path.exists(item_path):
+            seen.add(item)
+            yield item
+
+    package_path = os.path.join(payload_root, "de4py")
+    if not os.path.isdir(package_path):
+        raise InstallError("Update payload is missing the de4py package directory.")
+
+    if "de4py" not in seen:
+        yield "de4py"
+
+
 def backup_current(base_dir: Optional[str] = None) -> str:
     """
     Create a backup of the current installation.
@@ -138,15 +196,19 @@ def backup_current(base_dir: Optional[str] = None) -> str:
 
         os.makedirs(backup_dir, exist_ok=True)
 
-        # Back up the de4py package directory
-        src = os.path.join(base_dir, "de4py")
-        dest = os.path.join(backup_dir, "de4py")
+        copied_any = False
+        for item in MANAGED_ROOT_ITEMS:
+            src = os.path.join(base_dir, item)
+            if not os.path.exists(src):
+                continue
+            dest = os.path.join(backup_dir, item)
+            _copy_path(src, dest)
+            copied_any = True
 
-        if os.path.exists(src):
-            shutil.copytree(src, dest, dirs_exist_ok=True)
-            logger.info(f"Backed up current installation to: {backup_dir}")
+        if not copied_any:
+            logger.warning("No managed application files found for backup in: %s", base_dir)
         else:
-            logger.warning(f"Source directory not found for backup: {src}")
+            logger.info(f"Backed up current installation to: {backup_dir}")
 
         return backup_dir
 
@@ -182,21 +244,18 @@ def apply_update(base_dir: Optional[str] = None) -> bool:
     if not os.path.exists(staging_dir) or not os.listdir(staging_dir):
         raise InstallError("No staged update found. Run stage_update() first.")
 
-    target = os.path.join(base_dir, "de4py")
-
     try:
-        # Check if staged update has a de4py directory
-        staged_de4py = os.path.join(staging_dir, "de4py")
-        if os.path.isdir(staged_de4py):
-            source = staged_de4py
-        else:
-            source = staging_dir
+        payload_root = _detect_payload_root(staging_dir)
+        payload_items = list(_iter_payload_items(payload_root))
 
-        # Remove current and replace
-        if os.path.exists(target):
-            shutil.rmtree(target)
+        for item in payload_items:
+            target = os.path.join(base_dir, item)
+            _remove_path(target)
 
-        shutil.copytree(source, target, dirs_exist_ok=True)
+        for item in payload_items:
+            source = os.path.join(payload_root, item)
+            target = os.path.join(base_dir, item)
+            _copy_path(source, target)
 
         logger.info("Update applied successfully")
         return True

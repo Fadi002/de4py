@@ -18,9 +18,10 @@ from de4py.engines.analyzers import (
     all_strings_lookup,
 )
 from de4py.config.config import settings
-from de4py.utils import tui, rpc, update, fade_type
+from de4py.utils import tui, rpc, fade_type
 from de4py.utils.errors import custom_error
 from de4py._meta import PROJECT_SIGNATURE
+from de4py.update_manager import UpdateManager
 from colorama import Fore, Style
 import socket
 import sys
@@ -282,7 +283,12 @@ def changelog_display():
 
 
 def cupdate() -> None:
-    if update.check_update():
+    mgr = UpdateManager(
+        current_version=settings.version,
+        channel=settings.update_channel,
+        auto_update=settings.auto_update,
+    )
+    if not mgr.check():
         tui.fade_type(
             f"{colorama.Fore.CYAN}You are using the latest version{colorama.Style.RESET_ALL}\n"
         )

@@ -19,7 +19,7 @@ import os
 import shutil
 from typing import Optional
 
-from .installer import get_update_dirs, InstallError
+from .installer import get_update_dirs, MANAGED_ROOT_ITEMS
 
 logger = logging.getLogger(__name__)
 
@@ -69,22 +69,32 @@ def rollback(base_dir: Optional[str] = None) -> bool:
             "This may mean no update has been applied, or the backup was already cleaned up."
         )
 
-    target = os.path.join(base_dir, "de4py")
-    backup_source = os.path.join(backup_dir, "de4py")
-
     try:
         logger.warning("Rolling back to previous version...")
 
-        # Remove the failed current installation
-        if os.path.exists(target):
-            shutil.rmtree(target)
+        for item in MANAGED_ROOT_ITEMS:
+            target = os.path.join(base_dir, item)
+            if os.path.isdir(target):
+                shutil.rmtree(target)
+            elif os.path.exists(target):
+                os.remove(target)
 
-        # Restore from backup
-        if os.path.isdir(backup_source):
-            shutil.copytree(backup_source, target, dirs_exist_ok=True)
-        else:
-            # Backup might be flat (no nested de4py dir)
-            shutil.copytree(backup_dir, target, dirs_exist_ok=True)
+        restored_any = False
+        for item in MANAGED_ROOT_ITEMS:
+            backup_source = os.path.join(backup_dir, item)
+            if not os.path.exists(backup_source):
+                continue
+
+            target = os.path.join(base_dir, item)
+            if os.path.isdir(backup_source):
+                shutil.copytree(backup_source, target, dirs_exist_ok=True)
+            else:
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                shutil.copy2(backup_source, target)
+            restored_any = True
+
+        if not restored_any:
+            raise RollbackError("Backup exists but contains no managed files to restore.")
 
         logger.info("Rollback successful. Previous version restored.")
 

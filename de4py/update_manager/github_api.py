@@ -72,7 +72,8 @@ def get_latest_release(
 
     Args:
         repo: Repository in "owner/repo" format (e.g., "Fadi002/de4py").
-        channel: "stable" for latest release, "beta"/"dev" for pre-releases.
+        channel: "stable" for latest production release, "dev" for the
+                 newest release entry including prereleases.
         timeout: Request timeout in seconds.
 
     Returns:
@@ -82,30 +83,29 @@ def get_latest_release(
         GitHubAPIError: On network/API errors.
     """
     try:
+        channel = (channel or "stable").strip().lower()
         if channel == "stable":
             url = f"{GITHUB_API_BASE}/repos/{repo}/releases/latest"
             response = requests.get(url, timeout=timeout, headers=_headers())
             response.raise_for_status()
             data = response.json()
             return _parse_release(data)
-        else:
-            # For beta/dev channels, fetch all releases and find first matching pre-release
-            url = f"{GITHUB_API_BASE}/repos/{repo}/releases"
-            response = requests.get(url, timeout=timeout, headers=_headers())
-            response.raise_for_status()
-            releases = response.json()
 
-            for release in releases:
-                if channel == "beta" and release.get("prerelease"):
-                    return _parse_release(release)
-                elif channel == "dev":
-                    # Dev channel gets the absolute latest, including drafts
-                    return _parse_release(release)
+        if channel != "dev":
+            logger.warning("Unknown update channel '%s'; falling back to stable", channel)
+            return get_latest_release(repo, channel="stable", timeout=timeout)
 
-            # Fallback to latest stable if no pre-release found
-            if releases:
-                return _parse_release(releases[0])
-            return None
+        url = f"{GITHUB_API_BASE}/repos/{repo}/releases"
+        response = requests.get(url, timeout=timeout, headers=_headers())
+        response.raise_for_status()
+        releases = response.json()
+
+        for release in releases:
+            if release.get("draft"):
+                continue
+            return _parse_release(release)
+
+        return None
 
     except requests.exceptions.RequestException as e:
         logger.warning(f"GitHub Releases API failed: {e}")

@@ -13,6 +13,8 @@ import os
 import logging
 from typing import Optional, Dict, Any
 
+VALID_UPDATE_CHANNELS = {"stable", "dev"}
+
 @dataclass
 class Settings:
     version: str = "V3.1.1"
@@ -53,12 +55,15 @@ class Settings:
                      setattr(self, normalized_key, value)
                 elif hasattr(self, key):
                      setattr(self, key, value)
+
+            self._normalize()
                      
         except Exception as e:
             logging.error(f"Failed to load config: {e}")
 
     def save(self):
         try:
+            self._normalize()
             data = asdict(self)
             data.pop('_path', None)
 
@@ -66,6 +71,12 @@ class Settings:
                 json.dump(data, f, indent=4)
         except Exception as e:
             logging.error(f"Failed to save config: {e}")
+
+    def _normalize(self):
+        channel = str(getattr(self, "update_channel", "stable")).strip().lower()
+        if channel not in VALID_UPDATE_CHANNELS:
+            channel = "dev" if channel in {"beta", "nightly", "preview"} else "stable"
+        self.update_channel = channel
 
 settings = Settings()
 

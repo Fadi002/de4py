@@ -102,7 +102,6 @@ class SettingsScreen(QWidget):
         self.channel_combo = QComboBox()
         self.channel_combo.setObjectName("UpdateChannelSelector")
         self.channel_combo.addItem("Stable", "stable")
-        self.channel_combo.addItem("Beta", "beta")
         self.channel_combo.addItem("Dev", "dev")
         self.channel_combo.currentIndexChanged.connect(self._change_update_channel)
         channel_layout.addWidget(self.channel_combo)
