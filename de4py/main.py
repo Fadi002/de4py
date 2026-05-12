@@ -79,6 +79,8 @@ def set_stealth_title():
     return None
 
 def main():
+    switched_update_channel = settings.apply_pending_update_channel()
+
     parser = argparse.ArgumentParser(description="de4py - Python Deobfuscator & Analyzer")
     parser.add_argument("--cli", action="store_true", help="Start in CLI mode")
     parser.add_argument("--test", action="store_true", help="Run internal tests")
@@ -169,6 +171,8 @@ def main():
     print(tui.__BANNER__)
 
     logging.info("Starting de4py")
+    if switched_update_channel:
+        print(f"[*] Update channel switched to: {settings.update_channel}")
 
     # 2. Handle auto-update check (Startup flow)
     if mgr and settings.auto_update and not any([args.test, args.cli]):

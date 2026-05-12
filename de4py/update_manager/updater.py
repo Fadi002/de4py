@@ -16,15 +16,12 @@ check → download → verify → stage → backup → apply → cleanup/rollbac
 
 import logging
 import os
-from datetime import datetime, timezone
 from typing import Optional, Callable
 
-from .versioning import parse_version, is_newer, format_version_info
+from .versioning import is_newer, format_version_info
 from .github_api import (
-    get_latest_release,
     get_latest_version_raw,
     ReleaseInfo,
-    GitHubAPIError,
 )
 from .downloader import download_file, verify_integrity, DownloadError, IntegrityError
 from .installer import (
@@ -72,32 +69,36 @@ class UpdateManager:
         """
         Check for available updates.
 
-        Tries the GitHub Releases API first, then falls back to
-        the raw version file.
+        Uses the selected branch as the source of truth.
 
         Returns:
             ReleaseInfo if an update is available, None if up-to-date.
         """
+        from de4py.config.config import settings
+
+        branch = settings.get_update_branch(self.channel)
+        raw_version = get_latest_version_raw(settings.version_url, timeout=self.api_timeout)
         release = None
-
-        # Primary: GitHub Releases API
-        try:
-            release = get_latest_release(
-                self.repo, channel=self.channel, timeout=self.api_timeout
+        if raw_version:
+            release = ReleaseInfo(
+                version=raw_version.lstrip("Vv"),
+                tag_name=branch,
+                download_url=settings.get_update_download_url(self.channel),
+                changelog=f"Branch: {branch}",
             )
-        except GitHubAPIError:
-            logger.info("Releases API unavailable, trying fallback...")
-
-        # Fallback: raw version file
-        if release is None:
-            from de4py.config.config import settings
-            raw_version = get_latest_version_raw(settings.version_url, timeout=self.api_timeout)
-            if raw_version:
-                release = ReleaseInfo(version=raw_version.lstrip("Vv"))
 
         if release is None:
             logger.warning("Could not determine latest version from any source")
             return None
+
+        branch_changed = settings.installed_update_channel != self.channel
+        if branch_changed:
+            logger.info(
+                "Update channel branch changed: installed=%s target=%s",
+                settings.installed_update_channel,
+                self.channel,
+            )
+            return release
 
         if is_newer(self.current_version, release.version):
             logger.info(format_version_info(self.current_version, release.version))
@@ -156,6 +157,10 @@ class UpdateManager:
 
             # 6. Cleanup
             cleanup(self.base_dir)
+
+            from de4py.config.config import settings
+            settings.installed_update_channel = self.channel
+            settings.save()
 
             logger.info(
                 f"Update to {release.version} installed successfully. "

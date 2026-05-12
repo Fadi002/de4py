@@ -8,7 +8,7 @@
 # See the LICENSE file for details.
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QFrame, QCheckBox, QComboBox, QHBoxLayout
+    QWidget, QVBoxLayout, QLabel, QFrame, QCheckBox, QComboBox, QHBoxLayout, QMessageBox
 )
 from PySide6.QtCore import Qt
 
@@ -129,7 +129,17 @@ class SettingsScreen(QWidget):
             return
         channel = self.channel_combo.currentData()
         if channel:
-            self._update_config("update_channel", channel)
+            changed = settings.request_update_channel_switch(channel)
+            if changed:
+                self.note_label.setText(
+                    f"{tr(SETTINGS_RESTART_NOTE)} Current branch: {settings.update_channel}. "
+                    f"Restart required to switch to {channel}."
+                )
+                QMessageBox.information(
+                    self,
+                    tr("common.msg.info"),
+                    f"Restart de4py to switch update branch to '{channel}'.",
+                )
 
     def retranslate_ui(self):
         """Update UI texts when language changes."""
@@ -173,7 +183,7 @@ class SettingsScreen(QWidget):
                 self.lang_combo.setCurrentIndex(idx)
 
             # Update channel combo box
-            channel = getattr(settings, 'update_channel', 'stable')
+            channel = getattr(settings, 'pending_update_channel', None) or getattr(settings, 'update_channel', 'stable')
             ch_idx = self.channel_combo.findData(channel)
             if ch_idx >= 0:
                 self.channel_combo.setCurrentIndex(ch_idx)
