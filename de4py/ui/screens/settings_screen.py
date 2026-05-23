@@ -17,8 +17,7 @@ from de4py.lang import tr, translation_manager
 from de4py.lang.keys import (
     SCREEN_TITLE_SETTINGS, SETTINGS_LANGUAGE, SETTINGS_RPC,
     SETTINGS_STEALTH, SETTINGS_PLUGINS, SETTINGS_RESTART_NOTE,
-    SETTINGS_TRANSPARENT_UI, SETTINGS_AUTO_UPDATE, SETTINGS_UPDATE_CHANNEL,
-    SETTINGS_TELEMETRY
+    SETTINGS_TRANSPARENT_UI, SETTINGS_TELEMETRY
 )
 
 
@@ -84,28 +83,11 @@ class SettingsScreen(QWidget):
         self.transparent_checkbox.stateChanged.connect(self._on_transparent_ui_changed)
         frame_layout.addWidget(self.transparent_checkbox)
 
-        # ── Update Settings ──────────────────────────────────────────
-        self.auto_update_checkbox = QCheckBox(tr(SETTINGS_AUTO_UPDATE))
-        self.auto_update_checkbox.stateChanged.connect(lambda s: self._update_config("auto_update", s == 2))
-        frame_layout.addWidget(self.auto_update_checkbox)
-        
+
         self.telemetry_checkbox = QCheckBox(tr(SETTINGS_TELEMETRY))
         self.telemetry_checkbox.stateChanged.connect(lambda s: self._update_config("telemetry", s == 2))
         frame_layout.addWidget(self.telemetry_checkbox)
 
-        # Update Channel Selector
-        channel_layout = QHBoxLayout()
-        self.channel_label = QLabel(tr(SETTINGS_UPDATE_CHANNEL))
-        self.channel_label.setFixedWidth(120)
-        channel_layout.addWidget(self.channel_label)
-
-        self.channel_combo = QComboBox()
-        self.channel_combo.setObjectName("UpdateChannelSelector")
-        self.channel_combo.addItem("Stable", "stable")
-        self.channel_combo.addItem("Dev", "dev")
-        self.channel_combo.currentIndexChanged.connect(self._change_update_channel)
-        channel_layout.addWidget(self.channel_combo)
-        frame_layout.addLayout(channel_layout)
         
         frame_layout.addStretch()
         frame_layout.addSpacing(20)
@@ -124,22 +106,6 @@ class SettingsScreen(QWidget):
             self._update_config("language", lang_code)
             translation_manager.set_language(lang_code)
 
-    def _change_update_channel(self, index):
-        if self._loading_config:
-            return
-        channel = self.channel_combo.currentData()
-        if channel:
-            changed = settings.request_update_channel_switch(channel)
-            if changed:
-                self.note_label.setText(
-                    f"{tr(SETTINGS_RESTART_NOTE)} Current branch: {settings.update_channel}. "
-                    f"Restart required to switch to {channel}."
-                )
-                QMessageBox.information(
-                    self,
-                    tr("common.msg.info"),
-                    f"Restart de4py to switch update branch to '{channel}'.",
-                )
 
     def retranslate_ui(self):
         """Update UI texts when language changes."""
@@ -149,8 +115,6 @@ class SettingsScreen(QWidget):
         self.stealth_checkbox.setText(tr(SETTINGS_STEALTH))
         self.plugins_checkbox.setText(tr(SETTINGS_PLUGINS))
         self.transparent_checkbox.setText(tr(SETTINGS_TRANSPARENT_UI))
-        self.auto_update_checkbox.setText(tr(SETTINGS_AUTO_UPDATE))
-        self.channel_label.setText(tr(SETTINGS_UPDATE_CHANNEL))
         self.telemetry_checkbox.setText(tr(SETTINGS_TELEMETRY))
         self.note_label.setText(tr(SETTINGS_RESTART_NOTE))
 
@@ -162,10 +126,8 @@ class SettingsScreen(QWidget):
                 self.stealth_checkbox,
                 self.plugins_checkbox,
                 self.transparent_checkbox,
-                self.auto_update_checkbox,
                 self.telemetry_checkbox,
                 self.lang_combo,
-                self.channel_combo,
             )
             for widget in widgets:
                 widget.blockSignals(True)
@@ -174,19 +136,12 @@ class SettingsScreen(QWidget):
             self.stealth_checkbox.setChecked(settings.stealth_title)
             self.plugins_checkbox.setChecked(settings.load_plugins)
             self.transparent_checkbox.setChecked(settings.transparent_ui)
-            self.auto_update_checkbox.setChecked(getattr(settings, 'auto_update', True))
             self.telemetry_checkbox.setChecked(getattr(settings, 'telemetry', True))
             
             # Update language combo box
             idx = self.lang_combo.findData(settings.language)
             if idx >= 0:
                 self.lang_combo.setCurrentIndex(idx)
-
-            # Update channel combo box
-            channel = getattr(settings, 'pending_update_channel', None) or getattr(settings, 'update_channel', 'stable')
-            ch_idx = self.channel_combo.findData(channel)
-            if ch_idx >= 0:
-                self.channel_combo.setCurrentIndex(ch_idx)
         except Exception:
             pass
         finally:
@@ -195,10 +150,8 @@ class SettingsScreen(QWidget):
                 self.stealth_checkbox,
                 self.plugins_checkbox,
                 self.transparent_checkbox,
-                self.auto_update_checkbox,
                 self.telemetry_checkbox,
                 self.lang_combo,
-                self.channel_combo,
             ):
                 widget.blockSignals(False)
             self._loading_config = False

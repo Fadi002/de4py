@@ -79,16 +79,13 @@ def set_stealth_title():
     return None
 
 def main():
-    switched_update_channel = settings.apply_pending_update_channel()
 
     parser = argparse.ArgumentParser(description="de4py - Python Deobfuscator & Analyzer")
     parser.add_argument("--cli", action="store_true", help="Start in CLI mode")
     parser.add_argument("--test", action="store_true", help="Run internal tests")
     parser.add_argument("--about", action="store_true", help="Show project info and exit")
     parser.add_argument("--checksums-gen", action="store_true", help="Generate project checksums")
-    parser.add_argument("--update-check", action="store_true", help="Check for available updates")
-    parser.add_argument("--update", action="store_true", help="Download and install the latest update")
-    parser.add_argument("--rollback", action="store_true", help="Rollback to the previous version")
+
     args = parser.parse_args()
 
     if args.about:
@@ -103,43 +100,6 @@ def main():
         print("Checksums generated successfully.")
         return
 
-    # ── UpdateManager ──────────────────────────────────────────────
-    mgr = None
-    if any([args.update_check, args.update, args.rollback]) or settings.auto_update:
-        from de4py.update_manager import UpdateManager
-        mgr = UpdateManager(
-            current_version=settings.version,
-            channel=settings.update_channel,
-            auto_update=settings.auto_update
-        )
-
-    # 1. Handle explicit CLI update commands (e.g. --update-check)
-    if mgr and (args.update_check or args.update or args.rollback):
-        if args.rollback:
-            if mgr.has_rollback_available():
-                print("[*] Rolling back to previous version...")
-                if mgr.rollback():
-                    print("[+] Rollback successful. Please restart de4py.")
-                else:
-                    print("[!] Rollback failed.")
-            else:
-                print("[!] No backup available for rollback.")
-            return
-
-        release = mgr.check()
-        if release:
-            print(f"[+] Update available: {release.version}")
-            if release.changelog:
-                print(f"    Changelog: {release.changelog[:200]}...")
-            if args.update:
-                print("[*] Downloading and installing update...")
-                if mgr.download_and_install(release):
-                    print("[+] Update installed. Please restart de4py.")
-                else:
-                    print("[!] Update failed. Use --rollback if needed.")
-        else:
-            print(f"[+] You are running the latest version ({settings.version})")
-        return
 
     # For any other mode, check dependencies first
     check_dependencies()
@@ -171,28 +131,7 @@ def main():
     print(tui.__BANNER__)
 
     logging.info("Starting de4py")
-    if switched_update_channel:
-        print(f"[*] Update channel switched to: {settings.update_channel}")
 
-    # 2. Handle auto-update check (Startup flow)
-    if mgr and settings.auto_update and not any([args.test, args.cli]):
-        try:
-            release = mgr.auto_check()
-            if release:
-                print(f"\n[!] UPDATE AVAILABLE: {release.version}")
-                print("[?] A new version is available. Continue anyway? [y/n]")
-                choice = input(">>> ").lower()
-                if choice not in ('y', 'yes'):
-                    print(f"[*] Download it from: https://github.com/Fadi002/de4py/releases")
-                    if _IS_WINDOWS:
-                        print("[*] Press any key to exit...")
-                        while True:
-                            if msvcrt.kbhit():
-                                msvcrt.getch()
-                                break
-                    sys.exit(0)
-        except Exception as e:
-            print(f"[!] Auto-update check failed: {e}")
 
     # 3. Mode Steering (Test / CLI / GUI)
     if args.test:

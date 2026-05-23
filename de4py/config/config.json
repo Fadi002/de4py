@@ -12,9 +12,5 @@
     "active_theme": null,
     "language": "en",
     "transparent_ui": true,
-    "auto_update": true,
-    "update_channel": "dev",
-    "last_update_check": null,
-    "github_repo": "Fadi002/de4py",
-    "telemetry": false
+    "telemetry": true
 }
