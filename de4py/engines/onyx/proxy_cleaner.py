@@ -56,7 +56,6 @@ _SAFE_ENV: Dict[str, Any] = {
     'len':len,'range':range,'chr':chr,'ord':ord,'abs':abs,
     'sum':sum,'min':min,'max':max,'round':round,
     'True':True,'False':False,'None':None,
-    '__import__':__import__,'eval':eval,
 }
 
 
