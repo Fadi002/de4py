@@ -171,8 +171,10 @@
         "other": "{count} seconds"
     },
     "tooltip.clear": "Clear content",
+    "tooltip.close": "Close",
     "tooltip.copy": "Copy to clipboard",
     "tooltip.hamburger": "Toggle menu",
+    "tooltip.minimize": "Minimize",
     "tooltip.pyshell.execute": "Execute code in process",
     "tooltip.pyshell.select": "Select process to attach",
     "screen.settings.transparent": "Transparent UI (experimental)",

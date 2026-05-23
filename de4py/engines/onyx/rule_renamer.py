@@ -284,7 +284,7 @@ NEVER_RENAME: Set[str] = {
     'parse', 'format', 'encode', 'decode', 'read', 'write',
     'get', 'set', 'add', 'remove', 'update', 'delete', 'create',
     'load', 'save', 'open', 'close', 'connect', 'disconnect',
-    'i', 'j', 'k', 'n', 'x', 'y', 'z',  # conventional math vars
+    'i', 'j', 'k',  # conventional math vars
     'e',    # except Exception as e — convention
     'f',    # file handles (f = open(...))
     'fp',   # file pointer

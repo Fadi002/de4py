@@ -31,6 +31,7 @@ Resolves proxy / alias obfuscation patterns:
 
 import ast
 import copy
+import warnings
 import re
 import io
 import tokenize
@@ -62,12 +63,11 @@ _SAFE_ENV: Dict[str, Any] = {
 
 
 def _try_eval(node: ast.expr, env: Dict[str, Any]) -> Tuple[bool, Any]:
-    import warnings as _warnings
     try:
         merged = {**_SAFE_ENV, **env}
-        code = compile(ast.Expression(body=copy.deepcopy(node)), '<proxy>', 'eval')
-        with _warnings.catch_warnings():
-            _warnings.simplefilter("ignore")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            code = compile(ast.Expression(body=copy.deepcopy(node)), '<proxy>', 'eval')
             return True, eval(code, {'__builtins__': _SAFE_ENV}, merged)
     except Exception:
         return False, None

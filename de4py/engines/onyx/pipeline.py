@@ -11,6 +11,8 @@
 Main deobfuscation pipeline — Onyx engine.
 """
 
+import ast
+import re
 import subprocess
 import shutil
 import sys
@@ -142,6 +144,35 @@ class Pipeline:
         current         = source
         log             = []
         return self._run_inner(result, current, log, source, filename)
+
+    def _run_ir_optimization(self, source: str) -> str:
+        """
+        Convert AST to Onyx IR, run optimization passes, and unparse back.
+        """
+        if "def " in source or "class " in source:
+            return source
+
+        try:
+            tree = ast.parse(source)
+            lifter = IR_Lifter()
+            cfg = lifter.lift(tree)
+
+            # Run basic optimization passes
+            passes = [ConstantFolder(), DeadBlockElimination()]
+            for p in passes:
+                p.run(cfg)
+
+            unparser = IR_Unparser()
+            # Use non-debug mode to get valid (if basic) Python
+            new_source = unparser.unparse(cfg, debug=False)
+
+            # Final validation: if the unparser output is broken, discard it
+            if new_source.strip():
+                ast.parse(new_source)
+                return new_source
+            return source
+        except Exception:
+            return source
 
     def _run_stage(self, name: str, fn: Callable[[str], str], source: str) -> str:
         if name not in _THREADED_STAGE_NAMES:
@@ -419,7 +450,7 @@ def _ast_structural_repair(source: str) -> str:
     Primary fix: 'expected an indented block after X on line N' -> insert pass.
     Falls back to: AST empty-body insertion, bad-line strip, truncation.
     """
-    import ast as _ast, re as _re
+    import ast as _ast
 
     def _ok(s):
         try: _ast.parse(s); return True
@@ -429,10 +460,14 @@ def _ast_structural_repair(source: str) -> str:
         try: _ast.parse(s); return None
         except SyntaxError as e: return e
 
+    def _fix_line_continuation(s):
+        """Fix 'unexpected character after line continuation character'"""
+        return re.sub(r'\\\s+\n', '\\\n', s)
+
     def _insert_pass(s, e):
         if not e.msg or 'expected an indented block' not in e.msg:
             return s
-        m = _re.search(r'on line (\d+)', e.msg)
+        m = re.search(r'on line (\d+)', e.msg)
         header_lineno = int(m.group(1)) if m else max(1, (e.lineno or 2) - 1)
         lines = s.splitlines(keepends=True)
         idx = header_lineno - 1
@@ -486,6 +521,8 @@ def _ast_structural_repair(source: str) -> str:
             return result
         e = _err(result)
         prev = result
+        result = _fix_line_continuation(result)
+        if result != prev: continue
         result = _insert_pass(result, e)
         if result != prev: continue
         result = _fix_ast_bodies(result)

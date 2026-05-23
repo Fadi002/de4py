@@ -9,6 +9,8 @@
 
 from PySide6.QtWidgets import QWidget, QPushButton, QHBoxLayout
 from PySide6.QtCore import Signal, Qt, QPoint
+from de4py.lang import tr
+from de4py.lang.keys import TOOLTIP_MINIMIZE, TOOLTIP_CLOSE
 
 class CustomTitleBar(QWidget):
     minimize_requested = Signal()
@@ -43,7 +45,14 @@ class CustomTitleBar(QWidget):
         layout.addWidget(self.close_btn)
 
         self.setLayout(layout)
+        self.retranslate_ui()
 
+
+    def retranslate_ui(self):
+        self.min_btn.setToolTip(tr(TOOLTIP_MINIMIZE))
+        self.min_btn.setAccessibleName(tr(TOOLTIP_MINIMIZE))
+        self.close_btn.setToolTip(tr(TOOLTIP_CLOSE))
+        self.close_btn.setAccessibleName(tr(TOOLTIP_CLOSE))
 
     def set_theme_colors(self, colors: dict):
         primary = colors.get("primary", "#ffffff")

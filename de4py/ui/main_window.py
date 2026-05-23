@@ -27,6 +27,7 @@ from de4py.ui.constants import (
     SCREEN_ANALYZER, SCREEN_PLUGINS, SCREEN_SETTINGS, SCREEN_ABOUT,
     SCREEN_PYLINGUAL
 )
+from de4py.lang.keys import TOOLTIP_HAMBURGER
 from de4py.ui.navigation.sidebar import Sidebar
 from de4py.ui.widgets.notification_widget import NotificationManager
 from de4py.ui.widgets.loading_overlay import LoadingOverlay
@@ -84,8 +85,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title if title else tr(keys.APP_NAME))
         translation_manager.load_language(settings.language)
 
-        # Enforce Fixed size for main application
-        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        # Allow resizing but set a reasonable minimum size
+        self.setMinimumSize(800, 600)
+        self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
 
         self._sidebar_visible = False
         self._screen_specs = {
@@ -219,8 +221,11 @@ class MainWindow(QMainWindow):
         base_path = os.path.dirname(os.path.abspath(__file__))
         icon_path = os.path.join(base_path, "resources", "menu.svg")
 
+        from de4py.lang import tr
         self.hamburger_btn = HamburgerButton(content_widget)
         self.hamburger_btn.setObjectName("HamburgerButton")
+        self.hamburger_btn.setToolTip(tr(TOOLTIP_HAMBURGER))
+        self.hamburger_btn.setAccessibleName(tr(TOOLTIP_HAMBURGER))
         self.hamburger_btn.move(SPACING_MD, SPACING_MD)
         if os.path.exists(icon_path):
              self.hamburger_btn.setIcon(QIcon(icon_path))
@@ -375,6 +380,13 @@ class MainWindow(QMainWindow):
 
         if hasattr(self.sidebar, 'retranslate_ui'):
             self.sidebar.retranslate_ui()
+
+        if hasattr(self, 'hamburger_btn'):
+            self.hamburger_btn.setToolTip(tr(TOOLTIP_HAMBURGER))
+            self.hamburger_btn.setAccessibleName(tr(TOOLTIP_HAMBURGER))
+
+        if hasattr(self, 'title_bar'):
+            self.title_bar.retranslate_ui()
 
         for i in range(self.screen_stack.count()):
             widget = self.screen_stack.widget(i)
