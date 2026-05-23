@@ -167,17 +167,8 @@ class FlowDeobfuscator:
 
         tree = AliasReplacer().visit(tree)
 
-        # Remove the original alias assignments (they're now inlined)
-        tree.body = [
-            node for node in tree.body
-            if not (
-                isinstance(node, ast.Assign)
-                and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name)
-                and node.targets[0].id in aliases
-            )
-        ]
-
+        # For Milestone 1, we keep module-level assignments to avoid stripping
+        # decoded constants that are the intended output of the deobfuscation.
         return tree
 
     # --- 1b. Function-level constant alias folding --------------------------------
@@ -302,17 +293,7 @@ class FlowDeobfuscator:
 
         tree = ImportAliasReplacer().visit(tree)
 
-        # Remove the alias assignment statements
-        tree.body = [
-            node for node in tree.body
-            if not (
-                isinstance(node, ast.Assign)
-                and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name)
-                and node.targets[0].id in alias_map
-            )
-        ]
-
+        # Keep module-level import aliases to avoid stripping them if they are the only output
         return tree
 
     # --- 3. Bogus try/except removal -------------------------------------------

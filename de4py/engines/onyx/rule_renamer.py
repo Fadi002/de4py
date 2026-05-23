@@ -284,7 +284,7 @@ NEVER_RENAME: Set[str] = {
     'parse', 'format', 'encode', 'decode', 'read', 'write',
     'get', 'set', 'add', 'remove', 'update', 'delete', 'create',
     'load', 'save', 'open', 'close', 'connect', 'disconnect',
-    'i', 'j', 'k', 'n', 'x', 'y', 'z',  # conventional math vars
+    'i', 'j', 'k',  # conventional math vars
     'e',    # except Exception as e — convention
     'f',    # file handles (f = open(...))
     'fp',   # file pointer
@@ -320,7 +320,6 @@ MANGLED_PATTERNS = [
     re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]{0,3}v[a-zA-Z0-9_]{1,3}__$'),
     # Random obfuscated names: 3+ consonant clusters with digits
     re.compile(r'^[a-z]{2,5}\d+[a-z]{2,5}$'),      # ab12cd, zpk3pg2
-    re.compile(r'^[a-z]{2,6}_[a-z]{3,8}$'),         # ors8odw, suyfet (short_word style when both parts random)
     re.compile(r'^[a-z]\d[a-z]{2,4}\d[a-z]{1,4}$'),# u3vd2, j0tmc pattern
     re.compile(r'^[a-z]{2,4}\d{1,3}[a-z]{2,4}\d{1,4}$'), # xm7uo4zhy0d2 style
     re.compile(r'^[a-z]{1,4}\d{1,2}[a-z]{1,4}\d{1,2}[a-z]{1,4}$'),  # mixed digit-letter

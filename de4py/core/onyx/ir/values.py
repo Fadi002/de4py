@@ -14,7 +14,7 @@ class Constant(Value):
         self.value = value
 
     def __repr__(self):
-        return f"Const({repr(self.value)})"
+        return repr(self.value)
 
 class Variable(Value):
     """Represents a named variable or register."""

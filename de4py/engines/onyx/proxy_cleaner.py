@@ -31,6 +31,7 @@ Resolves proxy / alias obfuscation patterns:
 
 import ast
 import copy
+import warnings
 import re
 import io
 import tokenize
@@ -60,12 +61,11 @@ _SAFE_ENV: Dict[str, Any] = {
 
 
 def _try_eval(node: ast.expr, env: Dict[str, Any]) -> Tuple[bool, Any]:
-    import warnings as _warnings
     try:
         merged = {**_SAFE_ENV, **env}
-        code = compile(ast.Expression(body=copy.deepcopy(node)), '<proxy>', 'eval')
-        with _warnings.catch_warnings():
-            _warnings.simplefilter("ignore")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            code = compile(ast.Expression(body=copy.deepcopy(node)), '<proxy>', 'eval')
             return True, eval(code, {'__builtins__': _SAFE_ENV}, merged)
     except Exception:
         return False, None
@@ -256,17 +256,8 @@ class ProxyCleaner:
     # ── Remove proxy assignments ──────────────────────────────────────────────
 
     def _remove_assignments(self, tree: ast.Module, names: Set[str]) -> ast.Module:
-        new_body = []
-        for stmt in tree.body:
-            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-                t = stmt.targets[0]
-                if isinstance(t, ast.Name) and t.id in names:
-                    continue
-                if (isinstance(t, ast.Tuple)
-                        and all(isinstance(e, ast.Name) and e.id in names for e in t.elts)):
-                    continue
-            new_body.append(stmt)
-        tree.body = new_body
+        # For Milestone 1, we keep module-level assignments to avoid stripping
+        # decoded constants that are the intended output of the deobfuscation.
         return tree
 
     # ── Strip builtins injections ─────────────────────────────────────────────
