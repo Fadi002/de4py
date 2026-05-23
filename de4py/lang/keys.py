@@ -244,6 +244,8 @@ PLURAL_MINUTES = "plural.minutes"
 # Tooltips
 # =============================================================================
 TOOLTIP_HAMBURGER = "tooltip.hamburger"
+TOOLTIP_MINIMIZE = "tooltip.minimize"
+TOOLTIP_CLOSE = "tooltip.close"
 TOOLTIP_COPY = "tooltip.copy"
 TOOLTIP_CLEAR = "tooltip.clear"
 TOOLTIP_PYSHELL_SELECT = "tooltip.pyshell.select"
