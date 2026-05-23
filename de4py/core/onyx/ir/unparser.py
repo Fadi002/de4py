@@ -9,16 +9,18 @@ from ..ir.instructions import (
 from ..ir.values import Constant, Variable
 
 class IR_Unparser:
-    def unparse(self, cfg: CFG) -> str:
+    def unparse(self, cfg: CFG, debug: bool = False) -> str:
         # Very basic linearized unparsing for Milestone 1.
         # This will be replaced by a proper structured flow reconstructor later.
         lines = []
         for bid in sorted(cfg.blocks.keys()):
             block = cfg.blocks[bid]
-            lines.append(f"# Block B{bid}")
+            if debug:
+                lines.append(f"# Block B{bid}")
             for instr in block.instructions:
                 if isinstance(instr, (Jump, Branch)):
-                    lines.append(f"# {instr}")
+                    if debug:
+                        lines.append(f"# {instr}")
                 else:
                     lines.append(str(instr))
         return "\n".join(lines)

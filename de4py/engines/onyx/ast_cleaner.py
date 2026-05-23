@@ -383,7 +383,7 @@ class ASTCleaner(ast.NodeTransformer):
         self.generic_visit(node)
         node.body = _remove_dead_code(node.body)
         node.body = _linearize_state_machines(node.body)
-        node.body = _remove_unused_junk_assignments(node.body)
+        # Keep module-level assignments even if unused; they might be the final output
         node.body = _strip_redundant_pass(node.body)
         return node
 
