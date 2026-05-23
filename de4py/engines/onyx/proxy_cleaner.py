@@ -37,6 +37,8 @@ import io
 import tokenize
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from de4py.engines.onyx.rule_renamer import is_mangled
+
 
 # ─── Confusable unicode → ASCII map ──────────────────────────────────────────
 
@@ -81,6 +83,9 @@ def _val_to_ast(val: Any) -> Optional[ast.expr]:
     if isinstance(val, int) and not isinstance(val, bool):
         return ast.Constant(value=val)
     if isinstance(val, (float, str, bytes, type(None))):
+        # String/bytes may contain non-printable chars or be too long
+        if isinstance(val, (str, bytes)) and len(val) > 1000:
+            return None
         return ast.Constant(value=val)
     # Don't inline callables, types, or modules — leave them as-is
     return None
@@ -195,8 +200,15 @@ class ProxyCleaner:
         return state_vars
 
     def _collect_env(self, tree: ast.Module) -> Dict[str, Any]:
+        from de4py.engines.onyx.rule_renamer import is_mangled
         # Don't inline state machine variables
         protected = self._find_state_machine_vars(tree)
+
+        # Collect all names read in the entire module
+        read_names: set = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                read_names.add(node.id)
 
         env: Dict[str, Any] = {}
         for stmt in tree.body:
@@ -209,6 +221,9 @@ class ProxyCleaner:
             # Simple: name = expr
             if isinstance(t, ast.Name):
                 if t.id in protected:
+                    continue
+                # Only inline if it's mangled. Non-mangled variables should be preserved.
+                if not is_mangled(t.id):
                     continue
                 ok, val = _try_eval(stmt.value, env)
                 if ok and self._worthy(val):
@@ -256,8 +271,31 @@ class ProxyCleaner:
     # ── Remove proxy assignments ──────────────────────────────────────────────
 
     def _remove_assignments(self, tree: ast.Module, names: Set[str]) -> ast.Module:
-        # For Milestone 1, we keep module-level assignments to avoid stripping
-        # decoded constants that are the intended output of the deobfuscation.
+        # Collect all names read in the entire module
+        read_names: set = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                read_names.add(node.id)
+
+        new_body = []
+        for stmt in tree.body:
+            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                t = stmt.targets[0]
+                # Only remove assignments if:
+                # 1. The target is one of the names we inlined
+                # 2. AND it is mangled OR it's not read anywhere else.
+                # This ensures we don't accidentally remove legitimate variables
+                # that were constant-folded but still have meaningful names.
+                if isinstance(t, ast.Name) and t.id in names:
+                    if is_mangled(t.id) or t.id not in read_names:
+                        continue
+                if (isinstance(t, ast.Tuple)
+                        and all(isinstance(e, ast.Name) and e.id in names
+                                and (is_mangled(e.id) or e.id not in read_names)
+                                for e in t.elts)):
+                    continue
+            new_body.append(stmt)
+        tree.body = new_body
         return tree
 
     # ── Strip builtins injections ─────────────────────────────────────────────
@@ -292,9 +330,19 @@ class ProxyCleaner:
         class Folder(ast.NodeTransformer):
             def visit_Call(self, node):
                 self.generic_visit(node)
+
+                # Check for chr(N) and b64decode(S) specifically to avoid over-folding
+                is_chr = (isinstance(node.func, ast.Name) and node.func.id == 'chr')
+                is_b64 = (isinstance(node.func, ast.Attribute) and node.func.attr == 'b64decode')
+
                 ok, result = _try_eval(node, env)
                 # Only fold to primitive constants — never fold to types/callables
                 if ok and isinstance(result, (int, float, bool, str, bytes, type(None))) and not callable(result):
+                    # For strings/bytes, only fold if they are reasonably short and printable
+                    if isinstance(result, (str, bytes)):
+                        if len(result) > 1000: return node
+                        if isinstance(result, str) and not result.isprintable() and not is_chr:
+                            return node
                     return ast.Constant(value=result)
                 return node
 

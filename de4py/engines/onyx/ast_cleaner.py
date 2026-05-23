@@ -11,6 +11,8 @@ import ast
 import re
 from typing import List, Union, Optional
 
+from de4py.engines.onyx.rule_renamer import is_mangled
+
 
 # --- Local helper for try/except safety checking ----------------------------
 
@@ -512,7 +514,10 @@ def _remove_unused_junk_assignments(stmts: List[ast.stmt]) -> List[ast.stmt]:
                 and isinstance(stmt.targets[0], ast.Name)
                 and _is_trivial_const(stmt.value)
                 and stmt.targets[0].id not in read_names):
-            continue  # Drop the junk assignment
+            # Only remove if it's mangled. Legitimate names are kept even if unused
+            # in this block, as they might be used globally or just for readability.
+            if is_mangled(stmt.targets[0].id):
+                continue
         result.append(stmt)
     # Never return an empty body - keep at least one pass to maintain valid structure
     return result if result else stmts

@@ -93,6 +93,34 @@ class Pipeline:
         ) if use_llm else None
         self.validator = Validator()
 
+    def _run_ir_optimization(self, source: str) -> str:
+        """
+        Foundational IR-based optimization pass.
+        Lifts AST to IR, runs optimization passes, and unparses back to source.
+        """
+        try:
+            import ast
+            tree = ast.parse(source)
+            lifter = IR_Lifter()
+            cfg = lifter.lift(tree)
+
+            # Run IR passes
+            ConstantFolder().run(cfg)
+            DeadBlockElimination().run(cfg)
+
+            # Note: The current IR_Unparser produces pseudo-code for Milestone 1.
+            # To avoid breaking the pipeline with non-Python code, we currently
+            # bypass this stage until the full flow reconstructor is implemented.
+            #
+            # lifter = IR_Lifter()
+            # cfg = lifter.lift(tree)
+            # ConstantFolder().run(cfg)
+            # DeadBlockElimination().run(cfg)
+            # return IR_Unparser().unparse(cfg)
+            return source
+        except Exception:
+            return source
+
     def _get_llm_config(self) -> dict:
         ram_gb = round(psutil.virtual_memory().total / (1024**3))
         vram_gb = 0
@@ -215,14 +243,13 @@ class Pipeline:
         for pass_num in range(1, 10):
             changed = False
             stages = [
-                ("ast_cleaner",     lambda s: self.cleaner.clean(s)),   # state-machine linearize first
-                ("match_sm",        lambda s: self.match_sm.deobfuscate(s)),
                 ("proxy_cleaner",   lambda s: self.proxy.deobfuscate(s)),
                 ("string_decoder",  lambda s: self.decoder.decode_all(s)),
+                ("ast_cleaner",     lambda s: self.cleaner.clean(s)),   # state-machine linearize first
+                ("match_sm",        lambda s: self.match_sm.deobfuscate(s)),
                 ("lambda_norm",     lambda s: self.lambda_n.deobfuscate(s)),
                 ("flow_deobf",      lambda s: self.flow.deobfuscate(s)),
                 ("ast_cleaner2",    lambda s: self.cleaner.clean(s)),   # clean up after flow
-                ("onyx_ir_opt",     lambda s: self._run_ir_optimization(s)), # foundational IR optimization
             ]
             for name, fn in stages:
                 prev = current

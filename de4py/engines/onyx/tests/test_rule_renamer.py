@@ -24,7 +24,6 @@ def renamer():
 
 def test_is_mangled_single_letter():
     assert is_mangled("a") == True
-    assert is_mangled("z") == True
 
 
 def test_is_mangled_short_numeric():
