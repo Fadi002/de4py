@@ -19,7 +19,8 @@ from de4py.ui.workers.changelog_worker import ChangelogWorker
 from de4py.lang import tr
 from de4py.lang.keys import (
     SCREEN_TITLE_HOME, HOME_CHANGELOG_TITLE, HOME_ENV_INFO,
-    HOME_PYTHON_VERSION, HOME_ARCH, HOME_OS
+    HOME_PYTHON_VERSION, HOME_ARCH, HOME_OS,
+    DEOBF_SELECT_FILE, ANALYZER_SELECT_FILE
 )
 
 
@@ -52,6 +53,9 @@ class HomeScreen(QWidget):
         right_layout = QVBoxLayout()
         right_layout.setSpacing(20)
         
+        self.quick_start_frame = self._create_quick_start_frame()
+        right_layout.addWidget(self.quick_start_frame)
+
         self.env_frame = self._create_env_frame()
         right_layout.addWidget(self.env_frame)
         
@@ -98,6 +102,27 @@ class HomeScreen(QWidget):
 
         return frame
 
+    def _create_quick_start_frame(self):
+        frame = QFrame()
+        frame.setObjectName("StyledFrame")
+        layout = QVBoxLayout(frame)
+        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+
+        title = QLabel("QUICK START")
+        title.setObjectName("EnvTitleLabel")
+        layout.addWidget(title)
+
+        self.quick_deobf_btn = QPushButton(tr(DEOBF_SELECT_FILE))
+        self.quick_deobf_btn.clicked.connect(lambda: self.window()._navigate_to("deobfuscator"))
+        layout.addWidget(self.quick_deobf_btn)
+
+        self.quick_analyzer_btn = QPushButton(tr(ANALYZER_SELECT_FILE))
+        self.quick_analyzer_btn.clicked.connect(lambda: self.window()._navigate_to("analyzer"))
+        layout.addWidget(self.quick_analyzer_btn)
+
+        return frame
+
     def _create_env_frame(self):
         self.env_frame = QFrame()
         self.env_frame.setObjectName("StyledFrame")  
@@ -137,6 +162,8 @@ class HomeScreen(QWidget):
         self.title_label.setText(tr(SCREEN_TITLE_HOME))
         self.changelog_title.setText(tr(HOME_CHANGELOG_TITLE))
         self.env_title.setText(tr(HOME_ENV_INFO))
+        self.quick_deobf_btn.setText(tr(DEOBF_SELECT_FILE))
+        self.quick_analyzer_btn.setText(tr(ANALYZER_SELECT_FILE))
         self._update_env_info()
 
     def _create_clock_frame(self):
