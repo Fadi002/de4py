@@ -34,6 +34,11 @@ from de4py.engines.onyx.formatter import Formatter
 from de4py.engines.onyx.llm_renamer import LLMRenamer
 from de4py.engines.onyx.validator import Validator, ValidationResult
 
+# New Foundation
+from de4py.core.onyx.ir.lifter import IR_Lifter
+from de4py.core.onyx.ir.unparser import IR_Unparser
+from de4py.core.onyx.optimizer.passes import ConstantFolder, DeadBlockElimination
+
 
 class PipelineResult:
     def __init__(self):
@@ -186,6 +191,7 @@ class Pipeline:
                 ("lambda_norm",     lambda s: self.lambda_n.deobfuscate(s)),
                 ("flow_deobf",      lambda s: self.flow.deobfuscate(s)),
                 ("ast_cleaner2",    lambda s: self.cleaner.clean(s)),   # clean up after flow
+                ("onyx_ir_opt",     lambda s: self._run_ir_optimization(s)), # foundational IR optimization
             ]
             for name, fn in stages:
                 prev = current
