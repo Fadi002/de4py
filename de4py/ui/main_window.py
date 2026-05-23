@@ -84,8 +84,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title if title else tr(keys.APP_NAME))
         translation_manager.load_language(settings.language)
 
-        # Enforce Fixed size for main application
-        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        # Allow resizing but set a reasonable minimum size
+        self.setMinimumSize(800, 600)
+        self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
 
         self._sidebar_visible = False
         self._screen_specs = {

@@ -39,7 +39,19 @@ class AnalyzerScreen(QWidget):
         super().__init__(parent)
         self._file_path = None
         self._worker = None
+        self.setAcceptDrops(True)
         self._setup_ui()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        if urls:
+            file_path = urls[0].toLocalFile()
+            if os.path.isfile(file_path):
+                self._load_file(file_path)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -137,10 +149,13 @@ class AnalyzerScreen(QWidget):
             "Exe Files (*.exe);;All Files (*.*)"
         )
         if file_path:
-            self._file_path = file_path
-            filename = os.path.basename(file_path)
-            self.file_label.setText(filename)
-            sentry.breadcrumb(f"File selected for analysis: {filename}", category="user.action", path=file_path)
+            self._load_file(file_path)
+
+    def _load_file(self, file_path: str):
+        self._file_path = file_path
+        filename = os.path.basename(file_path)
+        self.file_label.setText(filename)
+        sentry.breadcrumb(f"File selected for analysis: {filename}", category="user.action", path=file_path)
 
     def _run_command(self, command: str):
         if not self._file_path:
