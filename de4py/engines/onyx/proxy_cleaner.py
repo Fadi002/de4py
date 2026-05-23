@@ -94,37 +94,50 @@ def _val_to_ast(val: Any) -> Optional[ast.expr]:
 class ProxyCleaner:
 
     def deobfuscate(self, source: str) -> str:
+        current = source
         try:
-            source = self._normalize_unicode(source)
+            current = self._normalize_unicode(source)
         except Exception:
-            pass  # continue with un-normalized source
+            pass
+        global_changed = (current != source)
 
         try:
-            tree = ast.parse(source)
+            tree = ast.parse(current)
         except SyntaxError:
-            return source
+            return current
 
         try:
+            # Multi-pass deobfuscation with change tracking to avoid expensive ast.unparse()
             for _ in range(8):
-                before = ast.unparse(tree)
+                changed = False
                 env = self._collect_env(tree)
+
+                # 1. Consolidated AST transformations
+                ast_map = {n: node for n, v in env.items() if (node := _val_to_ast(v)) is not None}
+
+                transformer = ProxyTransformer(env, ast_map)
+                tree = transformer.visit(tree)
+                if transformer.changed:
+                    changed = True
+
+                # 2. Assignment removal (operates directly on module body)
                 if env:
-                    tree = self._inline(tree, env)
+                    before_len = len(tree.body)
                     tree = self._remove_assignments(tree, set(env.keys()))
-                tree = self._strip_builtins(tree)
-                tree = self._fold_calls(tree, env)
-                ast.fix_missing_locations(tree)
-                try:
-                    if ast.unparse(tree) == before:
-                        break
-                except Exception:
+                    if len(tree.body) != before_len:
+                        changed = True
+
+                if not changed:
                     break
 
-            return ast.unparse(tree)
+                global_changed = True
+                ast.fix_missing_locations(tree)
+
+            return ast.unparse(tree) if global_changed else source
         except RecursionError:
-            return source
+            return current
         except Exception:
-            return source
+            return current
 
     # ── Unicode normalization ─────────────────────────────────────────────────
 
@@ -200,7 +213,6 @@ class ProxyCleaner:
         return state_vars
 
     def _collect_env(self, tree: ast.Module) -> Dict[str, Any]:
-        from de4py.engines.onyx.rule_renamer import is_mangled
         # Don't inline state machine variables
         protected = self._find_state_machine_vars(tree)
 
@@ -252,22 +264,6 @@ class ProxyCleaner:
             return True
         return False
 
-    # ── Inline proxy values ───────────────────────────────────────────────────
-
-    def _inline(self, tree: ast.Module, env: Dict[str, Any]) -> ast.Module:
-        ast_map = {n: _val_to_ast(v) for n, v in env.items()}
-        ast_map = {n: node for n, node in ast_map.items() if node is not None}
-        if not ast_map:
-            return tree
-
-        class Inliner(ast.NodeTransformer):
-            def visit_Name(self, node):
-                if isinstance(node.ctx, ast.Load) and node.id in ast_map:
-                    return copy.deepcopy(ast_map[node.id])
-                return node
-
-        return Inliner().visit(tree)
-
     # ── Remove proxy assignments ──────────────────────────────────────────────
 
     def _remove_assignments(self, tree: ast.Module, names: Set[str]) -> ast.Module:
@@ -298,52 +294,60 @@ class ProxyCleaner:
         tree.body = new_body
         return tree
 
-    # ── Strip builtins injections ─────────────────────────────────────────────
 
-    def _strip_builtins(self, tree: ast.Module) -> ast.Module:
-        def _is_builtins_call(node):
-            return (isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Name)
-                    and node.func.id == '__import__'
-                    and node.args
-                    and isinstance(node.args[0], ast.Constant)
-                    and node.args[0].value == 'builtins')
+class ProxyTransformer(ast.NodeTransformer):
+    """
+    Consolidated AST transformer for ProxyCleaner.
+    Merges inlining, builtin stripping, and constant call folding.
+    """
 
-        class Stripper(ast.NodeTransformer):
-            def visit_Assign(self, node):
-                self.generic_visit(node)
-                for t in node.targets:
-                    if isinstance(t, ast.Attribute) and _is_builtins_call(t.value):
-                        return None
-                    if isinstance(t, ast.Tuple) and all(
-                        isinstance(e, ast.Attribute) and _is_builtins_call(e.value)
-                        for e in t.elts
-                    ):
-                        return None
-                return node
+    def __init__(self, env: Dict[str, Any], ast_map: Dict[str, ast.AST]):
+        self.env = env
+        self.ast_map = ast_map
+        self.changed = False
 
-        return Stripper().visit(tree)
+    def visit_Name(self, node: ast.Name) -> ast.AST:
+        if isinstance(node.ctx, ast.Load) and node.id in self.ast_map:
+            self.changed = True
+            return copy.deepcopy(self.ast_map[node.id])
+        return node
 
-    # ── Fold constant proxy calls ─────────────────────────────────────────────
+    def visit_Assign(self, node: ast.Assign) -> Optional[ast.Assign]:
+        self.generic_visit(node)
+        for t in node.targets:
+            if isinstance(t, ast.Attribute) and self._is_builtins_call(t.value):
+                self.changed = True
+                return None
+            if isinstance(t, ast.Tuple) and all(
+                isinstance(e, ast.Attribute) and self._is_builtins_call(e.value)
+                for e in t.elts
+            ):
+                self.changed = True
+                return None
+        return node
 
-    def _fold_calls(self, tree: ast.Module, env: Dict[str, Any]) -> ast.Module:
-        class Folder(ast.NodeTransformer):
-            def visit_Call(self, node):
-                self.generic_visit(node)
+    def visit_Call(self, node: ast.Call) -> ast.AST:
+        self.generic_visit(node)
 
-                # Check for chr(N) and b64decode(S) specifically to avoid over-folding
-                is_chr = (isinstance(node.func, ast.Name) and node.func.id == 'chr')
-                is_b64 = (isinstance(node.func, ast.Attribute) and node.func.attr == 'b64decode')
+        # Check for chr(N) specifically to avoid over-folding
+        is_chr = (isinstance(node.func, ast.Name) and node.func.id == 'chr')
 
-                ok, result = _try_eval(node, env)
-                # Only fold to primitive constants — never fold to types/callables
-                if ok and isinstance(result, (int, float, bool, str, bytes, type(None))) and not callable(result):
-                    # For strings/bytes, only fold if they are reasonably short and printable
-                    if isinstance(result, (str, bytes)):
-                        if len(result) > 1000: return node
-                        if isinstance(result, str) and not result.isprintable() and not is_chr:
-                            return node
-                    return ast.Constant(value=result)
-                return node
+        ok, result = _try_eval(node, self.env)
+        # Only fold to primitive constants — never fold to types/callables
+        if ok and isinstance(result, (int, float, bool, str, bytes, type(None))) and not callable(result):
+            # For strings/bytes, only fold if they are reasonably short and printable
+            if isinstance(result, (str, bytes)):
+                if len(result) > 1000: return node
+                if isinstance(result, str) and not result.isprintable() and not is_chr:
+                    return node
+            self.changed = True
+            return ast.Constant(value=result)
+        return node
 
-        return Folder().visit(tree)
+    def _is_builtins_call(self, node: ast.AST) -> bool:
+        return (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == '__import__'
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and node.args[0].value == 'builtins')
