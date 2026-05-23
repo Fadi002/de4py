@@ -15,6 +15,8 @@ import ast
 import copy
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+from de4py.engines.onyx.rule_renamer import is_mangled
+
 
 def _find_state_machine_vars(tree: ast.AST) -> set:
     """Return names used as state variables in while-True dispatcher loops."""
@@ -168,6 +170,7 @@ class FlowDeobfuscator:
         tree = AliasReplacer().visit(tree)
 
         # Remove the original alias assignments (they're now inlined)
+        # ONLY if the target name is mangled.
         tree.body = [
             node for node in tree.body
             if not (
@@ -175,6 +178,7 @@ class FlowDeobfuscator:
                 and len(node.targets) == 1
                 and isinstance(node.targets[0], ast.Name)
                 and node.targets[0].id in aliases
+                and is_mangled(node.targets[0].id)
             )
         ]
 
@@ -238,10 +242,12 @@ class FlowDeobfuscator:
                 new_stmts = []
                 for s in stmts:
                     # Remove the alias assignment itself
+                    # ONLY if the target name is mangled.
                     if (isinstance(s, ast.Assign)
                             and len(s.targets) == 1
                             and isinstance(s.targets[0], ast.Name)
-                            and s.targets[0].id in aliases):
+                            and s.targets[0].id in aliases
+                            and is_mangled(s.targets[0].id)):
                         continue
                     new_stmts.append(_Replacer().visit(s))
                 return new_stmts
