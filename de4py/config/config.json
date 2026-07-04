@@ -6,14 +6,14 @@
     "rpc": true,
     "stealth_title": true,
     "load_plugins": true,
-    "build_num": "3.1.1.260321656-stable-de4py",
+    "build_num": "3.2.2.260704542-stable-de4py",
     "api_base_url": "https://de4py-api.vercel.app",
     "api_timeout": 700,
     "poll_interval": 2.0,
-    "active_theme": "Catppuccin Mocha",
+    "active_theme": null,
     "language": "en",
     "transparent_ui": true,
-    "telemetry": false,
+    "telemetry": true,
     "auto_update_check": true,
     "auto_update_install": false
 }
