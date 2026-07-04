@@ -7,10 +7,6 @@
 #
 # See the LICENSE file for details.
 
-"""
-De4py Behavior Monitor Worker - Reads from analyzer pipe in background
-One task only, emits text updates via signal, no direct UI updates
-"""
 from PySide6.QtCore import QThread, Signal
 
 from de4py.ui.controllers import pyshell_controller
@@ -40,3 +36,4 @@ class BehaviorMonitorWorker(QThread):
 
     def stop(self):
         self._running = False
+        pyshell_controller.interrupt_analyzer_read()

@@ -8,7 +8,7 @@
 # See the LICENSE file for details.
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QFrame, QCheckBox, QComboBox, QHBoxLayout
+    QWidget, QVBoxLayout, QLabel, QFrame, QCheckBox, QComboBox, QPushButton, QHBoxLayout
 )
 from PySide6.QtCore import Qt
 
@@ -17,14 +17,20 @@ from de4py.lang import tr, translation_manager
 from de4py.lang.keys import (
     SCREEN_TITLE_SETTINGS, SETTINGS_LANGUAGE, SETTINGS_RPC,
     SETTINGS_STEALTH, SETTINGS_PLUGINS, SETTINGS_RESTART_NOTE,
-    SETTINGS_TRANSPARENT_UI, SETTINGS_AUTO_UPDATE, SETTINGS_UPDATE_CHANNEL,
-    SETTINGS_TELEMETRY
+    SETTINGS_TRANSPARENT_UI, SETTINGS_TELEMETRY,
+    SETTINGS_AUTO_UPDATE_CHECK, SETTINGS_AUTO_INSTALL, SETTINGS_CHECK_NOW,
+    SETTINGS_UPDATE_CHECKING, SETTINGS_UPDATE_UPTODATE, SETTINGS_UPDATE_AVAILABLE,
+    SETTINGS_UPDATE_DOWNLOAD_BTN, SETTINGS_UPDATE_OPENING_DIALOG
 )
+
+CHECKED = Qt.CheckState.Checked.value
 
 
 class SettingsScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._loading_config = False
+        self._updater_connected = False
         self._setup_ui()
         self._load_config()
 
@@ -33,156 +39,223 @@ class SettingsScreen(QWidget):
         layout.setContentsMargins(40, 20, 40, 20)
         layout.setSpacing(20)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        frame = QFrame()
-        frame.setObjectName("StyledFrame")
-        frame.setFixedSize(400, 420)
-        
-        frame_layout = QVBoxLayout(frame)
-        frame_layout.setSpacing(15)
-        
+
         self.title_label = QLabel(tr(SCREEN_TITLE_SETTINGS))
         self.title_label.setObjectName("TitleLabel")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        frame_layout.addWidget(self.title_label)
-        
-        # Language Selector
-        lang_layout = QHBoxLayout()
+        layout.addWidget(self.title_label)
+
+        frame = QFrame()
+        frame.setObjectName("StyledFrame")
+        frame.setMaximumWidth(500)
+
+        frame_layout = QVBoxLayout(frame)
+        frame_layout.setSpacing(12)
+
+        lang_row = QHBoxLayout()
         self.lang_label = QLabel(tr(SETTINGS_LANGUAGE))
         self.lang_label.setFixedWidth(120)
-        lang_layout.addWidget(self.lang_label)
-        
+        lang_row.addWidget(self.lang_label)
         self.lang_combo = QComboBox()
         self.lang_combo.setObjectName("LanguageSelector")
-        # Add available languages
         for code, name in translation_manager.get_available_languages().items():
             self.lang_combo.addItem(name, code)
-        
-        # Set current selection
         idx = self.lang_combo.findData(settings.language)
         if idx >= 0:
             self.lang_combo.setCurrentIndex(idx)
-            
         self.lang_combo.currentIndexChanged.connect(self._change_language)
-        lang_layout.addWidget(self.lang_combo)
-        frame_layout.addLayout(lang_layout)
-        
+        lang_row.addWidget(self.lang_combo)
+        frame_layout.addLayout(lang_row)
+
         self.rpc_checkbox = QCheckBox(tr(SETTINGS_RPC))
-        self.rpc_checkbox.stateChanged.connect(lambda s: self._update_config("rpc", s == 2))
+        self.rpc_checkbox.stateChanged.connect(lambda s: self._update_config("rpc", s == CHECKED))
         frame_layout.addWidget(self.rpc_checkbox)
-        
+
         self.stealth_checkbox = QCheckBox(tr(SETTINGS_STEALTH))
-        self.stealth_checkbox.stateChanged.connect(lambda s: self._update_config("stealth_title", s == 2))
+        self.stealth_checkbox.stateChanged.connect(lambda s: self._update_config("stealth_title", s == CHECKED))
         frame_layout.addWidget(self.stealth_checkbox)
-        
+
         self.plugins_checkbox = QCheckBox(tr(SETTINGS_PLUGINS))
-        self.plugins_checkbox.stateChanged.connect(lambda s: self._update_config("load_plugins", s == 2))
+        self.plugins_checkbox.stateChanged.connect(lambda s: self._update_config("load_plugins", s == CHECKED))
         frame_layout.addWidget(self.plugins_checkbox)
 
         self.transparent_checkbox = QCheckBox(tr(SETTINGS_TRANSPARENT_UI))
         self.transparent_checkbox.stateChanged.connect(self._on_transparent_ui_changed)
         frame_layout.addWidget(self.transparent_checkbox)
 
-        # ── Update Settings ──────────────────────────────────────────
-        self.auto_update_checkbox = QCheckBox(tr(SETTINGS_AUTO_UPDATE))
-        self.auto_update_checkbox.stateChanged.connect(lambda s: self._update_config("auto_update", s == 2))
-        frame_layout.addWidget(self.auto_update_checkbox)
-        
         self.telemetry_checkbox = QCheckBox(tr(SETTINGS_TELEMETRY))
-        self.telemetry_checkbox.stateChanged.connect(lambda s: self._update_config("telemetry", s == 2))
+        self.telemetry_checkbox.stateChanged.connect(lambda s: self._update_config("telemetry", s == CHECKED))
         frame_layout.addWidget(self.telemetry_checkbox)
 
-        # Update Channel Selector
-        channel_layout = QHBoxLayout()
-        self.channel_label = QLabel(tr(SETTINGS_UPDATE_CHANNEL))
-        self.channel_label.setFixedWidth(120)
-        channel_layout.addWidget(self.channel_label)
+        sep = QFrame()
+        sep.setObjectName("SettingsSeparator")
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFixedHeight(2)
+        frame_layout.addWidget(sep)
 
-        self.channel_combo = QComboBox()
-        self.channel_combo.setObjectName("UpdateChannelSelector")
-        self.channel_combo.addItem("Stable", "stable")
-        self.channel_combo.addItem("Beta", "beta")
-        self.channel_combo.addItem("Dev", "dev")
-        self.channel_combo.currentIndexChanged.connect(self._change_update_channel)
-        channel_layout.addWidget(self.channel_combo)
-        frame_layout.addLayout(channel_layout)
-        
+        self.auto_update_check_checkbox = QCheckBox(tr(SETTINGS_AUTO_UPDATE_CHECK))
+        self.auto_update_check_checkbox.stateChanged.connect(lambda s: self._update_config("auto_update_check", s == CHECKED))
+        frame_layout.addWidget(self.auto_update_check_checkbox)
+
+        self.auto_install_checkbox = QCheckBox(tr(SETTINGS_AUTO_INSTALL))
+        self.auto_install_checkbox.stateChanged.connect(lambda s: self._update_config("auto_update_install", s == CHECKED))
+        frame_layout.addWidget(self.auto_install_checkbox)
+
+        self.check_update_btn = QPushButton(tr(SETTINGS_CHECK_NOW))
+        self.check_update_btn.clicked.connect(self._on_check_updates)
+        frame_layout.addWidget(self.check_update_btn)
+
+        self.update_status_label = QLabel("")
+        self.update_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.update_status_label.setWordWrap(True)
+        self.update_status_label.hide()
+        frame_layout.addWidget(self.update_status_label)
+
+        self.download_update_btn = QPushButton(tr(SETTINGS_UPDATE_DOWNLOAD_BTN))
+        self.download_update_btn.clicked.connect(self._on_download_update)
+        self.download_update_btn.hide()
+        frame_layout.addWidget(self.download_update_btn)
+
         frame_layout.addStretch()
-        frame_layout.addSpacing(20)
-        
+
         self.note_label = QLabel(tr(SETTINGS_RESTART_NOTE))
         self.note_label.setWordWrap(True)
         frame_layout.addWidget(self.note_label)
-        
+
         layout.addWidget(frame)
 
-    def _change_language(self, index):
-        lang_code = self.lang_combo.currentData()
-        if lang_code:
-            self._update_config("language", lang_code)
-            translation_manager.set_language(lang_code)
+    def _change_language(self, _):
+        if self._loading_config:
+            return
+        code = self.lang_combo.currentData()
+        if code:
+            self._update_config("language", code)
+            translation_manager.set_language(code)
 
-    def _change_update_channel(self, index):
-        channel = self.channel_combo.currentData()
-        if channel:
-            self._update_config("update_channel", channel)
+    def _update_config(self, key: str, value):
+        if self._loading_config:
+            return
+        try:
+            settings.set_and_emit(key, value)
+        except Exception:
+            pass
+
+    def _on_transparent_ui_changed(self, state):
+        if self._loading_config:
+            return
+        enabled = state == CHECKED
+        settings.set_and_emit("transparent_ui", enabled)
+        mw = self.window()
+        if mw and hasattr(mw, "set_transparent_ui"):
+            mw.set_transparent_ui(enabled)
+
+    def _load_config(self):
+        self._loading_config = True
+        widgets = [
+            self.rpc_checkbox, self.stealth_checkbox, self.plugins_checkbox,
+            self.transparent_checkbox, self.telemetry_checkbox,
+            self.auto_update_check_checkbox, self.auto_install_checkbox,
+            self.lang_combo,
+        ]
+        for w in widgets:
+            w.blockSignals(True)
+        try:
+            self.rpc_checkbox.setChecked(settings.rpc)
+            self.stealth_checkbox.setChecked(settings.stealth_title)
+            self.plugins_checkbox.setChecked(settings.load_plugins)
+            self.transparent_checkbox.setChecked(settings.transparent_ui)
+            self.telemetry_checkbox.setChecked(getattr(settings, "telemetry", True))
+            self.auto_update_check_checkbox.setChecked(settings.auto_update_check)
+            self.auto_install_checkbox.setChecked(settings.auto_update_install)
+            idx = self.lang_combo.findData(settings.language)
+            if idx >= 0:
+                self.lang_combo.setCurrentIndex(idx)
+        except Exception:
+            pass
+        finally:
+            for w in widgets:
+                w.blockSignals(False)
+            self._loading_config = False
 
     def retranslate_ui(self):
-        """Update UI texts when language changes."""
         self.title_label.setText(tr(SCREEN_TITLE_SETTINGS))
         self.lang_label.setText(tr(SETTINGS_LANGUAGE))
         self.rpc_checkbox.setText(tr(SETTINGS_RPC))
         self.stealth_checkbox.setText(tr(SETTINGS_STEALTH))
         self.plugins_checkbox.setText(tr(SETTINGS_PLUGINS))
         self.transparent_checkbox.setText(tr(SETTINGS_TRANSPARENT_UI))
-        self.auto_update_checkbox.setText(tr(SETTINGS_AUTO_UPDATE))
-        self.channel_label.setText(tr(SETTINGS_UPDATE_CHANNEL))
         self.telemetry_checkbox.setText(tr(SETTINGS_TELEMETRY))
+        self.auto_update_check_checkbox.setText(tr(SETTINGS_AUTO_UPDATE_CHECK))
+        self.auto_install_checkbox.setText(tr(SETTINGS_AUTO_INSTALL))
+        self.check_update_btn.setText(tr(SETTINGS_CHECK_NOW))
+        self.download_update_btn.setText(tr(SETTINGS_UPDATE_DOWNLOAD_BTN))
         self.note_label.setText(tr(SETTINGS_RESTART_NOTE))
 
-    def _load_config(self):
-        try:
-            self.rpc_checkbox.setChecked(settings.rpc)
-            self.stealth_checkbox.setChecked(settings.stealth_title)
-            self.plugins_checkbox.setChecked(settings.load_plugins)
-            self.transparent_checkbox.setChecked(settings.transparent_ui)
-            self.auto_update_checkbox.setChecked(getattr(settings, 'auto_update', True))
-            self.telemetry_checkbox.setChecked(getattr(settings, 'telemetry', True))
-            
-            # Update language combo box
-            idx = self.lang_combo.findData(settings.language)
-            if idx >= 0 and idx != self.lang_combo.currentIndex():
-                self.lang_combo.blockSignals(True)
-                self.lang_combo.setCurrentIndex(idx)
-                self.lang_combo.blockSignals(False)
+    def _ensure_updater_signals(self):
+        if self._updater_connected:
+            return
+        from de4py.updater.manager import UpdateManager
+        mgr = UpdateManager.get()
+        mgr.check_complete.connect(
+            self._on_update_check_complete, Qt.ConnectionType.UniqueConnection)
+        mgr.check_error.connect(
+            self._on_update_check_error, Qt.ConnectionType.UniqueConnection)
+        self._updater_connected = True
 
-            # Update channel combo box
-            channel = getattr(settings, 'update_channel', 'stable')
-            ch_idx = self.channel_combo.findData(channel)
-            if ch_idx >= 0 and ch_idx != self.channel_combo.currentIndex():
-                self.channel_combo.blockSignals(True)
-                self.channel_combo.setCurrentIndex(ch_idx)
-                self.channel_combo.blockSignals(False)
-        except Exception:
-            pass
+    def _on_check_updates(self):
+        self._ensure_updater_signals()
+        self.check_update_btn.setEnabled(False)
+        self.check_update_btn.setText(tr(SETTINGS_UPDATE_CHECKING))
+        self.update_status_label.hide()
+        self.download_update_btn.hide()
 
-    def _update_config(self, key: str, value):
-        try:
-            if hasattr(settings, key):
-                setattr(settings, key, value)
-                settings.save()
-        except Exception:
-            pass
+        from de4py.updater.manager import UpdateManager
+        UpdateManager.get().check_for_updates()
 
-    def _on_transparent_ui_changed(self, state):
-        enabled = (state == 2)
-        self._update_config("transparent_ui", enabled)
-        
-        # Apply immediately to main window
-        if self.window():
-            main_window = self.window()
-            if hasattr(main_window, "set_transparent_ui"):
-                main_window.set_transparent_ui(enabled)
+    def _on_update_check_complete(self, result):
+        self.check_update_btn.setEnabled(True)
+        self.check_update_btn.setText(tr(SETTINGS_CHECK_NOW))
+        if result.update_available:
+            self.update_status_label.setText(
+                tr(SETTINGS_UPDATE_AVAILABLE, version=result.remote)
+            )
+            self.update_status_label.setStyleSheet("color: #58A6FF;")
+            self.download_update_btn.show()
+        else:
+            self.update_status_label.setText(tr(SETTINGS_UPDATE_UPTODATE))
+            self.update_status_label.setStyleSheet("color: #8b949e;")
+            self.download_update_btn.hide()
+        self.update_status_label.show()
+
+    def _on_update_check_error(self, msg):
+        self.check_update_btn.setEnabled(True)
+        self.check_update_btn.setText(tr(SETTINGS_CHECK_NOW))
+        self.update_status_label.setText(msg)
+        self.update_status_label.setStyleSheet("color: #f85149;")
+        self.update_status_label.show()
+        self.download_update_btn.hide()
+
+    def _on_download_update(self):
+        from de4py.updater.manager import UpdateManager
+        from de4py.ui.widgets.update_dialog import UpdateDialog
+        mgr = UpdateManager.get()
+        result = mgr._pending_result
+        if not result:
+            return
+        dialog = UpdateDialog(result, parent=self.window())
+        dialog.fade_in()
+
+        UCT = Qt.ConnectionType.UniqueConnection
+        mgr.download_progress.connect(dialog.set_download_progress, UCT)
+        mgr.update_ready.connect(lambda _: dialog.show_ready(), UCT)
+        mgr.update_failed.connect(dialog.show_error, UCT)
+        dialog.update_confirmed.connect(
+            lambda: mgr.start_download(result.remote), UCT)
+        dialog.install_confirmed.connect(mgr.apply, UCT)
+        dialog.dismissed.connect(dialog.fade_out, UCT)
+
+        self.download_update_btn.setEnabled(False)
+        self.download_update_btn.setText(tr(SETTINGS_UPDATE_OPENING_DIALOG))
 
     def showEvent(self, event):
         super().showEvent(event)

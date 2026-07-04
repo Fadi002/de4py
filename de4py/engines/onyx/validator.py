@@ -8,7 +8,7 @@
 # See the LICENSE file for details.
 
 import ast
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Tuple
 
 
@@ -18,11 +18,7 @@ class ValidationResult:
     syntax_ok: bool
     structure_ok: bool
     error: str = ""
-    warnings: list = None
-
-    def __post_init__(self):
-        if self.warnings is None:
-            self.warnings = []
+    warnings: list = field(default_factory=list)
 
 
 class Validator:
@@ -30,7 +26,6 @@ class Validator:
     def validate(self, original: str, cleaned: str) -> ValidationResult:
         """Full validation: syntax + structural equivalence"""
 
-        # Step 1: Syntax check on cleaned output
         syntax_ok, syntax_error = self._check_syntax(cleaned)
         if not syntax_ok:
             return ValidationResult(
@@ -40,7 +35,6 @@ class Validator:
                 error=f"Syntax error in cleaned output: {syntax_error}",
             )
 
-        # Step 2: Structural equivalence
         structure_ok, structure_warnings = self._check_structure(original, cleaned)
 
         return ValidationResult(
@@ -51,10 +45,8 @@ class Validator:
         )
 
     def check_syntax_only(self, source: str) -> Tuple[bool, str]:
-        """Quick syntax check â€” used mid-pipeline"""
+        """Quick syntax check - used mid-pipeline"""
         return self._check_syntax(source)
-
-    # â”€â”€ Private â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _check_syntax(self, source: str) -> Tuple[bool, str]:
         try:
@@ -78,7 +70,7 @@ class Validator:
             orig_tree  = ast.parse(original)
             clean_tree = ast.parse(cleaned)
         except SyntaxError:
-            return True, []  # Can't compare â€” give benefit of the doubt
+            return True, []
 
         orig_stats  = self._tree_stats(orig_tree)
         clean_stats = self._tree_stats(clean_tree)
@@ -90,20 +82,18 @@ class Validator:
             if orig_val == 0:
                 continue
 
-            # Allow up to 30% difference (dead code removal changes counts legitimately)
-            ratio = clean_val / orig_val if orig_val > 0 else 1.0
+            ratio = clean_val / orig_val
             if ratio < 0.5:
                 warnings.append(
-                    f"Significant reduction in {key}: {orig_val} â†’ {clean_val} "
+                    f"Significant reduction in {key}: {orig_val} -> {clean_val} "
                     f"({ratio:.0%})"
                 )
 
-        # Fail if function count dropped by more than 60% (likely LLM hallucination)
         orig_fns  = orig_stats.get("functions", 0)
         clean_fns = clean_stats.get("functions", 0)
         if orig_fns > 0 and clean_fns < orig_fns * 0.4:
             return False, warnings + [
-                f"Too many functions lost: {orig_fns} â†’ {clean_fns}"
+                f"Too many functions lost: {orig_fns} -> {clean_fns}"
             ]
 
         return True, warnings
@@ -132,4 +122,3 @@ class Validator:
             elif isinstance(node, ast.Return):
                 stats["returns"] += 1
         return stats
-

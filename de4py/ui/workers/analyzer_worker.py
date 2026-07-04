@@ -7,10 +7,6 @@
 #
 # See the LICENSE file for details.
 
-"""
-De4py Analyzer Worker - Runs analyzer functions in background thread
-One task only, emits result signal, no direct UI updates
-"""
 from PySide6.QtCore import QThread, Signal
 
 from de4py.ui.controllers import analyzer_controller
@@ -40,7 +36,7 @@ class AnalyzerWorker(QThread):
                     result = analyzer_controller.run_all_strings_lookup(self._file_path)
                 elif self._command == "get_file_hashs":
                     result = analyzer_controller.run_get_file_hashs(self._file_path)
-                
+
                 self.finished.emit(result)
             except Exception as e:
-                self.error.emit(f"Error: {str(e)}")
+                self.error.emit(f"Error: {e}")

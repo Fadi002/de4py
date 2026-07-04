@@ -33,7 +33,7 @@ class InjectionWorker(QThread):
                     result = pyshell_controller.stealth_inject_shell(self._pid)
                 else:
                     result = pyshell_controller.inject_shell(self._pid)
-                
+
                 if result and result[1]:
                     pyshell_controller.set_handle(result[0])
                     self.finished.emit(result[0], True)

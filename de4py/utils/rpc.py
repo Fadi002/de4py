@@ -7,26 +7,31 @@
 #
 # See the LICENSE file for details.
 
-# rpc.py - Presence moved to local scope
 import threading
 import time
 import logging
 from de4py.config.config import settings
 
-RPC = None
+_RPC = None
+_rpc_lock = threading.Lock()
+_stop_event = threading.Event()
+
 KILL_THREAD = False
 
 
 def _rpc_loop():
-    global RPC
-    global KILL_THREAD
     start = int(time.time())
-    while not KILL_THREAD:
+    details = f"De4py {settings.version}"
+    while not _stop_event.is_set():
         try:
-            RPC.update(
+            with _rpc_lock:
+                rpc = _RPC
+            if rpc is None:
+                break
+            rpc.update(
                 large_image="de4py",
                 large_text="De4py",
-                details=f"De4py {settings.version}",
+                details=details,
                 state="Python reverse engineering toolkit",
                 start=start,
                 buttons=[
@@ -34,20 +39,40 @@ def _rpc_loop():
                     {"label": "Github", "url": "https://github.com/Fadi002"},
                 ],
             )
-            time.sleep(3)
+            _stop_event.wait(3)
         except Exception as e:
             logging.debug(f"RPC update failed: {e}")
             break
 
 
-def start_RPC():
-    global RPC
+def start_rpc():
+    global _RPC, KILL_THREAD
+    with _rpc_lock:
+        if _RPC is not None:
+            return
+    KILL_THREAD = False
+    _stop_event.clear()
     try:
         from pypresence import Presence
-        RPC = Presence("1190392428247650466")
-        RPC.connect()
+        rpc = Presence("1190392428247650466")
+        rpc.connect()
+        with _rpc_lock:
+            _RPC = rpc
         t = threading.Thread(target=_rpc_loop, daemon=True)
         t.start()
     except Exception as e:
         logging.debug(f"RPC connection failed: {e}")
 
+
+def stop_rpc():
+    global _RPC, KILL_THREAD
+    KILL_THREAD = True
+    _stop_event.set()
+    with _rpc_lock:
+        rpc = _RPC
+        _RPC = None
+    if rpc is not None:
+        try:
+            rpc.close()
+        except Exception:
+            pass

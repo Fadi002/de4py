@@ -30,10 +30,32 @@ This makes the lifter work on ANY stack VM that follows the pattern:
 """
 
 import ast
+import io
+import logging
 import pickle
-import re
-import textwrap
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+
+class _RestrictedUnpickler(pickle.Unpickler):
+    """Unpickler that rejects dangerous types to prevent code execution."""
+    _SAFE_TYPES = frozenset({
+        'dict', 'list', 'tuple', 'set', 'frozenset',
+        'int', 'float', 'str', 'bytes', 'bool',
+        'complex', 'bytearray', 'memoryview',
+        'NoneType', 'range', 'slice',
+    })
+
+    def find_class(self, module, name):
+        if module == 'builtins' and name in self._SAFE_TYPES:
+            return getattr(__builtins__, name)
+        raise pickle.UnpicklingError(f"Unsupported class: {module}.{name}")
+
+
+def _safe_loads(data):
+    """Safely unpickle data using RestrictedUnpickler."""
+    return _RestrictedUnpickler(io.BytesIO(data)).load()
 
 
 # ─── Opcode semantic inference ────────────────────────────────────────────────
@@ -285,7 +307,7 @@ class VMLifter:
             if isinstance(node, ast.ClassDef):
                 table = _VMOpcodeTable()
                 if table.load_from_class(node):
-                    print(f'[VMLifter] Extracted {len(table.opcodes)} opcodes from {node.name}')
+                    logger.info("[VMLifter] Extracted %d opcodes from %s", len(table.opcodes), node.name)
                     return table
         return None
 
@@ -338,7 +360,7 @@ class VMLifter:
         for ci, fn in nested_name_map.items():
             if ci < len(consts) and isinstance(consts[ci], bytes):
                 try:
-                    nd = pickle.loads(consts[ci])
+                    nd = _safe_loads(consts[ci])
                     nested_defs.append(self._lift_data(nd, fn, table))
                 except Exception as e:
                     nested_defs.append(f'# Could not lift {fn}: {e}')
@@ -373,23 +395,29 @@ class VMLifter:
         return '\n'.join(parts)
 
     def deobfuscate(self, source: str) -> str:
-        table    = self._extract_vm_class(source)
-        payloads = self._extract_payloads(source)
-        if not payloads:
+        try:
+            table    = self._extract_vm_class(source)
+            payloads = self._extract_payloads(source)
+            if not payloads:
+                return source
+
+            header = [
+                '# ' + '═'*60,
+                '# VM BYTECODE — LIFTED TO PYTHON (dynamic opcode extraction)',
+                '# ' + '═'*60,
+                '',
+            ]
+            blocks = []
+            for payload_bytes, var_name in payloads:
+                try:
+                    data = _safe_loads(payload_bytes)
+                    blocks.append(self._lift_data(data, var_name, table or _VMOpcodeTable()))
+                except Exception as e:
+                    blocks.append(f'# Could not lift {var_name!r}: {e}')
+
+            return '\n'.join(header) + '\n\n'.join(blocks)
+        except RecursionError:
+            return source
+        except Exception:
             return source
 
-        header = [
-            '# ' + '═'*60,
-            '# VM BYTECODE — LIFTED TO PYTHON (dynamic opcode extraction)',
-            '# ' + '═'*60,
-            '',
-        ]
-        blocks = []
-        for payload_bytes, var_name in payloads:
-            try:
-                data = pickle.loads(payload_bytes)
-                blocks.append(self._lift_data(data, var_name, table or _VMOpcodeTable()))
-            except Exception as e:
-                blocks.append(f'# Could not lift {var_name!r}: {e}')
-
-        return '\n'.join(header) + '\n\n'.join(blocks)

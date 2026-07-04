@@ -10,7 +10,6 @@
 import logging
 import platform
 import sys
-import traceback
 from typing import Optional, Dict, Any
 
 from de4py.api.client import De4pyApiClient, ApiError

@@ -11,9 +11,44 @@
 Runs black on Python source code.
 """
 
+import ast
 import subprocess
 import sys
+from functools import lru_cache
+from importlib.util import find_spec
+from shutil import which
 from typing import Optional
+
+
+@lru_cache(maxsize=1)
+def _resolve_black_command() -> Optional[tuple[str, ...]]:
+    """Resolve the cheapest usable Black entrypoint once per process."""
+    black_exe = which("black")
+    if black_exe:
+        return (
+            black_exe,
+            "-",
+            "--quiet",
+            "--line-length",
+            str(Formatter.LINE_LENGTH),
+            "--target-version",
+            "py39",
+        )
+
+    if find_spec("black") is not None:
+        return (
+            sys.executable,
+            "-m",
+            "black",
+            "-",
+            "--quiet",
+            "--line-length",
+            str(Formatter.LINE_LENGTH),
+            "--target-version",
+            "py39",
+        )
+
+    return None
 
 
 class Formatter:
@@ -25,19 +60,23 @@ class Formatter:
         Format source with black. Returns formatted source or original on failure.
         Never raises — formatting failure is non-fatal.
         """
+        if not source.strip():
+            return source
+
         result = self._run_black(source)
         return result if result is not None else source
 
     def _run_black(self, source: str) -> Optional[str]:
+        cmd = _resolve_black_command()
+        if cmd is None:
+            return None
+
+        if not self._is_valid_python(source):
+            return None
+
         try:
             proc = subprocess.run(
-                [
-                    sys.executable, "-m", "black",
-                    "-",                          # Read from stdin
-                    "--quiet",
-                    "--line-length", str(self.LINE_LENGTH),
-                    "--target-version", "py39",
-                ],
+                list(cmd),
                 input=source.encode("utf-8"),
                 capture_output=True,
                 timeout=30,
@@ -48,3 +87,11 @@ class Formatter:
         except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
             pass
         return None
+
+    @staticmethod
+    def _is_valid_python(source: str) -> bool:
+        try:
+            ast.parse(source)
+        except SyntaxError:
+            return False
+        return True

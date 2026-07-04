@@ -7,11 +7,9 @@
 #
 # See the LICENSE file for details.
 
-import os
 import sys
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, 
-                             QStackedWidget, QLabel, QFrame, QPushButton, QSizePolicy)
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QTabWidget)
+from PySide6.QtCore import Qt
 
 from de4py.config.config import settings
 from de4py.lang import tr, keys
@@ -21,7 +19,7 @@ class DeveloperPanel(QWidget):
         super().__init__(parent)
         self.setWindowTitle(tr(keys.DEV_TITLE))
         self.setWindowFlags(Qt.Tool | Qt.WindowStaysOnTopHint)
-        self.resize(450, 600) # Balanced compact size
+        self.resize(450, 600)
         self.setAttribute(Qt.WA_StyledBackground, True)
         
         self.setup_ui()
@@ -31,7 +29,6 @@ class DeveloperPanel(QWidget):
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
-        from PySide6.QtWidgets import QTabWidget
         self.tabs = QTabWidget()
         self.tabs.setObjectName("DevToolsTabs")
         self.main_layout.addWidget(self.tabs)
@@ -100,7 +97,6 @@ class DeveloperPanel(QWidget):
                 max-height: 25px;
             }
             
-            /* Compact Scrollbar */
             QScrollBar:vertical {
                 background: #0d1117;
                 width: 6px;

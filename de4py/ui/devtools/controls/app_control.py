@@ -8,9 +8,8 @@
 # See the LICENSE file for details.
 
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, 
-                             QSlider, QHBoxLayout, QGridLayout, QFrame)
+                             QSlider, QHBoxLayout, QGridLayout)
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QScreen
 from de4py.lang import tr, keys
 from ..context import context
 from ..event_bus import bus
@@ -97,8 +96,6 @@ class AppControl(QWidget):
         self.layout.addLayout(sys_grid)
         
         self.layout.addStretch()
-        
-        self.layout.addStretch()
 
     def force_reload(self):
         if context.main_window and hasattr(context.main_window, 'screen_stack'):
@@ -122,12 +119,9 @@ class AppControl(QWidget):
                     bus.log.emit("INFO", f"NAV: Navigated to {screen_id}")
                     return
         
-        elif context.main_window:
-            pass
 
     def update_font_scale(self, size: int):
         if context.app:
-            from PySide6.QtGui import QFont
             font = context.app.font()
             font.setPointSize(size)
             context.app.setFont(font)

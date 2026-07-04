@@ -1,7 +1,8 @@
 {
-    "version": "V3.1.1",
+    "version": "V3.2.2",
     "changelog_url": "https://raw.githubusercontent.com/Fadi002/de4py/main/INFO/changelog.json",
     "version_url": "https://raw.githubusercontent.com/Fadi002/de4py/main/INFO/version",
+    "releases_base_url": "https://github.com/Fadi002/de4py/releases/download",
     "rpc": true,
     "stealth_title": true,
     "load_plugins": true,
@@ -9,12 +10,10 @@
     "api_base_url": "https://de4py-api.vercel.app",
     "api_timeout": 700,
     "poll_interval": 2.0,
-    "active_theme": null,
+    "active_theme": "Catppuccin Mocha",
     "language": "en",
     "transparent_ui": true,
-    "auto_update": true,
-    "update_channel": "beta",
-    "last_update_check": null,
-    "github_repo": "Fadi002/de4py",
-    "telemetry": true
+    "telemetry": false,
+    "auto_update_check": true,
+    "auto_update_install": false
 }

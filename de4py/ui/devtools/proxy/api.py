@@ -8,8 +8,7 @@
 # See the LICENSE file for details.
 
 import time
-import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from de4py.api.client import De4pyApiClient
 from de4py.ui.devtools.context import context
 

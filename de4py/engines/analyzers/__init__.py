@@ -15,15 +15,6 @@ from .pyinstxtractor import PyInstArchive
 from .unpy2exe import unpy2exe
 
 def detect_packer(file_path: str) -> tuple:
-    """
-    Analyzes a PE file to detect common Python packers like PyInstaller, Nuitka, or py2exe.
-    
-    Args:
-        file_path (str): Path to the executable file.
-        
-    Returns:
-        tuple: (bool success, str packer_type)
-    """
     with pefile.PE(file_path) as pe:
         for section in pe.sections:
             if ".rdata" in section.Name.decode():
@@ -45,15 +36,6 @@ def detect_packer(file_path: str) -> tuple:
     return (False, "unsupported packer")
 
 def get_file_hashs(file_path: str) -> str:
-    """
-    Calculates MD5, SHA1, and SHA256 hashes of a file.
-    
-    Args:
-        file_path (str): Path to the file.
-        
-    Returns:
-        str: Formatted string containing all three hashes.
-    """
     file_bytes = open(file_path, "rb").read()
     md5_hash = md5(file_bytes).hexdigest()
     sha1_hash = sha1(file_bytes).hexdigest()
@@ -61,15 +43,6 @@ def get_file_hashs(file_path: str) -> str:
     return f"MD5: {md5_hash}\nSHA1: {sha1_hash}\nSHA256: {sha256_hash}"
 
 def unpack_file(file_path: str) -> str:
-    """
-    Attempts to unpack an executable based on its detected packer type.
-    
-    Args:
-        file_path (str): Path to the executable to be unpacked.
-        
-    Returns:
-        str: Status message indicating success or specific failure reason.
-    """
     packer = detect_packer(file_path)
     if not packer[0]:
         return "invalid file or packer"
@@ -98,15 +71,6 @@ def unpack_file(file_path: str) -> str:
     return "Failed to unpack"
 
 def sus_strings_lookup(file_path: str) -> str:
-    """
-    Searches for suspicious strings (keywords, URLs, IPs) in a file.
-    
-    Args:
-        file_path (str): Original file path.
-        
-    Returns:
-        str: JSON formatted string containing lists of matched suspicious items.
-    """
     regex = {
         'sus words': re.compile(r'(\btoken\b|grabber|stealer|steal|webhook|passwords|chrome|\bopera\b|opera gx|\bedge\b|brave|firefox|ipify|leveldb|appdata|localappdata|local storage|index.js|desktop-core|discord|discordcanary|discordptb|logger)'),
         'urls': re.compile(r'(http|https|ftp)\://([a-zA-Z0-9\-\.]+\.+[a-zA-Z]{2,3})(:[a-zA-Z0-9]*)?/?([a-zA-Z0-9\-\._\?\,\'/\\\+&amp;%\$#\=~@]*)'),
@@ -121,15 +85,6 @@ def sus_strings_lookup(file_path: str) -> str:
         return json.dumps(matches)
 
 def all_strings_lookup(filename: str) -> str:
-    """
-    Extracts all printable ASCII strings (minimum length 4) from a binary file.
-    
-    Args:
-        filename (str): Target binary file.
-        
-    Returns:
-        str: Newline-separated list of extracted strings.
-    """
     with open(filename, 'rb') as file:
         content = file.read().decode(errors='ignore')
     strings_regex = re.compile(r'[\x20-\x7E]{4,}')

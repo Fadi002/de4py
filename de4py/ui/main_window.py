@@ -7,12 +7,17 @@
 #
 # See the LICENSE file for details.
 
+import importlib
 import os
+try:
+    import ctypes.wintypes
+    _HAS_CTYPES = True
+except ImportError:
+    _HAS_CTYPES = False
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout
+    QMainWindow, QWidget, QHBoxLayout
 )
 from de4py.ui.widgets.core_animations import AnimatedStackedWidget
-from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon
 
 from de4py.config.config import settings
@@ -20,30 +25,22 @@ from de4py.lang import translation_manager
 from de4py.ui.motion.manager import MotionManager
 from de4py.ui.widgets.hamburger_button import HamburgerButton
 from de4py.ui.constants import (
-    WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE,
-    SIDEBAR_WIDTH, HAMBURGER_SIZE, SPACING_MD,
+    WINDOW_WIDTH, WINDOW_HEIGHT, SIDEBAR_WIDTH, SPACING_MD,
     SCREEN_HOME, SCREEN_DEOBFUSCATOR, SCREEN_PYSHELL, SCREEN_BEHAVIOR_MONITOR,
     SCREEN_ANALYZER, SCREEN_PLUGINS, SCREEN_SETTINGS, SCREEN_ABOUT,
     SCREEN_PYLINGUAL
 )
+from de4py.lang.keys import TOOLTIP_HAMBURGER
 from de4py.ui.navigation.sidebar import Sidebar
-from de4py.ui.screens.home_screen import HomeScreen
-from de4py.ui.screens.deobfuscator_screen import DeobfuscatorScreen
-from de4py.ui.screens.pyshell_screen import PyShellScreen
-from de4py.ui.screens.behavior_monitor_screen import BehaviorMonitorScreen
-from de4py.ui.screens.analyzer_screen import AnalyzerScreen
-from de4py.ui.screens.plugins_screen import PluginsScreen
-from de4py.ui.screens.settings_screen import SettingsScreen
-from de4py.ui.screens.about_screen import AboutScreen
-from de4py.ui.screens.pylingual_screen import PyLingualScreen
 from de4py.ui.widgets.notification_widget import NotificationManager
 from de4py.ui.widgets.loading_overlay import LoadingOverlay
 from de4py.ui.widgets.custom_title_bar import CustomTitleBar
+from de4py.ui.widgets.glass_utils import GlassBlurCache
 
 TRANSPARENT_STYLESHEET = """
 /* Transparency Overrides */
 QMainWindow, QWidget#CentralWidget {
-    background-color: rgba(20, 20, 20, 0.02); /* Near-zero alpha to force render surface */
+    background-color: rgba(20, 20, 20, 0.02);
 }
 QWidget#MainContent {
     background-color: transparent;
@@ -77,46 +74,72 @@ QFrame#NotificationFrame {
 QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
     background-color: rgba(24, 28, 36, 0.5);
 }
-/* Ensure these input widgets become more opaque on focus/hover for readability */
-QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
-    background-color: rgba(30, 36, 46, 0.9);
-}
 """
 
 class MainWindow(QMainWindow):
-    """
-    The main application window for de4py.
-    Manages the sidebar navigation, the screen stack, and provides unified
-    access to global overlays like notifications and loading screens.
-    """
+    _NAV_SCREEN_MAP: dict[str, int] = {
+        "home": SCREEN_HOME,
+        "deobfuscator": SCREEN_DEOBFUSCATOR,
+        "pyshell": SCREEN_PYSHELL,
+        "analyzer": SCREEN_ANALYZER,
+        "plugins": SCREEN_PLUGINS,
+        "settings": SCREEN_SETTINGS,
+        "about": SCREEN_ABOUT,
+        "pylingual": SCREEN_PYLINGUAL,
+    }
+
     def __init__(self, title=None):
         super().__init__()
         from de4py.lang import tr, keys
         self.setWindowTitle(title if title else tr(keys.APP_NAME))
         translation_manager.load_language(settings.language)
-        
-        # Enforce Fixed size for main application
-        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+
+        self.setMinimumSize(800, 600)
+        self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        self.setAcceptDrops(True)
 
         self._sidebar_visible = False
-        
-        translation_manager.load_language(settings.language)
-        
+        self._screen_specs = {
+            SCREEN_HOME: ("home_screen", "de4py.ui.screens.home_screen", "HomeScreen"),
+            SCREEN_DEOBFUSCATOR: ("deobfuscator_screen", "de4py.ui.screens.deobfuscator_screen", "DeobfuscatorScreen"),
+            SCREEN_PYSHELL: ("pyshell_screen", "de4py.ui.screens.pyshell_screen", "PyShellScreen"),
+            SCREEN_BEHAVIOR_MONITOR: ("behavior_monitor_screen", "de4py.ui.screens.behavior_monitor_screen", "BehaviorMonitorScreen"),
+            SCREEN_ANALYZER: ("analyzer_screen", "de4py.ui.screens.analyzer_screen", "AnalyzerScreen"),
+            SCREEN_PLUGINS: ("plugins_screen", "de4py.ui.screens.plugins_screen", "PluginsScreen"),
+            SCREEN_SETTINGS: ("settings_screen", "de4py.ui.screens.settings_screen", "SettingsScreen"),
+            SCREEN_ABOUT: ("about_screen", "de4py.ui.screens.about_screen", "AboutScreen"),
+            SCREEN_PYLINGUAL: ("pylingual_screen", "de4py.ui.screens.pylingual_screen", "PyLingualScreen"),
+        }
+        self._screen_widgets = {}
+        self._screen_placeholders = {}
+        self._behavior_bridge_connected = False
+
+        for attr_name, _, _ in self._screen_specs.values():
+            setattr(self, attr_name, None)
+
         self._setup_ui()
         self._connect_signals()
-        
+
         translation_manager.language_changed.connect(self._on_language_changed)
 
         if settings.transparent_ui:
             self.set_transparent_ui(True)
-            
-        from de4py.utils.win32_blur import set_high_precision_timer
+
+        from de4py.ui.platform.win32_blur import set_high_precision_timer
         set_high_precision_timer(True)
+
+        MotionManager.start_simulation()
+
+        try:
+            from de4py.ui.motion.proximity import ProximityTracker
+            ProximityTracker.instance()
+        except Exception:
+            pass
 
     def set_transparent_ui(self, enabled: bool):
         try:
-            from de4py.utils.win32_blur import enable_dynamic_blur, disable_blur
-            
+            from de4py.ui.platform.win32_blur import enable_dynamic_blur, disable_blur
+
             # Toggling TranslucentBackground usually requires a hide/show cycle
             was_visible = self.isVisible()
             if was_visible:
@@ -125,49 +148,51 @@ class MainWindow(QMainWindow):
             if enabled:
                 theme_colors = {}
                 active_style = TRANSPARENT_STYLESHEET
-                
+
                 if settings.active_theme:
                     try:
                         from plugins import load_plugins
                         loaded = load_plugins()
                         active_name = settings.active_theme.strip().lower()
-                        for p in loaded:
-                            inst = p.get("instance")
+                        for plugin in loaded:
+                            inst = plugin.get("instance")
                             if inst and inst.name.strip().lower() == active_name:
                                 if hasattr(inst, "colors") and inst.colors:
                                     theme_colors = inst.colors
-                                
+
                                 if hasattr(inst, "transparent_qss") and inst.transparent_qss:
                                     active_style = inst.transparent_qss
                                 break
                     except Exception:
                         pass
-                
+
                 enable_dynamic_blur(self, theme_colors)
                 self.setStyleSheet(active_style)
                 self.title_bar.set_theme_colors(theme_colors)
+                if "secondary" in theme_colors:
+                    from PySide6.QtGui import QColor
+                    self.drop_overlay.set_border_color(QColor(theme_colors["secondary"]))
                 self.title_bar.show()
                 self.title_bar.raise_()
             else:
                 disable_blur(self)
                 self.setStyleSheet("")
                 self.title_bar.hide()
-            
+
             if was_visible:
                 self.show()
-                
+
         except Exception:
-            self.show() # Safety fallback
+            self.show()
 
     def nativeEvent(self, eventType, message):
         """Handle Windows system color change events to refresh blur."""
         try:
-            if eventType == "windows_generic_MSG":
-                import ctypes.wintypes
+            if _HAS_CTYPES and eventType == "windows_generic_MSG":
                 msg = ctypes.wintypes.MSG.from_address(message.__int__())
                 if msg.message in (0x0320, 0x001A):
                     if settings.transparent_ui:
-                        self.set_transparent_ui(True) 
+                        self.set_transparent_ui(True)
         except Exception:
             pass
         return super().nativeEvent(eventType, message)
@@ -176,70 +201,85 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         central_widget.setObjectName("CentralWidget")
         self.setCentralWidget(central_widget)
-        
+
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-        
+
         self.title_bar = CustomTitleBar(self)
         self.title_bar.hide()
-        
+
         self.sidebar = Sidebar(self)
         self.sidebar.setFixedWidth(0)
-        
+
         content_widget = QWidget()
         content_widget.setObjectName("MainContent")
         content_layout = QHBoxLayout(content_widget)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
-        
+
         self.screen_stack = AnimatedStackedWidget()
         self._create_screens()
         content_layout.addWidget(self.screen_stack)
-        
+
         main_layout.addWidget(self.sidebar)
         main_layout.addWidget(content_widget, 1)
-        
+
         self._setup_notification_manager()
         self._setup_loading_overlay()
-        
-        # Determine icon path safely
+        self._setup_drop_overlay()
+
         base_path = os.path.dirname(os.path.abspath(__file__))
         icon_path = os.path.join(base_path, "resources", "menu.svg")
-        
+
+        from de4py.lang import tr
         self.hamburger_btn = HamburgerButton(content_widget)
         self.hamburger_btn.setObjectName("HamburgerButton")
+        self.hamburger_btn.setToolTip(tr(TOOLTIP_HAMBURGER))
+        self.hamburger_btn.setAccessibleName(tr(TOOLTIP_HAMBURGER))
         self.hamburger_btn.move(SPACING_MD, SPACING_MD)
         if os.path.exists(icon_path):
              self.hamburger_btn.setIcon(QIcon(icon_path))
-        
-        # Initial raise
+
         self.hamburger_btn.raise_()
         self.title_bar.raise_()
-    
+
 
     def _create_screens(self):
-        self.home_screen = HomeScreen(self)
-        self.deobfuscator_screen = DeobfuscatorScreen(self)
-        self.pyshell_screen = PyShellScreen(self)
-        self.behavior_monitor_screen = BehaviorMonitorScreen(self)
-        self.analyzer_screen = AnalyzerScreen(self)
-        self.plugins_screen = PluginsScreen(self)
-        self.settings_screen = SettingsScreen(self)
-        self.about_screen = AboutScreen(self)
-        self.pylingual_screen = PyLingualScreen(self)
-        
-        self.screen_stack.addWidget(self.home_screen)
-        self.screen_stack.addWidget(self.deobfuscator_screen)
-        self.screen_stack.addWidget(self.pyshell_screen)
-        self.screen_stack.addWidget(self.behavior_monitor_screen)
-        self.screen_stack.addWidget(self.analyzer_screen)
-        self.screen_stack.addWidget(self.plugins_screen)
-        self.screen_stack.addWidget(self.settings_screen)
-        self.screen_stack.addWidget(self.about_screen)
-        self.screen_stack.addWidget(self.pylingual_screen)
-        
+        for index in sorted(self._screen_specs):
+            placeholder = QWidget(self.screen_stack)
+            placeholder.setObjectName(f"ScreenPlaceholder{index}")
+            self._screen_placeholders[index] = placeholder
+            self.screen_stack.insertWidget(index, placeholder)
+
+        self._ensure_screen(SCREEN_HOME)
         self.screen_stack.setCurrentIndex(SCREEN_HOME)
+
+    def _ensure_screen(self, index: int):
+        existing = self._screen_widgets.get(index)
+        if existing is not None:
+            return existing
+
+        spec = self._screen_specs.get(index)
+        if spec is None:
+            return None
+
+        attr_name, module_name, class_name = spec
+        module = importlib.import_module(module_name)
+        widget_class = getattr(module, class_name)
+        widget = widget_class(self)
+
+        self._screen_widgets[index] = widget
+        setattr(self, attr_name, widget)
+
+        placeholder = self._screen_placeholders.pop(index, None)
+        self.screen_stack.insertWidget(index, widget)
+        if placeholder is not None:
+            self.screen_stack.removeWidget(placeholder)
+            placeholder.deleteLater()
+
+        self._wire_screen_dependencies()
+        return widget
 
     def _setup_notification_manager(self):
         self.notification_manager = NotificationManager(self)
@@ -248,22 +288,34 @@ class MainWindow(QMainWindow):
         self.loading_overlay = LoadingOverlay(self)
         self.loading_overlay.hide()
 
+    def _setup_drop_overlay(self):
+        from de4py.ui.widgets.drop_overlay import DropOverlay
+        self.drop_overlay = DropOverlay(self)
+        self.drop_overlay.hide()
+
     def _connect_signals(self):
         self.hamburger_btn.clicked.connect(self._toggle_sidebar)
         self.sidebar.navigation_requested.connect(self._navigate_to)
-        
-        # Custom Title Bar Signals
+
         self.title_bar.close_requested.connect(self.close)
         self.title_bar.minimize_requested.connect(self.showMinimized)
-        
-        # Connect process death from PyShell to Behavior Monitor reset
-        self.pyshell_screen.process_died.connect(self.behavior_monitor_screen.handle_process_death)
+
+    def _wire_screen_dependencies(self):
+        pyshell = self._screen_widgets.get(SCREEN_PYSHELL)
+        behavior = self._screen_widgets.get(SCREEN_BEHAVIOR_MONITOR)
+        if pyshell and behavior and not self._behavior_bridge_connected:
+            pyshell.process_died.connect(behavior.handle_process_death)
+            self._behavior_bridge_connected = True
 
     def _toggle_sidebar(self):
         start_width = self.sidebar.width()
         target_width = SIDEBAR_WIDTH if not self._sidebar_visible else 0
-        
-        # Use MotionManager's specialized helper for "fixedWidth" animation inertia
+
+        if not self._sidebar_visible:
+            self.sidebar.on_sidebar_opening()
+        else:
+            self.sidebar.on_sidebar_closing()
+
         MotionManager.animate_sidebar_width(
             target=self.sidebar,
             start=start_width,
@@ -275,30 +327,23 @@ class MainWindow(QMainWindow):
         self._sidebar_visible = not self._sidebar_visible
 
     def _navigate_to(self, screen_id: str):
-        screen_map = {
-            "home": SCREEN_HOME,
-            "deobfuscator": SCREEN_DEOBFUSCATOR,
-            "pyshell": SCREEN_PYSHELL,
-            "analyzer": SCREEN_ANALYZER,
-            "plugins": SCREEN_PLUGINS,
-            "settings": SCREEN_SETTINGS,
-            "about": SCREEN_ABOUT,
-            "pylingual": SCREEN_PYLINGUAL,
-        }
-        if screen_id in screen_map:
+        if screen_id in self._NAV_SCREEN_MAP:
             from de4py.utils import sentry
             sentry.breadcrumb(f"Navigating to screen: {screen_id}", category="navigation")
-            self.screen_stack.fade_to_index(screen_map[screen_id])
+            target_index = self._NAV_SCREEN_MAP[screen_id]
+            self._ensure_screen(target_index)
+            self.screen_stack.fade_to_index(target_index)
             self.sidebar.set_active(screen_id)
-            
-            # Auto-close sidebar after selection
+
             if self._sidebar_visible:
                 self._toggle_sidebar()
 
     def navigate_to_behavior_monitor(self):
+        self._ensure_screen(SCREEN_BEHAVIOR_MONITOR)
         self.screen_stack.fade_to_index(SCREEN_BEHAVIOR_MONITOR)
 
     def navigate_to_pyshell(self):
+        self._ensure_screen(SCREEN_PYSHELL)
         self.screen_stack.fade_to_index(SCREEN_PYSHELL)
         self.sidebar.set_active("pyshell")
 
@@ -314,27 +359,56 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        GlassBlurCache.invalidate(self)
         self.loading_overlay.setGeometry(self.rect())
+        self.drop_overlay.setGeometry(self.rect())
         self._update_title_bar_geometry()
 
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            current_screen = self.screen_stack.currentWidget()
+            if hasattr(current_screen, '_load_file'):
+                event.acceptProposedAction()
+                self.drop_overlay.fade_in()
+                self.drop_overlay.raise_()
+
+    def dragLeaveEvent(self, event):
+        self.drop_overlay.fade_out()
+        event.accept()
+
+    def dropEvent(self, event):
+        self.drop_overlay.fade_out()
+        urls = event.mimeData().urls()
+        if urls:
+            file_path = urls[0].toLocalFile()
+            if os.path.isfile(file_path):
+                current_screen = self.screen_stack.currentWidget()
+                if hasattr(current_screen, '_load_file'):
+                    current_screen._load_file(file_path)
+
     def _update_title_bar_geometry(self):
-        if hasattr(self, 'title_bar'):
-            self.title_bar.setGeometry(0, 0, self.width(), 28)
-            self.title_bar.raise_()
+        self.title_bar.setGeometry(0, 0, self.width(), 28)
+        self.title_bar.raise_()
+
+    def closeEvent(self, event):
+        MotionManager.stop_simulation()
+        super().closeEvent(event)
 
     def _on_language_changed(self, lang_code: str):
-        """
-        Handle runtime language changes.
-        Propagates the change to all screens and widgets that support retranslation.
-        """
         from de4py.lang import tr, keys
         self.setWindowTitle(tr(keys.APP_NAME))
 
         if hasattr(self.sidebar, 'retranslate_ui'):
             self.sidebar.retranslate_ui()
 
-        for i in range(self.screen_stack.count()):
-            widget = self.screen_stack.widget(i)
+        if hasattr(self, 'hamburger_btn'):
+            self.hamburger_btn.setToolTip(tr(TOOLTIP_HAMBURGER))
+            self.hamburger_btn.setAccessibleName(tr(TOOLTIP_HAMBURGER))
+
+        if hasattr(self, 'title_bar'):
+            self.title_bar.retranslate_ui()
+
+        for widget in self._screen_widgets.values():
             if hasattr(widget, 'retranslate_ui'):
                 widget.retranslate_ui()
 

@@ -1,7 +1,7 @@
 # https://github.com/matiasb/unpy2exe/blob/master/unpy2exe.py
 
 try:import imp
-except: import importlib
+except: pass
 import logging
 import marshal
 import ntpath

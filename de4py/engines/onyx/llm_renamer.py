@@ -8,11 +8,12 @@
 # See the LICENSE file for details.
 
 import ast
-import re
+import logging
 import textwrap
 import requests
-import json
 from typing import Optional, List, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 # --- Constants ----------------------------------------------------------------
@@ -101,7 +102,7 @@ class LLMRenamer:
         try:
             response = requests.get(TAGS_URL, timeout=5)
             if response.status_code != 200:
-                print(f"[LLM] Error: Ollama returned status {response.status_code}")
+                logger.error("[LLM] Error: Ollama returned status %s", response.status_code)
                 return False
 
             data = response.json()
@@ -109,29 +110,29 @@ class LLMRenamer:
 
             model_base = self.model.split(":")[0]
             if not any(model_base in m for m in models):
-                print(f"[LLM] Model '{self.model}' not found. Downloading now (this may take a few minutes)...")
+                logger.info("[LLM] Model '%s' not found. Downloading now...", self.model)
                 pull_response = requests.post(
                     f"{OLLAMA_BASE_URL}/api/pull",
                     json={"name": self.model, "stream": False},
                     timeout=10000
                 )
                 if pull_response.status_code == 200:
-                    print(f"[LLM] Successfully downloaded {self.model}!")
+                    logger.info("[LLM] Successfully downloaded %s!", self.model)
                     return True
                 else:
-                    print(f"[LLM] Failed to download model: {pull_response.text}")
+                    logger.error("[LLM] Failed to download model: %s", pull_response.text)
                     return False
 
             return True
         except requests.exceptions.ConnectionError:
-            print(f"[LLM] Warning: Could not connect to Ollama at {OLLAMA_BASE_URL}")
-            print(f"[LLM] Start it with: ollama serve")
+            logger.warning("[LLM] Warning: Could not connect to Ollama at %s", OLLAMA_BASE_URL)
+            logger.warning("[LLM] Start it with: ollama serve")
             return False
         except requests.exceptions.Timeout:
-            print(f"[LLM] Warning: Connection to Ollama timed out")
+            logger.warning("[LLM] Warning: Connection to Ollama timed out")
             return False
         except Exception as e:
-            print(f"[LLM] Error checking Ollama: {e}")
+            logger.error("[LLM] Error checking Ollama: %s", e)
             return False
 
     def process_file(self, source: str, annotate: bool = False) -> str:
@@ -161,7 +162,7 @@ class LLMRenamer:
             return source
 
         total = len(functions)
-        print(f"[LLM] Found {total} top-level functions to deobfuscate")
+        logger.info("[LLM] Found %d top-level functions to deobfuscate", total)
 
         source_lines = source.splitlines(keepends=True)
 
@@ -170,41 +171,55 @@ class LLMRenamer:
         ):
             display_idx = total - idx + 1
             if len(fn_source) > MAX_CHUNK_CHARS:
-                print(
-                    f"[LLM] [{display_idx}/{total}] Skipping {fn_node.name!r} "
-                    f"— too large ({len(fn_source)} chars)"
+                logger.info(
+                    "[LLM] [%d/%d] Skipping %r — too large (%d chars)",
+                    display_idx, total, fn_node.name, len(fn_source)
                 )
                 continue
 
-            print(f"[LLM] [{display_idx}/{total}] Deobfuscating function: {fn_node.name!r}...")
+            logger.info("[LLM] [%d/%d] Deobfuscating function: %r...", display_idx, total, fn_node.name)
             renamed = self._call_llm(fn_source, "rename")
 
             if renamed and renamed != fn_source and self._is_structurally_valid(renamed, fn_node):
                 renamed = self._match_indentation(fn_source, renamed)
                 source_lines[start_line:end_line] = [renamed + "\n"]
                 fn_source = renamed
-                print(f"[LLM] [{display_idx}/{total}] Renamed successfully")
+                logger.info("[LLM] [%d/%d] Renamed successfully", display_idx, total)
             else:
                 if renamed and renamed != fn_source:
-                    print(
-                        f"[LLM] [{display_idx}/{total}] Rename rejected "
-                        f"(structural mismatch or invalid Python)"
+                    logger.warning(
+                        "[LLM] [%d/%d] Rename rejected (structural mismatch or invalid Python)",
+                        display_idx, total
                     )
                 else:
-                    print(f"[LLM] [{display_idx}/{total}] No changes or rename failed")
+                    logger.info("[LLM] [%d/%d] No changes or rename failed", display_idx, total)
 
             if annotate:
-                print(f"[LLM] [{display_idx}/{total}] Adding annotations to: {fn_node.name!r}...")
+                logger.info("[LLM] [%d/%d] Adding annotations to: %r...", display_idx, total, fn_node.name)
                 annotated = self._call_llm(fn_source, "annotate")
                 if annotated and self._is_valid_python(annotated):
                     annotated = self._match_indentation(fn_source, annotated)
                     source_lines[start_line:end_line] = [annotated + "\n"]
-                    print(f"[LLM] [{display_idx}/{total}] Annotations added")
+                    logger.info("[LLM] [%d/%d] Annotations added", display_idx, total)
 
         return "".join(source_lines)
 
     def fix_syntax(self, code: str, error_msg: str) -> str:
-        """Attempt to fix syntax errors using the LLM."""
+        """
+        Attempt to fix syntax errors.
+        First tries fast AST-based structural repair, then falls back to LLM.
+        """
+        # Fast path: try AST structural repair first (no LLM needed)
+        repaired = self._ast_repair(code)
+        if repaired and repaired != code:
+            try:
+                import ast as _ast
+                _ast.parse(repaired)
+                logger.info("[LLM] Syntax fixed by AST repair (no LLM needed)")
+                return repaired
+            except SyntaxError:
+                pass
+
         if not self.available:
             return code
             
@@ -214,7 +229,7 @@ class LLMRenamer:
             
         prompt = FIX_SYNTAX_PROMPT.format(error=error_msg, code=code)
         
-        print(f"[LLM] Requesting syntax fix from Ollama ({self.model})...")
+        logger.info("[LLM] Requesting syntax fix from Ollama (%s)...", self.model)
         payload = {
             "model": self.model,
             "prompt": prompt,
@@ -236,19 +251,66 @@ class LLMRenamer:
             response = requests.post(GENERATE_URL, json=payload, timeout=180)
             response.raise_for_status()
             raw = response.json().get("response", "")
-            breakpoint()
             fixed_code = self._extract_python(raw)
             if fixed_code and self._is_valid_python(fixed_code):
-                print("[LLM] Syntax successfully fixed by LLM")
+                logger.info("[LLM] Syntax successfully fixed by LLM")
                 return fixed_code
             else:
-                print("[LLM] LLM failed to fix syntax")
+                logger.warning("[LLM] LLM failed to fix syntax")
                 return code
         except Exception as e:
-            print(f"[LLM] Error during syntax fix: {e}")
+            logger.error("[LLM] Error during syntax fix: %s", e)
             return code
 
     # --- Source extraction ----------------------------------------------------
+
+    def _ast_repair(self, source: str) -> str:
+        """Fast AST-based structural repair: fix empty bodies, strip bad lines."""
+        import ast as _ast
+
+        def _fix_empty(src):
+            try:
+                tree = _ast.parse(src)
+                changed = False
+                for node in _ast.walk(tree):
+                    for field in ('body', 'orelse', 'finalbody'):
+                        val = getattr(node, field, None)
+                        if isinstance(val, list) and not val:
+                            needs = isinstance(node, (
+                                _ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef,
+                                _ast.If, _ast.While, _ast.For, _ast.With,
+                                _ast.Try, _ast.ExceptHandler,
+                            ))
+                            if needs and field == 'body':
+                                val.append(_ast.Pass())
+                                changed = True
+                if changed:
+                    _ast.fix_missing_locations(tree)
+                    return _ast.unparse(tree)
+            except Exception:
+                pass
+            return src
+
+        result = _fix_empty(source)
+        try:
+            _ast.parse(result)
+            return result
+        except SyntaxError as e:
+            err_lineno = getattr(e, 'lineno', 1) or 1
+
+        # Strip the offending line
+        lines = source.splitlines(keepends=True)
+        idx = err_lineno - 1
+        if 0 <= idx < len(lines):
+            candidate = ''.join(lines[:idx] + lines[idx+1:])
+            candidate = _fix_empty(candidate)
+            try:
+                _ast.parse(candidate)
+                return candidate
+            except SyntaxError:
+                pass
+
+        return source
 
     def _collect_top_level_functions(
         self, tree: ast.Module, source: str
@@ -292,16 +354,16 @@ class LLMRenamer:
             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
         ]
         if len(fn_nodes) != 1:
-            print(f"[LLM] Structural reject: expected 1 function, got {len(fn_nodes)}")
+            logger.warning("[LLM] Structural reject: expected 1 function, got %d", len(fn_nodes))
             return False
 
         renamed_fn = fn_nodes[0]
         orig_args  = len(original_node.args.args)
         new_args   = len(renamed_fn.args.args)
         if orig_args != new_args:
-            print(
-                f"[LLM] Structural reject: parameter count changed "
-                f"({orig_args} → {new_args})"
+            logger.warning(
+                "[LLM] Structural reject: parameter count changed (%d → %d)",
+                orig_args, new_args
             )
             return False
 
@@ -312,9 +374,15 @@ class LLMRenamer:
             1 for n in ast.walk(renamed_fn)    if isinstance(n, ast.Return)
         )
         if orig_returns > 0 and new_returns == 0:
-            print(
-                f"[LLM] Structural reject: all return statements removed "
-                f"(original had {orig_returns})"
+            logger.warning(
+                "[LLM] Structural reject: all return statements removed (original had %d)",
+                orig_returns
+            )
+            return False
+        if orig_returns > 0 and new_returns > 0 and abs(orig_returns - new_returns) > orig_returns:
+            logger.warning(
+                "[LLM] Structural reject: return count changed too much (%d → %d)",
+                orig_returns, new_returns
             )
             return False
 
@@ -353,7 +421,7 @@ class LLMRenamer:
         prompt_template = RENAME_PROMPT if task == "rename" else ANNOTATE_PROMPT
         prompt = prompt_template.format(code=code)
 
-        print(f"[LLM] Requesting {task} from Ollama ({self.model})...")
+        logger.info("[LLM] Requesting %s from Ollama (%s)...", task, self.model)
         payload = {
             "model": self.model,
             "prompt": prompt,
@@ -380,13 +448,13 @@ class LLMRenamer:
             )
             response.raise_for_status()
             raw = response.json().get("response", "")
-            print(f"[LLM] Response received")
+            logger.info("[LLM] Response received")
             return self._extract_python(raw)
         except requests.Timeout:
-            print(f"[LLM] Timeout — function too complex for {self.model} on CPU")
+            logger.warning("[LLM] Timeout — function too complex for %s on CPU", self.model)
             return None
         except Exception as e:
-            print(f"[LLM] Error: {e}")
+            logger.error("[LLM] Error: %s", e)
             return None
 
     def _extract_python(self, raw: str) -> Optional[str]:
@@ -394,27 +462,69 @@ class LLMRenamer:
         if not raw or not raw.strip():
             return None
 
+        # Try ```python ... ``` blocks first
         if "```python" in raw:
             parts = raw.split("```python")
             if len(parts) > 1:
                 code = parts[1].split("```")[0].strip()
-                return code if code else None
+                if code:
+                    return self._clean_extracted(code)
 
+        # Try ``` ... ``` blocks
         if "```" in raw:
             parts = raw.split("```")
             if len(parts) > 1:
                 code = parts[1].strip()
-                if code.startswith("python\n"):
-                    code = code[7:]
-                return code if code else None
+                if code.lower().startswith("python"):
+                    code = code[code.index("\n")+1:] if "\n" in code else code[6:]
+                code = code.strip()
+                if code:
+                    return self._clean_extracted(code)
 
         stripped = raw.strip()
 
+        # Remove common LLM preambles
+        preamble_patterns = [
+            "Here is the renamed", "Here's the renamed", "Here is the fixed",
+            "Here's the fixed", "The fixed code", "Renamed function:",
+            "Fixed code:", "Here is the corrected",
+        ]
+        for pat in preamble_patterns:
+            if stripped.lower().startswith(pat.lower()):
+                idx = stripped.find("\n")
+                if idx != -1:
+                    stripped = stripped[idx+1:].strip()
+
         valid_starts = ("def ", "async def ", "class ", "import ", "from ", "#", "@")
         if any(stripped.startswith(s) for s in valid_starts):
-            return stripped
+            return self._clean_extracted(stripped)
+
+        # Last resort: find the first def/class line
+        for i, line in enumerate(stripped.splitlines()):
+            if line.strip().startswith(("def ", "async def ", "class ")):
+                return self._clean_extracted("\n".join(stripped.splitlines()[i:]))
 
         return None
+
+    def _clean_extracted(self, code: str) -> Optional[str]:
+        """Remove trailing non-code lines (explanations after the function body)."""
+        if not code or not code.strip():
+            return None
+        lines = code.splitlines()
+        # Find last non-empty line that is valid Python continuation
+        # Strategy: try progressively shorter versions until it parses
+        for end in range(len(lines), 0, -1):
+            candidate = "\n".join(lines[:end]).strip()
+            if not candidate:
+                continue
+            try:
+                import ast as _ast
+                _ast.parse(candidate)
+                return candidate
+            except SyntaxError:
+                continue
+        # Return original if nothing parses
+        return code.strip() or None
 
     def _is_valid_python(self, source: str) -> bool:
         """Return True if source parses as valid Python"""

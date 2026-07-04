@@ -10,7 +10,7 @@
 import logging
 import requests
 from requests.exceptions import RequestException, ConnectionError, Timeout
-from typing import Optional, Dict, Any, Tuple
+from typing import Dict, Any
 
 from de4py.config.config import settings
 from de4py.api.constants import ERROR_CODES
@@ -87,7 +87,7 @@ class De4pyApiClient:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError:
-            print(f"Response text: {response.text}")
+            logger.debug("Response text: %s", response.text)
             status_code = response.status_code
             
             # Check for known error codes

@@ -43,5 +43,26 @@ class ScenarioEngine:
         }
         if context.app:
             context.app.setStyleSheet("")
-            from .controls.app_control import AppControl
             bus.api_mode_changed.emit("normal")
+
+    @staticmethod
+    def trigger_update_sim():
+        bus.log.emit("INFO", "SCENARIO: Update Sim")
+        from de4py.updater.check import UpdateCheckResult
+        from de4py.ui.widgets.update_dialog import UpdateDialog
+        fake = UpdateCheckResult(
+            update_available=True,
+            local="V3.1.0",
+            remote="V9.9.9",
+            changelog=[
+                {"version": "V9.9.9", "changes": [
+                    "Simulated feature A",
+                    "Simulated feature B",
+                    "Bug fix from devtools sim"
+                ]}
+            ],
+        )
+        if context.main_window:
+            context._sim_update_dialog = UpdateDialog(fake, parent=context.main_window)
+            context._sim_update_dialog.fade_in()
+            bus.log.emit("INFO", "Update dialog shown (simulated)")

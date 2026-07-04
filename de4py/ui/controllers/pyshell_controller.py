@@ -8,7 +8,7 @@
 # See the LICENSE file for details.
 
 import os
-from de4py.utils.dlls import shell
+from de4py.utils import shell
 
 
 HANDLE = None
@@ -75,6 +75,10 @@ def open_analyzer_handle():
     global HANDLE_analyzer
     HANDLE_analyzer = os.open('\\\\.\\pipe\\de4py_analyzer', os.O_RDWR)
     return HANDLE_analyzer
+
+
+def interrupt_analyzer_read():
+    pass
 
 
 def clear_handles():

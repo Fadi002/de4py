@@ -7,7 +7,6 @@
 #
 # See the LICENSE file for details.
 
-import weakref
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:

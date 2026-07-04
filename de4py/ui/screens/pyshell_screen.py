@@ -7,7 +7,6 @@
 #
 # See the LICENSE file for details.
 
-import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton,
     QLineEdit, QGridLayout, QFileDialog, QSizePolicy
@@ -20,24 +19,21 @@ from de4py.ui.workers.pyshell_worker import (
     InjectionWorker, PipeCommandWorker,
     ShowConsoleWorker, ProcessMonitorWorker
 )
-from de4py.ui.constants import SPACING_MD
 from de4py.ui.controllers import pyshell_controller
 from de4py.utils import gen_path, sentry
 from de4py.lang import tr
 from de4py.lang.keys import (
-    SCREEN_TITLE_PYSHELL, PYSHELL_ATTACH, PYSHELL_DETACH, PYSHELL_EXECUTE, PYSHELL_CLEAR,
-    PYSHELL_INPUT_PLACEHOLDER, PYSHELL_PID_LABEL, PYSHELL_COMMANDS_TITLE,
+    SCREEN_TITLE_PYSHELL, PYSHELL_ATTACH, PYSHELL_INPUT_PLACEHOLDER, PYSHELL_PID_LABEL, PYSHELL_COMMANDS_TITLE,
     PYSHELL_CMD_EXEC_PY, PYSHELL_CMD_CRASH, PYSHELL_CMD_FUNCTIONS,
     PYSHELL_CMD_SHOW_CONSOLE, PYSHELL_CMD_GUI, PYSHELL_CMD_DUMP_STRINGS,
     PYSHELL_CMD_DEL_EXIT, PYSHELL_CMD_DETACH, PYSHELL_CMD_BEHAVIOR,
     PYSHELL_INJECTED, PYSHELL_INJECT_FAIL, PYSHELL_PROCESS_DIED,
     PYSHELL_NEED_INJECT, PYSHELL_ENTER_PID, PYSHELL_INJECTOR_FAILED,
     PYSHELL_CMD_EXECUTED, PYSHELL_CMD_SAVED_AS, PYSHELL_CMD_EXECUTED_MSG,
-    PYSHELL_CMD_DLL_DETACHED, PYSHELL_CMD_DONE, PYSHELL_CMD_FAILED,
-    PYSHELL_CMD_BEHAVIOR_HINT, PYSHELL_BTN_STEALTH,
-    MSG_SUCCESS, MSG_WARNING, MSG_ERROR, LBL_OUTPUT
+    PYSHELL_CMD_DLL_DETACHED, PYSHELL_CMD_BEHAVIOR_HINT, PYSHELL_BTN_STEALTH,
+    LBL_OUTPUT
 )
-    
+
 
 
 class PyShellScreen(QWidget):
@@ -51,8 +47,6 @@ class PyShellScreen(QWidget):
         self._process_monitor = None
         self._setup_ui()
 
-    # ------------------------------------------------------------------
-
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(40, 20, 40, 20)
@@ -60,7 +54,7 @@ class PyShellScreen(QWidget):
 
         self.title_label = QLabel(tr(SCREEN_TITLE_PYSHELL))
         self.title_label.setObjectName("TitleLabel")
-        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.title_label)
 
         content_layout = QHBoxLayout()
@@ -78,8 +72,8 @@ class PyShellScreen(QWidget):
         content_layout.addLayout(left_layout)
         content_layout.addWidget(output_frame)
 
-        content_layout.setStretch(0, 0)  # left panel fixed
-        content_layout.setStretch(1, 1)  # output expands
+        content_layout.setStretch(0, 0)
+        content_layout.setStretch(1, 1)
 
         layout.addLayout(content_layout)
 
@@ -87,8 +81,6 @@ class PyShellScreen(QWidget):
         layout.addWidget(commands_frame)
 
         self._create_modal()
-
-    # ------------------------------------------------------------------
 
     def _create_inject_frame(self):
         frame = QFrame()
@@ -125,8 +117,6 @@ class PyShellScreen(QWidget):
         layout.addLayout(btn_layout)
         return frame
 
-    # ------------------------------------------------------------------
-
     def _create_output_frame(self):
         frame = QFrame()
         frame.setObjectName("StyledFrame")
@@ -137,14 +127,11 @@ class PyShellScreen(QWidget):
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(10)
 
-        # Uses built-in themed title instead of manual label
         self.output = OutputTextArea(tr(LBL_OUTPUT), show_copy=True)
         self.output.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.output)
-        
-        return frame
 
-    # ------------------------------------------------------------------
+        return frame
 
     def _create_commands_frame(self):
         frame = QFrame()
@@ -157,7 +144,7 @@ class PyShellScreen(QWidget):
 
         self.commands_title = QLabel(tr(PYSHELL_COMMANDS_TITLE))
         self.commands_title.setObjectName("ChangelogTitleLabel")
-        self.commands_title.setAlignment(Qt.AlignCenter)
+        self.commands_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.commands_title)
 
 
@@ -200,8 +187,6 @@ class PyShellScreen(QWidget):
                 row += 1
 
 
-    # ------------------------------------------------------------------
-
     def _create_modal(self):
         self.show_console_modal = ModalOverlay(
             "Force Show Console",
@@ -212,11 +197,8 @@ class PyShellScreen(QWidget):
         self.show_console_modal.submitted.connect(self._on_show_console)
         self.show_console_modal.hide()
 
-    # ------------------------------------------------------------------
-    # ------------------------- LOGIC UNCHANGED -------------------------
-    # ------------------------------------------------------------------
-
     def _inject(self, inject_type: str):
+        self._cleanup_workers()
         pid = self.pid_input.text().strip()
         if not pid:
             self.window().show_notification("warning", tr(PYSHELL_ENTER_PID))
@@ -240,6 +222,7 @@ class PyShellScreen(QWidget):
         self.window().hide_loading()
         if success:
             self._injected = True
+            pyshell_controller.set_handle(handle)
             self.output.set_text(tr(PYSHELL_INJECTED))
             self.window().show_notification("success", tr(PYSHELL_INJECTED))
 
@@ -269,6 +252,7 @@ class PyShellScreen(QWidget):
 
 
     def _exec_command(self, command: str):
+        self._cleanup_workers()
         if command == "ShowConsole":
             self.show_console_modal.setParent(self.window())
             self.show_console_modal.fade_in()
@@ -333,6 +317,16 @@ class PyShellScreen(QWidget):
         worker.start()
         self._workers.append(worker)
 
+    def _cleanup_workers(self):
+        self._workers = [w for w in self._workers if w.isRunning()]
+
+    def closeEvent(self, event):
+        if self._process_monitor and self._process_monitor.isRunning():
+            self._process_monitor.stop()
+            self._process_monitor.wait(2000)
+        self._cleanup_workers()
+        super().closeEvent(event)
+
     def _on_show_console_result(self, success: bool):
         self.output.set_text("DONE" if success else "FAILED")
         self.window().show_notification(
@@ -340,20 +334,17 @@ class PyShellScreen(QWidget):
         )
 
     def retranslate_ui(self):
-        """Update UI texts when language changes."""
         self.title_label.setText(tr(SCREEN_TITLE_PYSHELL))
         self.pid_label.setText(tr(PYSHELL_PID_LABEL))
         self.inject_btn.setText(tr(PYSHELL_ATTACH))
         self.stealth_btn.setText(f"{tr(PYSHELL_ATTACH)} ({tr(PYSHELL_BTN_STEALTH)})")
         self.pid_input.setPlaceholderText(tr(PYSHELL_INPUT_PLACEHOLDER))
         self.commands_title.setText(tr(PYSHELL_COMMANDS_TITLE))
-        
-        # Clear and rebuild command buttons
+
         while self.commands_grid.count():
-             item = self.commands_grid.takeAt(0)
-             if item.widget():
-                 item.widget().deleteLater()
-        
+            item = self.commands_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
         self.output.retranslate_ui()
         self._add_pyshell_buttons()
-

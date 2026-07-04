@@ -99,7 +99,6 @@ class WidgetTree(QWidget):
         if shiboken:
             return shiboken.isValid(widget)
         try:
-            # Fallback check
             widget.parent()
             return True
         except (RuntimeError, AttributeError):
@@ -112,7 +111,6 @@ class WidgetTree(QWidget):
     def populate_tree(self):
         if not context.app: return
         
-        # Save state: expanded paths and selection
         expanded_paths = self._get_expanded_paths()
         selected_widget = None
         if self.tree.currentItem():
@@ -129,7 +127,6 @@ class WidgetTree(QWidget):
         for win in main_windows:
             self.add_widget_item(None, win)
             
-        # Restore state
         self._restore_expanded_paths(expanded_paths)
         if selected_widget and self._is_alive(selected_widget):
             self._select_widget_item(selected_widget)

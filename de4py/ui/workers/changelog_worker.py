@@ -7,10 +7,6 @@
 #
 # See the LICENSE file for details.
 
-"""
-De4py Changelog Worker - Fetches changelog from remote URL in background
-One task only, emits result signal, no direct UI updates
-"""
 import requests
 from requests.exceptions import ConnectionError, Timeout, RequestException
 from PySide6.QtCore import QThread, Signal
@@ -37,6 +33,4 @@ class ChangelogWorker(QThread):
             except Timeout:
                 self.error.emit("The server took too long to respond.")
             except RequestException as e:
-                self.error.emit(f"Failed to load changelog: {str(e)}")
-            except Exception as e:
-                self.error.emit(f"An unexpected error occurred: {str(e)}")
+                self.error.emit(f"Failed to load changelog: {e}")

@@ -12,15 +12,11 @@ import platform
 import socket
 import os
 import json
-import hashlib
-import logging
 import argparse
 from importlib import import_module
 
-# Avoid pycache
 sys.dont_write_bytecode = True
 
-# Colors for terminal
 RED = "\033[91m"
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
@@ -46,7 +42,6 @@ class De4pyTester:
 
     def log_result(self, category, name, success, message=""):
         status = "PASSED" if success else "FAILED"
-        color = GREEN if success else RED
         self.results.append({
             "category": category,
             "name": name,
@@ -64,7 +59,6 @@ class De4pyTester:
         # 1. Python Version
         major, minor = sys.version_info[:2]
         is_py_ver_ok = (3, 8) <= (major, minor) <= (3, 14)
-        msg = f"Detecting Python {major}.{minor}"
         self.log_result("System", "Python Version", is_py_ver_ok, f"Found {major}.{minor}. Expected 3.8-3.14")
 
         # 2. Architecture
@@ -123,46 +117,53 @@ class De4pyTester:
                 mismatched.append(f"Mismatch: {rel_path}")
 
         success = len(mismatched) == 0
-        msg = f"All {len(checksums)} files verified." if success else f"{len(mismatched)} failures."
+        f"All {len(checksums)} files verified." if success else f"{len(mismatched)} failures."
         self.log_result("Integrity", "File Checksums", success, "\n".join(mismatched))
 
     def calculate_checksum(self, file_path):
-        hasher = hashlib.sha256()
-        with open(file_path, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                hasher.update(chunk)
-        return hasher.hexdigest()
+        from de4py.utils.fs import calculate_checksum
+        return calculate_checksum(file_path)
 
     def generate_checksums(self, excludes=None):
-        if excludes is None:
-            excludes = [
-                'checksums.json', 'checksums.py', '.git', '__pycache__', '.pytest_cache', 
-                '.env', '.venv', 'logs', 'brain', '.antigravityignore',
-                'ui/resources', 'config', 'README.md', 'FAQ.md', 'LICENSE'
-            ]
-        
+        import subprocess
+
         colored_print(YELLOW, f"Generating checksums for {self.target_dir}...")
         checksums = {}
-        for root, dirs, files in os.walk(self.target_dir):
-            rel_root = os.path.relpath(root, self.target_dir).replace('\\', '/')
-            if rel_root == '.': rel_root = ''
 
-            # Skip excluded base directories
-            if any(rel_root.startswith(ex.replace('\\', '/')) for ex in excludes if os.path.isdir(os.path.join(self.target_dir, ex))):
-                dirs[:] = []
-                continue
+        def is_ignored(path):
+            if path in ('checksums.json', 'crowdin.yml', '.gitattributes', '.gitignore', 'LICENSE'):
+                return True
+            if path.endswith('.md'):
+                return True
+            if path.startswith(('Pictures/', 'INFO/', 'prompts/', 'samples/')):
+                return True
+            return False
 
-            # Filter directories
-            dirs[:] = [d for d in dirs if d not in excludes and os.path.join(rel_root, d).replace('\\', '/') not in excludes]
-            
-            for file in files:
-                rel_path = os.path.join(rel_root, file).replace('\\', '/')
-                if file in excludes or rel_path in excludes:
+        try:
+            result = subprocess.run(
+                ['git', 'ls-files', '--cached', '--others', '--exclude-standard'],
+                cwd=self.target_dir, capture_output=True, text=True, check=True
+            )
+            for line in result.stdout.splitlines():
+                rel_path = line.replace('\\', '/')
+                if not line or is_ignored(rel_path):
                     continue
-                
-                full_path = os.path.join(root, file)
-                checksums[rel_path] = self.calculate_checksum(full_path)
-        
+                full_path = os.path.join(self.target_dir, line)
+                if os.path.isfile(full_path):
+                    checksums[rel_path] = self.calculate_checksum(full_path)
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            if excludes is None:
+                excludes = {'__pycache__', '.git', 'node_modules', 'logs', 'brain'}
+
+            for root, dirs, files in os.walk(self.target_dir):
+                dirs[:] = [d for d in dirs if d not in excludes and not d.startswith('.')]
+                for file in files:
+                    full_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(full_path, self.target_dir).replace('\\', '/')
+                    if is_ignored(rel_path):
+                        continue
+                    checksums[rel_path] = self.calculate_checksum(full_path)
+
         with open(self.checksum_file, 'w') as f:
             json.dump(checksums, f, indent=4)
         

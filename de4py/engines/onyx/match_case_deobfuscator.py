@@ -336,15 +336,17 @@ class MatchCaseDeobfuscator:
         except SyntaxError:
             return source
 
-        for _ in range(6):
-            before = ast.unparse(tree)
-            transformer = _SMTransformer()
-            tree = transformer.visit(tree)
-            ast.fix_missing_locations(tree)
-            if ast.unparse(tree) == before:
-                break
-
         try:
+            for _ in range(6):
+                before = ast.unparse(tree)
+                transformer = _SMTransformer()
+                tree = transformer.visit(tree)
+                ast.fix_missing_locations(tree)
+                if ast.unparse(tree) == before:
+                    break
+
             return ast.unparse(tree)
+        except RecursionError:
+            return source
         except Exception:
             return source

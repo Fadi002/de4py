@@ -8,3 +8,4 @@ xdis
 pyinstaller
 sentry-sdk
 pefile
+six

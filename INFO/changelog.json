@@ -140,5 +140,13 @@
             "Refactored engine directory structure",
             "Optimizations and bug fixes"
         ]
+    },
+    {
+        "version": "3.2.2",
+        "changes": [
+            "Darg & drop support",
+            "improving Onyx-Alpha engine",
+            "Optimizations and bug fixes"
+        ]
     }
 ]

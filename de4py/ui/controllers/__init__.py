@@ -7,4 +7,3 @@
 #
 # See the LICENSE file for details.
 
-# Controllers Package

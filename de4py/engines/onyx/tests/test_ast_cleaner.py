@@ -7,7 +7,6 @@
 #
 # See the LICENSE file for details.
 
-import ast
 import pytest
 import sys
 import os

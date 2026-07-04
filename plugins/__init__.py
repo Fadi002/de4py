@@ -10,10 +10,10 @@ from typing import Optional, List, Dict, Any, Type
 class BasePlugin:
     """Base class for all plugins."""
     def __init__(self):
-        self.name: str = "Unknown"
-        self.creator: str = "Unknown"
-        self.link: str = ""
-        self.version: str = "1.0.0"
+        self.name= "Unknown"
+        self.creator= "Unknown"
+        self.link= ""
+        self.version= "1.0.0"
 
 
 class DeobfuscatorPlugin(BasePlugin):
@@ -33,7 +33,7 @@ class ThemePlugin(BasePlugin):
     def __init__(self):
         super().__init__()
         self.type = "theme"
-        self.qss: str = ""
+        self.qss= ""
         self.transparent_qss: Optional[str] = None
         self.is_dark: bool = True
         self.colors: Dict[str, str] = {}  # e.g. {"primary": "#HEX", "background": "#HEX"}

@@ -1,1 +1,0 @@
-credits: https://github.com/teaishealthy/erebus

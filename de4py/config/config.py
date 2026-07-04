@@ -11,15 +11,47 @@ from dataclasses import dataclass, field, asdict
 import json
 import os
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional
 
-PROJECT_SIGNATURE = "de4py-core-signature-7f3a91"
+from PySide6.QtCore import QObject, Signal as QSignal
+
+
+def _read_local_version() -> str:
+    info_path = os.path.join(os.path.dirname(__file__), '..', '..', 'INFO', 'version')
+    try:
+        with open(info_path, 'r') as f:
+            return f.read().strip()
+    except Exception:
+        return "V0.0.0"
+
+
+class SettingsEmitter(QObject):
+    """Emits signals when settings values change."""
+    rpc_changed = QSignal(bool)
+    stealth_title_changed = QSignal(bool)
+    load_plugins_changed = QSignal(bool)
+    transparent_ui_changed = QSignal(bool)
+    telemetry_changed = QSignal(bool)
+    language_changed = QSignal(str)
+    poll_interval_changed = QSignal(float)
+    active_theme_changed = QSignal(object)
+    auto_update_check_changed = QSignal(bool)
+    auto_update_install_changed = QSignal(bool)
+
+
+_emitter = SettingsEmitter()
+
+
+def get_settings_emitter() -> SettingsEmitter:
+    return _emitter
+
 
 @dataclass
 class Settings:
-    version: str = "V3.1.1"
+    version: str = field(default_factory=_read_local_version)
     changelog_url: str = "https://raw.githubusercontent.com/Fadi002/de4py/main/INFO/changelog.json"
     version_url: str = "https://raw.githubusercontent.com/Fadi002/de4py/main/INFO/version"
+    releases_base_url: str = "https://github.com/Fadi002/de4py/releases/download"
     rpc: bool = True
     stealth_title: bool = True
     load_plugins: bool = True
@@ -30,32 +62,28 @@ class Settings:
     active_theme: Optional[str] = None
     language: str = "en"
     transparent_ui: bool = False
-    auto_update: bool = True
-    update_channel: str = "stable"
-    last_update_check: Optional[str] = None
-    github_repo: str = "Fadi002/de4py"
     telemetry: bool = True
+    auto_update_check: bool = True
+    auto_update_install: bool = False
     _path: str = field(default=os.path.join(os.path.dirname(__file__), 'config.json'), repr=False, init=False)
 
     def __post_init__(self):
         self._load()
 
     def _load(self):
-        """Load settings from JSON file if it exists."""
         if not os.path.exists(self._path):
             return
-
         try:
             with open(self._path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            
+            _saved_version = self.version
             for key, value in data.items():
                 normalized_key = key.lower().strip('_')
                 if hasattr(self, normalized_key):
                      setattr(self, normalized_key, value)
                 elif hasattr(self, key):
                      setattr(self, key, value)
-                     
+            self.version = _saved_version
         except Exception as e:
             logging.error(f"Failed to load config: {e}")
 
@@ -63,11 +91,22 @@ class Settings:
         try:
             data = asdict(self)
             data.pop('_path', None)
-
             with open(self._path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4)
         except Exception as e:
             logging.error(f"Failed to save config: {e}")
+
+    def set_and_emit(self, key: str, value):
+        old = getattr(self, key, None)
+        if old == value:
+            return
+        setattr(self, key, value)
+        self.save()
+        signal_name = f"{key}_changed"
+        if hasattr(_emitter, signal_name):
+            sig = getattr(_emitter, signal_name)
+            sig.emit(value)
+
 
 settings = Settings()
 
@@ -77,7 +116,4 @@ def get_config() -> dict:
 
 
 def update_json(key: str, value) -> None:
-    attr = key.lower().strip("_")
-    if hasattr(settings, attr):
-        setattr(settings, attr, value)
-        settings.save()
+    settings.set_and_emit(key, value)

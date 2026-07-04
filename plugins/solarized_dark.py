@@ -10,7 +10,8 @@ class SolarizedDark(ThemePlugin):
             "background": "#002B36",
             "primary": "#B58900",
             "secondary": "#CB4B16",
-            "text": "#93A1A1"
+            "text": "#93A1A1",
+            "spinner_color": "#B58900"
         }
         self.qss = """
 QMainWindow,QWidget#CentralWidget,QWidget#MainContent
@@ -70,10 +71,19 @@ background-color:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 transparent,stop:0.5
 max-height:2px;
 margin-bottom:10px
 }
+QFrame#SettingsSeparator{background-color:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 transparent,stop:0.5 rgba(203, 75, 22, 0.8),stop:1 transparent);border:none;max-height:1px;margin:8px 0}
 
 QWidget#LoadingOverlay,QWidget#ModalOverlay
 {
 background-color:rgba(0,0,0,160)
+}
+
+QWidget#LoadingOverlay QLabel#StatusLabel
+{
+color:rgba(255,255,255,0.6);
+font-weight:500;
+font-size:14px;
+letter-spacing:0.5px
 }
 
 QFrame#NotificationFrame
@@ -373,6 +383,35 @@ background-color:#B58900;
 border-radius:2px
 }
 
+QProgressBar#UpdateProgressBar {
+	border: none;
+	background-color: rgba(255, 255, 255, 0.08);
+	border-radius: 3px;
+	max-height: 6px;
+	min-height: 6px;
+}
+
+QProgressBar#UpdateProgressBar::chunk {
+	background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+		stop:0 #B58900, stop:1 #D4A840);
+	border-radius: 3px;
+}
+
+QPushButton#CloseButton {
+	background: transparent;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 6px;
+}
+
+QPushButton#CloseButton:hover {
+	border-color: #B58900;
+}
+
+QPushButton#CloseButton:pressed {
+	border-color: #B58900;
+	background-color: rgba(255, 255, 255, 0.05);
+}
+
 QFrame#ModeSelectorFrame
 {
 background-color:rgba(0, 43, 54, 0.85);
@@ -452,7 +491,62 @@ QComboBox QAbstractItemView::item:selected
 background-color:#B58900;
 color:#ffffff
         }
-        """
+        
+QWidget#SearchBar {
+background:transparent;
+border:none;
+qproperty-pillBgIdle:rgba(0, 43, 54, 230);
+qproperty-pillBgHover:rgba(0, 43, 54, 245);
+qproperty-pillBgFocus:rgba(0, 43, 54, 255);
+qproperty-pillBorderIdle:rgba(181, 137, 0, 76);
+qproperty-pillBorderHover:rgba(181, 137, 0, 130);
+qproperty-pillBorderFocus:rgba(181, 137, 0, 255);
+qproperty-accent:rgba(181, 137, 0, 255);
+qproperty-ring:rgba(203, 75, 22, 255);
+qproperty-textMuted:rgba(147, 161, 161, 160)
+}
+
+QLineEdit#SearchInput
+{
+background-color:transparent;
+border:none;
+padding:0;
+min-height:0;
+color:#93A1A1;
+selection-background-color:rgba(181, 137, 0, 200)
+}
+
+QLabel#SearchCounter
+{
+color:#93A1A1;
+font-family:Consolas,monospace;
+font-size:12px
+}
+
+QLabel#SearchCounter[state="error"]
+{
+color:#ff6464
+}
+
+QWidget#NavCapsule
+{
+qproperty-bgIdle:rgba(147, 161, 161, 13);
+qproperty-bgHover:rgba(147, 161, 161, 22);
+qproperty-borderIdle:rgba(181, 137, 0, 40);
+qproperty-borderHover:rgba(181, 137, 0, 90);
+qproperty-divider:rgba(181, 137, 0, 30);
+qproperty-iconIdle:rgba(147, 161, 161, 180);
+qproperty-iconPressed:#93A1A1
+}
+
+QWidget#SearchClearBtn
+{
+qproperty-hoverBg:rgba(255, 80, 80, 40);
+qproperty-icon:rgba(147, 161, 161, 180);
+qproperty-iconHover:#93A1A1
+}
+
+"""
         self.transparent_qss = """
 QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
     background-color: transparent;
@@ -470,7 +564,7 @@ QLabel#SidebarTitle {
 }
 QPushButton#NavButton {
     background-color: transparent;
-    color: #ffffff;
+    color: #93A1A1;
     border: none;
     text-align: left;
     padding-left: 20px;
@@ -488,6 +582,8 @@ QPushButton#NavButton[active="true"] {
 QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
     background-color: rgba(0, 43, 54, 0.40);
 }
+
+
 QFrame#ModeSelectorFrame {
     background-color: rgba(0, 43, 54, 0.40);
 }
@@ -505,7 +601,7 @@ QScrollArea#ChangelogArea, QScrollArea#ChangelogArea > QWidget > QWidget {
 QTextBrowser#ChangelogContent {
     background-color: transparent;
     border: none;
-    color: #e6edf3;
+    color: #93A1A1;
 }
 """
 

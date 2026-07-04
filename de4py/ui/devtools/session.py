@@ -8,7 +8,7 @@
 # See the LICENSE file for details.
 
 import time
-from PySide6.QtCore import QObject, QEvent
+from PySide6.QtCore import QObject
 from .event_bus import bus
 
 class SessionRecorder(QObject):

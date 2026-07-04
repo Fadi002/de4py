@@ -10,7 +10,8 @@ class CatppuccinMocha(ThemePlugin):
             "background": "#1E1E2E",
             "primary": "#F5BDE6",
             "secondary": "#CBA6F7",
-            "text": "#CDD6F4"
+            "text": "#CDD6F4",
+            "spinner_color": "#F5BDE6"
         }
         self.qss = """
 QMainWindow,QWidget#CentralWidget,QWidget#MainContent
@@ -70,10 +71,19 @@ background-color:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 transparent,stop:0.5
 max-height:2px;
 margin-bottom:10px
 }
+QFrame#SettingsSeparator{background-color:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 transparent,stop:0.5 rgba(242, 205, 205, 0.8),stop:1 transparent);border:none;max-height:1px;margin:8px 0}
 
 QWidget#LoadingOverlay,QWidget#ModalOverlay
 {
 background-color:rgba(0,0,0,160)
+}
+
+QWidget#LoadingOverlay QLabel#StatusLabel
+{
+color:rgba(255,255,255,0.6);
+font-weight:500;
+font-size:14px;
+letter-spacing:0.5px
 }
 
 QFrame#NotificationFrame
@@ -373,6 +383,35 @@ background-color:#F5BDE6;
 border-radius:2px
 }
 
+QProgressBar#UpdateProgressBar {
+	border: none;
+	background-color: rgba(255, 255, 255, 0.08);
+	border-radius: 3px;
+	max-height: 6px;
+	min-height: 6px;
+}
+
+QProgressBar#UpdateProgressBar::chunk {
+	background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+		stop:0 #F5BDE6, stop:1 #FAE0F2);
+	border-radius: 3px;
+}
+
+QPushButton#CloseButton {
+	background: transparent;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 6px;
+}
+
+QPushButton#CloseButton:hover {
+	border-color: #F5BDE6;
+}
+
+QPushButton#CloseButton:pressed {
+	border-color: #F5BDE6;
+	background-color: rgba(255, 255, 255, 0.05);
+}
+
 QFrame#ModeSelectorFrame
 {
 background-color:rgba(30, 30, 46, 0.85);
@@ -452,7 +491,62 @@ QComboBox QAbstractItemView::item:selected
 background-color:#F5BDE6;
 color:#ffffff
         }
-        """
+        
+QWidget#SearchBar {
+background:transparent;
+border:none;
+qproperty-pillBgIdle:rgba(30, 30, 46, 230);
+qproperty-pillBgHover:rgba(30, 30, 46, 245);
+qproperty-pillBgFocus:rgba(30, 30, 46, 255);
+qproperty-pillBorderIdle:rgba(245, 189, 230, 76);
+qproperty-pillBorderHover:rgba(245, 189, 230, 130);
+qproperty-pillBorderFocus:rgba(245, 189, 230, 255);
+qproperty-accent:rgba(245, 189, 230, 255);
+qproperty-ring:rgba(203, 166, 247, 255);
+qproperty-textMuted:rgba(205, 214, 244, 160)
+}
+
+QLineEdit#SearchInput
+{
+background-color:transparent;
+border:none;
+padding:0;
+min-height:0;
+color:#CDD6F4;
+selection-background-color:rgba(245, 189, 230, 200)
+}
+
+QLabel#SearchCounter
+{
+color:#CDD6F4;
+font-family:Consolas,monospace;
+font-size:12px
+}
+
+QLabel#SearchCounter[state="error"]
+{
+color:#ff6464
+}
+
+QWidget#NavCapsule
+{
+qproperty-bgIdle:rgba(205, 214, 244, 13);
+qproperty-bgHover:rgba(205, 214, 244, 22);
+qproperty-borderIdle:rgba(245, 189, 230, 40);
+qproperty-borderHover:rgba(245, 189, 230, 90);
+qproperty-divider:rgba(245, 189, 230, 30);
+qproperty-iconIdle:rgba(205, 214, 244, 180);
+qproperty-iconPressed:#CDD6F4
+}
+
+QWidget#SearchClearBtn
+{
+qproperty-hoverBg:rgba(255, 80, 80, 40);
+qproperty-icon:rgba(205, 214, 244, 180);
+qproperty-iconHover:#CDD6F4
+}
+
+"""
         self.transparent_qss = """
 QMainWindow, QWidget#CentralWidget, QWidget#MainContent {
     background-color: transparent;
@@ -470,7 +564,7 @@ QLabel#SidebarTitle {
 }
 QPushButton#NavButton {
     background-color: transparent;
-    color: #ffffff;
+    color: #CDD6F4;
     border: none;
     text-align: left;
     padding-left: 20px;
@@ -488,6 +582,8 @@ QPushButton#NavButton[active="true"] {
 QFrame#StyledFrame, QFrame#PluginCard, QFrame#ClockFrame {
     background-color: rgba(30, 30, 46, 0.40);
 }
+
+
 QFrame#ModeSelectorFrame {
     background-color: rgba(30, 30, 46, 0.40);
 }
@@ -505,7 +601,7 @@ QScrollArea#ChangelogArea, QScrollArea#ChangelogArea > QWidget > QWidget {
 QTextBrowser#ChangelogContent {
     background-color: transparent;
     border: none;
-    color: #e6edf3;
+    color: #CDD6F4;
 }
 """
 

@@ -7,7 +7,7 @@
 #
 # See the LICENSE file for details.
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QGridLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel
 from de4py.lang import tr, keys
 from ..scenarios import ScenarioEngine
 
@@ -35,12 +35,17 @@ class ScenarioControl(QWidget):
             (tr(keys.DEV_SCENARIO_UI_STRESS), ScenarioEngine.trigger_ui_stress),
             (tr(keys.DEV_SCENARIO_FIRST_RUN), ScenarioEngine.trigger_first_run),
         ]
-        
+
         for i, (name, func) in enumerate(scenarios):
             btn = QPushButton(name)
             btn.setMinimumHeight(35)
             btn.clicked.connect(func)
             grid.addWidget(btn, 0, i)
+
+        btn_update = QPushButton(tr(keys.DEV_SCENARIO_UPDATE_SIM))
+        btn_update.setMinimumHeight(35)
+        btn_update.clicked.connect(ScenarioEngine.trigger_update_sim)
+        grid.addWidget(btn_update, 1, 0)
             
         self.layout.addLayout(grid)
         

@@ -27,9 +27,6 @@ from ..context import context
 from ..event_bus import bus
 
 class UIControl(QWidget):
-    """
-    Control panel for UI inspection, highlighting, and property editing.
-    """
     def __init__(self):
         super().__init__()
         self.current_inspect_widget = None
@@ -42,7 +39,6 @@ class UIControl(QWidget):
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.layout.setSpacing(10)
         
-        # 1. Inspection Toggles
         toggle_grid = QGridLayout()
         self.highlight_check = QCheckBox(tr(keys.DEV_UI_HIGHLIGHT))
         self.highlight_check.toggled.connect(self.set_highlight)
@@ -57,7 +53,6 @@ class UIControl(QWidget):
         toggle_grid.addWidget(self.fps_check, 1, 0)
         self.layout.addLayout(toggle_grid)
         
-        # 2. Global Speed Control (0.1x to 5.0x)
         self.layout.addWidget(QLabel(f"<b>{tr(keys.DEV_UI_ANIM_SPEED)}</b>"))
         anim_row = QHBoxLayout()
         self.anim_slider = QSlider(Qt.Orientation.Horizontal)
@@ -72,7 +67,6 @@ class UIControl(QWidget):
         anim_row.addWidget(self.anim_val_label)
         self.layout.addLayout(anim_row)
 
-        # 3. Property Inspector
         header_row = QHBoxLayout()
         header_row.addWidget(QLabel(f"<b>{tr(keys.DEV_UI_PROP_INSPECTOR)}</b>"))
         header_row.addStretch()
@@ -123,7 +117,6 @@ class UIControl(QWidget):
         self.prop_table.itemChanged.connect(self.on_property_changed)
         self.layout.addWidget(self.prop_table)
         
-        # 4. Stress Tests
         self.layout.addWidget(QLabel(f"<b>{tr(keys.DEV_UI_STRESS_TITLE)}</b>"))
         stress_row = QHBoxLayout()
         stress_row.setSpacing(5)

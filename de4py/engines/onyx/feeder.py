@@ -7,7 +7,6 @@
 #
 # See the LICENSE file for details.
 
-import logging
 import threading
 from pathlib import Path
 import requests
@@ -28,13 +27,13 @@ class SamplesFeeder:
                     "description": f"Uploaded via de4py UI/CLI from {file_path.parent}"
                 }
                 
-                response = requests.post(
+                requests.post(
                     f"{self.api_url}/api/samples/upload",
                     files=files,
                     data=data,
                     timeout=30.0
                 )
-        except:pass
+        except Exception: pass
 
     def upload_file_bg(self, file_path: str):
         path = Path(file_path)

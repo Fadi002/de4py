@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtCore import Qt, QTimer, QRect, QPoint
 from PySide6.QtGui import QPainter, QColor, QPen
 from de4py.lang import tr, keys
+import time
 
 class DebugOverlay(QWidget):
     def __init__(self, parent=None):
@@ -23,12 +24,11 @@ class DebugOverlay(QWidget):
         self.show_inspector = False
         self.show_fps = False
         
-        self.highlight_rect = None # (x, y, w, h)
-        self.inspect_rect = None   # (x, y, w, h)
+        self.highlight_rect = None
+        self.inspect_rect = None
         
-        self._repaint_regions = []  # List of (rect, time)
+        self._repaint_regions = []
         
-        import time
         self._last_fps_time = time.time()
         self._frame_count = 0
         self._current_fps = 0
@@ -41,7 +41,6 @@ class DebugOverlay(QWidget):
         if not any([self.show_boundaries, self.show_highlight, self.show_inspector, self.show_fps, self._repaint_regions]):
             return
             
-        import time
         now = time.time()
         self._repaint_regions = [(r, t) for r, t in self._repaint_regions if now - t < 0.3]
         
@@ -53,6 +52,7 @@ class DebugOverlay(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
 
         if self.show_boundaries:
             self._draw_boundaries(painter)
@@ -64,7 +64,6 @@ class DebugOverlay(QWidget):
             self._draw_fps(painter)
 
     def _draw_fps(self, painter):
-        import time
         now = time.time()
         self._frame_count += 1
         
@@ -80,8 +79,6 @@ class DebugOverlay(QWidget):
         x = self.width() - width - 10
         y = 35
         
-        # Background
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(0, 0, 0, 180))
         painter.drawRoundedRect(x, y, width, height, 4, 4)
@@ -95,7 +92,9 @@ class DebugOverlay(QWidget):
             
         painter.setPen(color)
         from PySide6.QtGui import QFont
-        painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        font = QFont("Segoe UI", 9, QFont.Weight.Bold)
+        font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
+        painter.setFont(font)
         painter.drawText(QRect(x, y, width, height), Qt.AlignmentFlag.AlignCenter, fps_text)
 
     def _draw_highlights(self, painter):
@@ -128,13 +127,3 @@ class DebugOverlay(QWidget):
                 pos = w.mapTo(main_win, QPoint(0, 0))
                 painter.drawRect(pos.x(), pos.y(), w.width(), w.height())
 
-    def _draw_repaints(self, painter):
-        import time
-        now = time.time()
-        for rect, timestamp in self._repaint_regions:
-            alpha = int(255 * (1.0 - (now - timestamp) / 0.3))
-            painter.fillRect(rect, QColor(255, 0, 0, alpha))
-
-    def add_repaint(self, rect):
-        import time
-        self._repaint_regions.append((rect, time.time()))

@@ -8,11 +8,12 @@
 # See the LICENSE file for details.
 
 import logging
-from PySide6.QtCore import QPropertyAnimation
+from PySide6.QtCore import QPropertyAnimation, QVariantAnimation
 from ...devtools.context import context
 
 class DevAnimationController:
     _original_set_duration = QPropertyAnimation.setDuration
+    _original_variant_set_duration = QVariantAnimation.setDuration
 
     @staticmethod
     def inject():
@@ -23,9 +24,17 @@ class DevAnimationController:
             scaled_duration = int(duration / multi)
             DevAnimationController._original_set_duration(self, scaled_duration)
             
+        def patched_variant_set_duration(self, duration: int):
+            multi = context.dev_flags.get("anim_speed", 1.0)
+            if multi <= 0: multi = 1.0
+            scaled_duration = int(duration / multi)
+            DevAnimationController._original_variant_set_duration(self, scaled_duration)
+
         QPropertyAnimation.setDuration = patched_set_duration
+        QVariantAnimation.setDuration = patched_variant_set_duration
         logging.info("[DevTools] Animation Duration Hook injected.")
 
     @staticmethod
     def restore():
         QPropertyAnimation.setDuration = DevAnimationController._original_set_duration
+        QVariantAnimation.setDuration = DevAnimationController._original_variant_set_duration

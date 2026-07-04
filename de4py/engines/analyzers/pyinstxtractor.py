@@ -15,7 +15,6 @@ Licensed under GNU General Public License (GPL) v3.
 """
 
 import os
-import sys
 import zlib
 import struct
 import argparse

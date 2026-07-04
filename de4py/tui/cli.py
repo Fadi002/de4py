@@ -7,7 +7,7 @@
 #
 # See the LICENSE file for details.
 
-import colorama, msvcrt, platform, signal
+import colorama, msvcrt, platform, signal, os
 from tkinter import Tk, filedialog
 from de4py.engines.legacy.detector import detect_obfuscator
 from de4py.engines.analyzers import (
@@ -18,7 +18,8 @@ from de4py.engines.analyzers import (
     all_strings_lookup,
 )
 from de4py.config.config import settings
-from de4py.utils import tui, rpc, update, custom_error, fade_type
+from de4py.utils import tui, rpc, fade_type
+from de4py.utils.errors import custom_error
 from de4py._meta import PROJECT_SIGNATURE
 from colorama import Fore, Style
 import socket
@@ -70,7 +71,7 @@ def home_tab():
     elif choice == "analyzer":
         analyzer_tab()
     elif choice == "about":
-        from de4py.about import print_about
+        from de4py._meta import print_about
         print_about()
     elif choice == "neofetch":
         neofetch()
@@ -281,35 +282,82 @@ def changelog_display():
 
 
 def cupdate() -> None:
-    if update.check_update():
+    from de4py.utils.version import is_newer
+    from de4py.updater.verify import fetch_remote_checksums, verify_zip
+    from de4py.updater.apply import backup_current, apply_update, restart_app
+    from de4py.updater.download import DOWNLOAD_DIR
+
+    try:
+        r = requests.get(settings.version_url, timeout=8)
+        r.raise_for_status()
+        remote_version = r.text.strip()
+    except Exception:
         tui.fade_type(
-            f"{colorama.Fore.CYAN}You are using the latest version{colorama.Style.RESET_ALL}\n"
+            f"{colorama.Fore.YELLOW}Could not check for updates.{colorama.Style.RESET_ALL}\n"
         )
+        return
+
+    if not is_newer(remote_version, settings.version):
+        tui.fade_type(
+            f"{colorama.Fore.CYAN}You are using the latest version ({settings.version}).{colorama.Style.RESET_ALL}\n"
+        )
+        return
+
+    tui.fade_type(
+        f"{colorama.Fore.YELLOW}New version available: {remote_version} (current: {settings.version}){colorama.Style.RESET_ALL}\n"
+    )
+    tui.fade_type("Download and install? [y/n]\n>>> ")
+    if input().strip().lower() != "y":
+        return
+
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    filename = f"de4py-{remote_version}.zip"
+    dest = os.path.join(DOWNLOAD_DIR, filename)
+    url = f"{settings.releases_base_url}/{remote_version}/{filename}"
+
+    tui.fade_type(f"{colorama.Fore.CYAN}Downloading {remote_version}...{colorama.Style.RESET_ALL}\n")
+    try:
+        r = requests.get(url, stream=True, timeout=30)
+        r.raise_for_status()
+        total = int(r.headers.get('content-length', 0))
+        downloaded = 0
+        with open(dest, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=262144):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total > 0:
+                        pct = int(downloaded / total * 100)
+                        print(f"\r  Progress: {pct}%", end='', flush=True)
+        print()
+    except Exception as e:
+        tui.fade_type(f"{colorama.Fore.RED}Download failed: {e}{colorama.Style.RESET_ALL}\n")
+        return
+
+    tui.fade_type(f"{colorama.Fore.CYAN}Verifying integrity...{colorama.Style.RESET_ALL}\n")
+    try:
+        checksums = fetch_remote_checksums(remote_version)
+        mismatches = verify_zip(dest, checksums)
+        if mismatches:
+            tui.fade_type(f"{colorama.Fore.RED}Integrity check failed: {mismatches[:3]}{colorama.Style.RESET_ALL}\n")
+            return
+    except Exception as e:
+        tui.fade_type(f"{colorama.Fore.YELLOW}Checksum verification skipped: {e}{colorama.Style.RESET_ALL}\n")
+
+    tui.fade_type(f"{colorama.Fore.CYAN}Backing up current version...{colorama.Style.RESET_ALL}\n")
+    backup_current()
+    tui.fade_type(f"{colorama.Fore.CYAN}Applying update...{colorama.Style.RESET_ALL}\n")
+    if apply_update(dest):
+        tui.fade_type(f"{colorama.Fore.GREEN}Update applied successfully. Restarting...{colorama.Style.RESET_ALL}\n")
+        restart_app()
     else:
-        tui.fade_type(
-            f"{colorama.Fore.YELLOW}There's a new version. Are you sure you want to use this version?{colorama.Style.RESET_ALL}\n"
-        )
-        tui.fade_type("Answer [y/n]\n")
-        if not input(">>> ").lower() == "y":
-            tui.fade_type(
-                f"{colorama.Fore.YELLOW}Download it from here : https://github.com/Fadi002/de4py{colorama.Style.RESET_ALL}\n"
-            )
-            tui.fade_type(
-                f"{colorama.Fore.YELLOW}Press any key to exit...{colorama.Style.RESET_ALL}\n"
-            )
-            while True:
-                if msvcrt.kbhit():
-                    key = msvcrt.getch()
-                    tui.fade_type(
-                        f"{colorama.Fore.YELLOW}Exiting...{colorama.Style.RESET_ALL}"
-                    )
-                    sys.exit(0)
+        tui.fade_type(f"{colorama.Fore.RED}Failed to apply update.{colorama.Style.RESET_ALL}\n")
 
 
 def banner():
     tui.draw_line()
     print(
-        tui.water(
+        tui.apply_gradient_coloring(
             tui.align('''
      888              d8888                    
      888             d8P888                    
@@ -359,7 +407,7 @@ def start():
         f"{colorama.Fore.CYAN}Welcome to de4py type {colorama.Style.RESET_ALL}help {colorama.Fore.CYAN}to get the commands that you can use\n"
     )
     if settings.rpc:
-        rpc.start_RPC()
+        rpc.start_rpc()
     while 1:
         home_tab()
 

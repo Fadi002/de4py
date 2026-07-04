@@ -9,18 +9,23 @@
 
 import json
 import platform
+from datetime import datetime
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QScrollArea, QTextBrowser
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QScrollArea, QTextBrowser, QScroller
 )
 from PySide6.QtCore import Qt, QTimer
 
-from de4py.ui.widgets.output_textarea import OutputTextArea
 from de4py.ui.workers.changelog_worker import ChangelogWorker
 from de4py.lang import tr
 from de4py.lang.keys import (
     SCREEN_TITLE_HOME, HOME_CHANGELOG_TITLE, HOME_ENV_INFO,
-    HOME_PYTHON_VERSION, HOME_ARCH, HOME_OS
+    HOME_PYTHON_VERSION, HOME_ARCH, HOME_OS,
 )
+
+_PYTHON_VERSION = platform.python_version()
+_ARCH = platform.architecture()[0]
+_UNAME = platform.uname()
+_OS_STR = f"{_UNAME.system} {_UNAME.release}"
 
 
 
@@ -36,32 +41,32 @@ class HomeScreen(QWidget):
         layout.setContentsMargins(40, 20, 40, 20)
         layout.setSpacing(20)
 
-        
-        
+
+
         self.title_label = QLabel(tr(SCREEN_TITLE_HOME))
         self.title_label.setObjectName("TitleLabel")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.title_label)
-        
+
         content_layout = QHBoxLayout()
         content_layout.setSpacing(40)
-        
+
         self.changelog_frame = self._create_changelog_frame()
         content_layout.addWidget(self.changelog_frame)
-        
+
         right_layout = QVBoxLayout()
         right_layout.setSpacing(20)
-        
-        self.env_frame = self._create_env_frame()
-        right_layout.addWidget(self.env_frame)
-        
+
+        env_frame = self._create_env_frame()
+        right_layout.addWidget(env_frame)
+
         self.clock_frame = self._create_clock_frame()
         right_layout.addWidget(self.clock_frame)
-        
+
         right_layout.addStretch()
         content_layout.addLayout(right_layout)
         content_layout.addStretch()
-        
+
         layout.addLayout(content_layout, 1)
         self.changelog_area.setObjectName("ChangelogArea")
         self.changelog_content.setObjectName("ChangelogContent")
@@ -85,8 +90,6 @@ class HomeScreen(QWidget):
         self.changelog_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.changelog_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # Enable smooth scrolling
-        from PySide6.QtWidgets import QScroller
         QScroller.grabGesture(self.changelog_area.viewport(), QScroller.ScrollerGestureType.LeftMouseButtonGesture)
 
         self.changelog_content = QTextBrowser()
@@ -100,7 +103,7 @@ class HomeScreen(QWidget):
 
     def _create_env_frame(self):
         self.env_frame = QFrame()
-        self.env_frame.setObjectName("StyledFrame")  
+        self.env_frame.setObjectName("StyledFrame")
         layout = QVBoxLayout(self.env_frame)
         layout.setSpacing(8)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -109,9 +112,9 @@ class HomeScreen(QWidget):
         self.env_title.setObjectName("EnvTitleLabel")
         layout.addWidget(self.env_title)
 
-        self.pv_label = QLabel()
-        self.pv_label.setObjectName("EnvLabel")
-        layout.addWidget(self.pv_label)
+        self.python_version_label = QLabel()
+        self.python_version_label.setObjectName("EnvLabel")
+        layout.addWidget(self.python_version_label)
 
         self.arch_label = QLabel()
         self.arch_label.setObjectName("EnvLabel")
@@ -120,20 +123,18 @@ class HomeScreen(QWidget):
         self.os_label = QLabel()
         self.os_label.setObjectName("EnvLabel")
         layout.addWidget(self.os_label)
-        
+
         self._update_env_info()
 
         layout.addStretch()
         return self.env_frame
 
     def _update_env_info(self):
-        self.pv_label.setText(f"<b>{tr(HOME_PYTHON_VERSION)}:</b> {platform.python_version()}")
-        self.arch_label.setText(f"<b>{tr(HOME_ARCH)}:</b> {platform.architecture()[0]}")
-        system_info = platform.uname()
-        self.os_label.setText(f"<b>{tr(HOME_OS)}:</b> {system_info.system} {system_info.release}")
+        self.python_version_label.setText(f"<b>{tr(HOME_PYTHON_VERSION)}:</b> {_PYTHON_VERSION}")
+        self.arch_label.setText(f"<b>{tr(HOME_ARCH)}:</b> {_ARCH}")
+        self.os_label.setText(f"<b>{tr(HOME_OS)}:</b> {_OS_STR}")
 
     def retranslate_ui(self):
-        """Update UI texts when language changes."""
         self.title_label.setText(tr(SCREEN_TITLE_HOME))
         self.changelog_title.setText(tr(HOME_CHANGELOG_TITLE))
         self.env_title.setText(tr(HOME_ENV_INFO))
@@ -143,14 +144,14 @@ class HomeScreen(QWidget):
         frame = QFrame()
         frame.setObjectName("StyledFrame")
         frame.setFixedWidth(300)
-        
+
         layout = QVBoxLayout(frame)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
+
         self.clock_label = QLabel("00:00:00")
         self.clock_label.setObjectName("ClockLabel")
         layout.addWidget(self.clock_label)
-        
+
         return frame
 
     def _setup_clock(self):
@@ -160,7 +161,6 @@ class HomeScreen(QWidget):
         self._update_clock()
 
     def _update_clock(self):
-        from datetime import datetime
         now = datetime.now()
         self.clock_label.setText(now.strftime("%H:%M:%S"))
 
@@ -174,13 +174,13 @@ class HomeScreen(QWidget):
         try:
             changelog_data = json.loads(data)
             changelog_data.reverse()
-            html = ""
+            parts = []
             for version in changelog_data:
-                html += f"<h3>Version {version['version']}</h3><ul>"
+                parts.append(f"<h3>Version {version['version']}</h3><ul>")
                 for change in version.get('changes', []):
-                    html += f"<li>{change}</li>"
-                html += "</ul>"
-            self.changelog_content.setText(html)
+                    parts.append(f"<li>{change}</li>")
+                parts.append("</ul>")
+            self.changelog_content.setText("".join(parts))
         except Exception:
             self.changelog_content.setText(data)
 

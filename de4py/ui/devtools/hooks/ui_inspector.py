@@ -7,9 +7,8 @@
 #
 # See the LICENSE file for details.
 
-from PySide6.QtCore import QObject, QEvent, Qt, QPoint, QTimer
-from PySide6.QtWidgets import QWidget, QApplication
-from PySide6.QtGui import QPainter, QColor, QPen
+from PySide6.QtCore import QObject, QEvent, QPoint, QTimer
+from PySide6.QtWidgets import QWidget
 from ..context import context
 from ..event_bus import bus
 

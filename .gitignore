@@ -1,12 +1,52 @@
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+# =========================
+# IDEs / Editors
+# =========================
+.vs/
+.vscode/
+.idea/
+*.iml
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.opencode/
+.jules/
+
+# =========================
+# Binaries / Native
+# =========================
+*.dll
+*.pdb
+*.exe
+*.lib
+*.old
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.nupkg
+*.p7s
+**/packages/
+samples/**/*.dll
+
+# Exceptions
+!dlls/pyshell.dll
+!de4py/utils/pyshell.dll
+!samples/**/*.exe
+
+# C++ build source (ships as compiled .dll)
+de4py/utils/dlls/De4pyTools/
+de4py/utils/dlls/packages/
+
+# =========================
+# Build outputs
+# =========================
+bin/
+obj/
 build/
-develop-eggs/
 dist/
-downloads/
+out/
+target/
+develop-eggs/
 eggs/
 .eggs/
 lib/
@@ -15,49 +55,20 @@ parts/
 sdist/
 var/
 wheels/
-share/python-wheels/
+site/
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyc.*
+*.so
+.Python
+*.egg
 *.egg-info/
 .installed.cfg
-*.egg
 MANIFEST
-*.manifest
-*.spec
-pip-log.txt
-pip-delete-this-directory.txt
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.status
-.hypotheses/
-.pytest_cache/
-pytestdebug.log
-*.mo
-*.pot
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-instance/
-.webassets-cache
-.scrapy
-docs/_build/
-.pybuilder/
-target/
-.ipynb_checkpoints
-profile_default/
-ipython_config.py
-.pdm-build/
-__pypackages__/
-celerybeat-schedule
-celerybeat.pid
-*.sage.py
+# Environments
 .env
 .venv
 env/
@@ -65,26 +76,87 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-.spyderproject
-.spyproject
-.ropeproject
-/site
+# =========================
+# Testing / coverage / tools
+# =========================
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
+*.cover
+.hypotheses/
 .mypy_cache/
 .dmypy.json
-dmypy.json
 .pyre/
 .pytype/
 cython_debug/
-.idea/
-.vscode/
+# =========================
+# Logs
+# =========================
+*.log
+pip-log.txt
+celerybeat-schedule
+celerybeat.pid
+logs/
+# =========================
+# OS files
+# =========================
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
 Thumbs.db
-logs/
-samples/
-*.log
-checksums.json
+ehthumbs.db
+# =========================
+# Temp / cache
+# =========================
+.cache/
+tmp/
+temp/
+*.tmp
+.webassets-cache
+# =========================
+# Notebooks / interactive
+# =========================
+.ipynb_checkpoints/
+ipython_config.py
+profile_default/
+# =========================
+# Scrapy / docs / misc tools
+# =========================
+.scrapy/
+docs/_build/
+.pybuilder/
+.cortexkit/
+docs/
+# =========================
+# Packages / installers
+# =========================
+*.zip
+*.tar
+*.tar.gz
+*.nupkg
+*.msi
+# =========================
+# AI agent configs
+# =========================
+AGENTS.md
+CLAUDE.md
+.claude/
+.cursorrules
+.cursor/
+.windsurfrules
+.github/copilot-instructions.md
+.aider*
+prompts/
+# =========================
+# Scratch / prompt files
+# =========================
+answers.txt
+prompt.txt
+gitprompt.txt

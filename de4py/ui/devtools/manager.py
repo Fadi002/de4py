@@ -10,7 +10,7 @@
 import os
 import logging
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QObject, Qt, QTimer, QPropertyAnimation, QEasingCurve, QPoint
+from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 
 from .context import context
@@ -86,7 +86,5 @@ def init_devtools(app: QApplication):
     dev_mode = str(os.getenv("DEV_MODE", "")).lower()
     if dev_mode not in ("1", "true", "on", "yes"):
         return None
-        
-    assert dev_mode in ("1", "true", "on", "yes"), "SAFETY: DevTools loaded in production environment!"
-    
+
     return DeveloperMenuManager(app)

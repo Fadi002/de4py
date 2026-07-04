@@ -7,12 +7,48 @@
 #
 # See the LICENSE file for details.
 
-import re
-import pkgutil
-import importlib
-from typing import List, Dict, Optional, Type
-from de4py.core.interfaces import BaseEngine, Deobfuscator, Analyzer
-from de4py.engines.adapter import LegacyDeobfuscatorAdapter
+import logging
+from typing import Callable, List, Dict, Optional
+from de4py.core.interfaces import Deobfuscator, Analyzer
+
+logger = logging.getLogger(__name__)
+
+
+# ── Legacy Adapter ────────────────────────────────────────────────────────────
+
+class LegacyDeobfuscatorAdapter(Deobfuscator):
+    """
+    Wraps a plain callable (path → str) as a full Deobfuscator implementation.
+
+    Used to integrate the legacy regex-detected deobfuscators into the
+    modern engine registry without rewriting them.
+    """
+
+    def __init__(self, name: str, deobfuscate_func: Callable[[str], str], description: str = ""):
+        self._name = name
+        self._func = deobfuscate_func
+        self._description = description
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def description(self) -> str:
+        return self._description or f"Legacy deobfuscator: {self._name}"
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    def deobfuscate(self, file_path: str) -> str:
+        try:
+            return self._func(file_path)
+        except Exception as e:
+            return f"Error deobfuscating with {self.name}: {e}"
+
+
+# ── Engine Manager ────────────────────────────────────────────────────────────
 
 class EngineManager:
     """Manages registration and retrieval of deobfuscators and analyzers."""
@@ -20,20 +56,19 @@ class EngineManager:
     def __init__(self):
         self._deobfuscators: Dict[str, Deobfuscator] = {}
         self._analyzers: Dict[str, Analyzer] = {}
+        self._legacy_obfuscators = self._load_legacy_obfuscators()
         self.load_legacy_engines()
-        
-        # Load modern engines
+
         try:
             from de4py.engines.onyx.engine import OnyxAlpha
-            engine = OnyxAlpha()
-            self.register_deobfuscator(engine)
+            self.register_deobfuscator(OnyxAlpha())
         except ImportError as e:
-            print(f"Failed to load Onyx engine: {e}")
+            logger.error("Failed to load Onyx engine: %s", e)
 
-    def register_deobfuscator(self, deobfuscator: Deobfuscator):
+    def register_deobfuscator(self, deobfuscator: Deobfuscator) -> None:
         self._deobfuscators[deobfuscator.name.lower()] = deobfuscator
 
-    def register_analyzer(self, analyzer: Analyzer):
+    def register_analyzer(self, analyzer: Analyzer) -> None:
         self._analyzers[analyzer.name.lower()] = analyzer
 
     def get_deobfuscator(self, name: str) -> Optional[Deobfuscator]:
@@ -42,23 +77,24 @@ class EngineManager:
     def get_all_deobfuscators(self) -> List[Deobfuscator]:
         return list(self._deobfuscators.values())
 
-    def load_legacy_engines(self):
-        """Loads legacy deobfuscators from de4py.engines.legacy.detector"""
-        try:
-            from de4py.engines.legacy.detector import obfuscators
-            for name, regex, func in obfuscators:
-                adapter = LegacyDeobfuscatorAdapter(name, func, description=f"Regex: {regex.pattern}")
-                self.register_deobfuscator(adapter)
-        except ImportError as e:
-            print(f"Failed to load legacy engines: {e}")
+    def load_legacy_engines(self) -> None:
+        """Register all legacy regex-detected deobfuscators."""
+        for name, regex, func in self._legacy_obfuscators:
+            adapter = LegacyDeobfuscatorAdapter(name, func, description=f"Regex: {regex.pattern}")
+            self.register_deobfuscator(adapter)
 
     def auto_detect(self, content: str) -> Optional[Deobfuscator]:
-        """Tries to match content against loaded legacy regexes."""
+        """Return the first deobfuscator whose regex matches *content*, or None."""
+        for name, regex, _ in self._legacy_obfuscators:
+            if regex.search(content):
+                return self.get_deobfuscator(name)
+        return None
+
+    @staticmethod
+    def _load_legacy_obfuscators():
         try:
             from de4py.engines.legacy.detector import obfuscators
-            for name, regex, func in obfuscators:
-                if regex.search(content):
-                    return self.get_deobfuscator(name)
-        except ImportError:
-            pass
-        return None
+            return tuple(obfuscators)
+        except ImportError as e:
+            logger.error("Failed to load legacy engines: %s", e)
+            return ()

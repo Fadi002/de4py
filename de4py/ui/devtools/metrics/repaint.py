@@ -7,7 +7,7 @@
 #
 # See the LICENSE file for details.
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject
 from ..event_bus import bus
 
 class RepaintTracker(QObject):

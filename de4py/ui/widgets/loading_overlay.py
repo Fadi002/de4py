@@ -7,156 +7,192 @@
 #
 # See the LICENSE file for details.
 
-from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QGraphicsBlurEffect, QGraphicsScene, QGraphicsPixmapItem, QGraphicsOpacityEffect
-from PySide6.QtCore import Qt, QTimer, QRectF, QPropertyAnimation
-from PySide6.QtGui import QPainter, QColor, QPixmap
+from __future__ import annotations
+
+from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QGraphicsOpacityEffect
+from PySide6.QtCore import Qt, QTimer, QPoint
+from PySide6.QtGui import QPainter, QColor
+from de4py.ui.widgets.glass_utils import GlassBlurCache
+from de4py.ui.motion.spring import FramePacer, spring_gentle
+
+_SPINNER_RADIUS = 22.0
+_SPINNER_WIDTH = 3.5
+_SPRING_TICK_MS = 16
+_BACKDROP_MAX_ALPHA = 200.0
+_BACKDROP_TARGET_ALPHA = 160.0
+_DEFAULT_BRAND_COLOR = QColor(2, 135, 207)
 
 
 class LoadingOverlay(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("LoadingOverlay")
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
-        self._angle = 0
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._rotate)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+        self._angle = 0.0
         self._blurred_bg = None
         self._lock_events = False
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self._brand_color = QColor(_DEFAULT_BRAND_COLOR)
+        
+        self._dragging = False
+        self._drag_pos = QPoint()
 
-        # Single reusable opacity effect
         self._opacity_effect = QGraphicsOpacityEffect(self)
         self._opacity_effect.setOpacity(0.0)
         self.setGraphicsEffect(self._opacity_effect)
 
-        self._fade_anim = QPropertyAnimation(self._opacity_effect, b"opacity", self)
-        self._fade_anim.setDuration(250)
-        self._fade_anim.finished.connect(self._on_fade_finished)
-        self._fade_target: str | None = None # "visible" or "hidden"
+        self._fade_spring = spring_gentle()
+        self._backdrop_spring = spring_gentle()
+        self._backdrop_alpha = 0.0
+        self._closing = False
+
+        self._spin_timer = QTimer(self)
+        self._spin_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._spin_timer.setInterval(_SPRING_TICK_MS)
+        self._spin_timer.timeout.connect(self._tick)
+
+        self._fade_timer = QTimer(self)
+        self._fade_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._fade_timer.setInterval(_SPRING_TICK_MS)
+        self._fade_timer.timeout.connect(self._tick_springs)
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addSpacing(100)
+        layout.addSpacing(60)
 
         self.status_label = QLabel("")
-        self.status_label.setObjectName("SubtitleLabel")
+        self.status_label.setObjectName("StatusLabel")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet("color: white; font-weight: bold; font-size: 18px;")
         layout.addWidget(self.status_label)
 
     def set_status(self, text: str):
         self.status_label.setText(text)
         self.update()
 
-    def _on_fade_finished(self):
-        if self._fade_target == "hidden":
-            self.setHidden(True)
-        self._fade_target = None
+    def setBrandColor(self, color: QColor):
+        self._brand_color = QColor(color)
+        self.update()
+
+    def _tick(self):
+        self._angle = (self._angle + 6.0) % 360.0
+        self.update()
+
+    def _tick_springs(self):
+        dt = FramePacer.instance().tick()
+        self._fade_spring.tick(dt)
+        self._backdrop_spring.tick(dt)
+
+        self._opacity_effect.setOpacity(max(0.0, min(1.0, self._fade_spring.value)))
+        self._backdrop_alpha = max(0.0, min(_BACKDROP_MAX_ALPHA, self._backdrop_spring.value))
+
+        if self._fade_spring.is_settled() and self._backdrop_spring.is_settled():
+            self._fade_timer.stop()
+            if self._closing:
+                self._closing = False
+                self.setHidden(True)
+                return
+
+        self.update()
 
     def showEvent(self, event):
         super().showEvent(event)
         if not self._lock_events and self.parent():
             self.setGeometry(self.parent().rect())
             self._blurred_bg = self._create_blur_cache()
-        self._timer.start(16)
+        self._spin_timer.start()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.parent():
+            self.setGeometry(self.parent().rect())
 
     def hideEvent(self, event):
         super().hideEvent(event)
-        self._timer.stop()
+        self._spin_timer.stop()
+        self._fade_timer.stop()
         if not self._lock_events:
             self._blurred_bg = None
 
     def fade_in(self):
-        self._fade_anim.stop()
-        self._fade_target = "visible"
+        self._closing = False
         self.setHidden(False)
-        self._fade_anim.setStartValue(self._opacity_effect.opacity())
-        self._fade_anim.setEndValue(1.0)
-        self._fade_anim.start()
+        self._fade_spring.value = self._opacity_effect.opacity()
+        self._fade_spring.target = 1.0
+        self._backdrop_spring.value = self._backdrop_alpha
+        self._backdrop_spring.target = _BACKDROP_TARGET_ALPHA
+        self._fade_timer.start()
 
     def fade_out(self):
-        self._fade_anim.stop()
-        self._fade_target = "hidden"
-        self._fade_anim.setStartValue(self._opacity_effect.opacity())
-        self._fade_anim.setEndValue(0.0)
-        self._fade_anim.start()
-
-    def _rotate(self):
-        self._angle = (self._angle + 6) % 360  # smaller increment = smoother
-        self.update()  # trigger paintEvent
+        self._closing = True
+        self._fade_spring.value = self._opacity_effect.opacity()
+        self._fade_spring.target = 0.0
+        self._backdrop_spring.value = self._backdrop_alpha
+        self._backdrop_spring.target = 0.0
+        self._fade_timer.start()
 
     def _create_blur_cache(self):
         top_window = self.window()
         if not top_window or self._lock_events:
             return None
-        
         self._lock_events = True
-        super().hide() # Use native hide for immediate effect
-        screen = top_window.screen()
-        if not screen:
-            from PySide6.QtWidgets import QApplication
-            screen = QApplication.primaryScreen()
-            
-        snapshot = screen.grabWindow(top_window.winId(),
-                                     0, 0, top_window.width(), top_window.height())
-        super().show() # Use native show
-        self._lock_events = False
-
-        blur_effect = QGraphicsBlurEffect()
-        blur_effect.setBlurRadius(25)
-        scene = QGraphicsScene()
-        item = QGraphicsPixmapItem(snapshot)
-        item.setGraphicsEffect(blur_effect)
-        scene.addItem(item)
-        blurred_pixmap = QPixmap(snapshot.size())
-        blurred_pixmap.fill(Qt.transparent)
-        painter = QPainter(blurred_pixmap)
-        scene.render(painter, QRectF(blurred_pixmap.rect()), QRectF(snapshot.rect()))
-        painter.end()
-        return blurred_pixmap
+        try:
+            return GlassBlurCache.capture(
+                top_window, exclude_widget=self,
+                blur_radius=28, downsample_divisor=2, force_refresh=False,
+            )
+        finally:
+            self._lock_events = False
 
     def paintEvent(self, event):
+        from PySide6.QtGui import QConicalGradient, QBrush, QPen
+        from PySide6.QtCore import QPointF, QRectF
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect()
 
-        # 1. Draw blurred background
         if self._blurred_bg:
             painter.drawPixmap(rect, self._blurred_bg)
 
-        # 2. Draw semi-transparent overlay
-        painter.fillRect(rect, QColor(0, 0, 0, 160))
+        painter.fillRect(rect, QColor(0, 0, 0, int(self._backdrop_alpha)))
 
-        # 3. Draw spinner
         center = rect.center()
-        radius = 25
-
-        painter.save()
         painter.translate(center)
-        painter.rotate(self._angle)  # rotate spinner
+        painter.rotate(self._angle)
 
-        # Glow arcs (for visual depth)
-        for i in range(10, 0, -1):
-            alpha = int((10 - i) * 5)
-            pen = painter.pen()
-            pen.setWidthF(2 + i)  # thicker for outer glow
-            pen.setColor(QColor(2, 135, 207, alpha))
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-            painter.setPen(pen)
-            painter.drawArc(-radius, -radius, radius*2, radius*2, 0*16, 270*16)
+        gradient = QConicalGradient(0, 0, 0)
+        color_head = QColor(self._brand_color)
+        color_tail = QColor(self._brand_color)
+        color_tail.setAlpha(0)
+        
+        gradient.setColorAt(0.0, color_head)
+        gradient.setColorAt(0.75, color_tail)
+        gradient.setColorAt(1.0, color_tail)
 
-        # Main blue arc
-        pen = painter.pen()
-        pen.setWidthF(4)
-        pen.setColor(QColor(2, 135, 207))
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen = QPen(QBrush(gradient), _SPINNER_WIDTH)
+        pen.setCapStyle(Qt.PenCapStyle.FlatCap)
         painter.setPen(pen)
-        painter.drawArc(-radius, -radius, radius*2, radius*2, 0*16, 270*16)
+        
+        r = _SPINNER_RADIUS
+        painter.drawEllipse(QRectF(-r, -r, r * 2.0, r * 2.0))
 
-        # Small white highlight
-        pen.setColor(QColor(255, 255, 255))
-        painter.setPen(pen)
-        painter.drawArc(-radius, -radius, radius*2, radius*2, 270*16, 90*16)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color_head)
+        head_radius = _SPINNER_WIDTH / 2.0
+        painter.drawEllipse(QPointF(r, 0), head_radius, head_radius)
 
-        painter.restore()
-        painter.end()
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = True
+            self._drag_pos = event.globalPosition().toPoint() - self.window().frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._dragging and event.buttons() & Qt.MouseButton.LeftButton:
+            self.window().move(event.globalPosition().toPoint() - self._drag_pos)
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self._dragging = False
+        event.accept()

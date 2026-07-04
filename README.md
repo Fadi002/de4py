@@ -20,12 +20,12 @@ Maintained by [Fadi002](https://github.com/Fadi002) and [AdvDebug](https://githu
 | **Modern UI** | Built with **PySide6** and a custom dark theme for a premium look and feel. CLI mode also supported. |
 | **Global Localization** | Support for over **18+ languages** out of the box, powered by a community-driven localization engine. |
 | **Plugin Architecture & API** | Extensible plugin system to create custom analyzers. You can also use de4py directly as a programmable library in your own tools. |
-| **Behavior Monitor & DevTools** | Monitor process handles, memory access, and sockets. Built-in developer tools for real-time inspection, UI debugging, and API testing. |
+| **Behavior Monitor** | Monitor process handles, memory access, and sockets. Built-in developer tools for real-time inspection. |
 
 ## 📦 Installation & Usage
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.10+
 - Windows (recommended for full feature support)
 
 ### Installation
@@ -84,7 +84,6 @@ All contributions are welcome!
 
 ## 🔗 Community
 
-- **Matrix:** [Join our Matrix room](https://matrix.to/#/#de4py_commiunty:matrix.org) 🔒 (recommended)
 - **Signal:** [Join our Signal room](https://signal.group/#CjQKIGl8b9tJIMoMpwnrzUIDSqJY5UMJOzpixJklsEgYSrjJEhCw2rBAUFVOWkwIZ-gM3mqS)
 - **Discord:** [Join here](https://discord.gg/cYxxUHsbRm) 💬
 

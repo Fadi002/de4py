@@ -7,10 +7,6 @@
 #
 # See the LICENSE file for details.
 
-"""
-De4py Deobfuscator Worker - Runs deobfuscation in background thread
-One task only, emits result signal, no direct UI updates
-"""
 from PySide6.QtCore import QThread, Signal
 
 from de4py.ui.controllers import deobfuscator_controller
@@ -31,4 +27,4 @@ class DeobfuscatorWorker(QThread):
                 result = deobfuscator_controller.run_detect_obfuscator(self._file_path)
                 self.finished.emit(str(result))
             except Exception as e:
-                self.error.emit(f"Error: {str(e)}")
+                self.error.emit(f"Error: {e}")
