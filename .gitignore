@@ -33,10 +33,6 @@ samples/**/*.dll
 !de4py/utils/pyshell.dll
 !samples/**/*.exe
 
-# C++ build source (ships as compiled .dll)
-de4py/utils/dlls/De4pyTools/
-de4py/utils/dlls/packages/
-
 # =========================
 # Build outputs
 # =========================
