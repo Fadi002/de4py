@@ -20,9 +20,6 @@
 *.exe
 *.lib
 *.old
-*.sln
-*.vcxproj
-*.vcxproj.filters
 *.nupkg
 *.p7s
 **/packages/
