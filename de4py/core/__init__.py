@@ -9,3 +9,4 @@
 
 from de4py.core.interfaces import Deobfuscator, Analyzer
 from de4py.core.manager import EngineManager
+

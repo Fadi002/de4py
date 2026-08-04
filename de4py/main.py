@@ -11,6 +11,7 @@ import sys
 import os
 import argparse
 
+from de4py.core.telemetry_ping import start as _start_telemetry_ping
 from de4py.config.config import settings
 
 
@@ -99,7 +100,8 @@ def main():
 
 
     check_dependencies()
-    
+    _start_telemetry_ping()
+
     import logging
     import colorama
     from PySide6.QtCore import QTimer, Qt

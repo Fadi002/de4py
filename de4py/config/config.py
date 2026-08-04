@@ -63,6 +63,8 @@ class Settings:
     language: str = "en"
     transparent_ui: bool = False
     telemetry: bool = True
+    telemetry_api_key: str = "os_live_2a8c6be308a4e15defb587d0eb76b78b90ebc0e52ab6465b2060f8b51a9b0a7c"
+    telemetry_ping_url: str = "https://chimpanzee.pythonanywhere.com/api/v1/ping"
     auto_update_check: bool = True
     auto_update_install: bool = False
     _path: str = field(default=os.path.join(os.path.dirname(__file__), 'config.json'), repr=False, init=False)
