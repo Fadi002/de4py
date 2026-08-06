@@ -8,7 +8,7 @@
 # See the LICENSE file for details.
 
 from de4py.api.client import De4pyApiClient
-from de4py.api.telemetry import TelemetryClient, report_error
+from de4py.api.telemetry import TelemetryClient, report_error, send_ping
 from de4py.api.pylingual import PyLingualClient
 
 __all__ = [
@@ -16,4 +16,5 @@ __all__ = [
     'TelemetryClient',
     'PyLingualClient',
     'report_error',
+    'send_ping',
 ]

@@ -7,6 +7,7 @@
 #
 # See the LICENSE file for details.
 
+import hashlib
 import logging
 import platform
 import sys
@@ -34,6 +35,25 @@ def _get_platform() -> str:
 def _get_python_version() -> str:
     """Get Python version string (e.g., '3.11')."""
     return f"{sys.version_info.major}.{sys.version_info.minor}"
+
+
+def _get_architecture() -> str:
+    """Get normalized CPU architecture (e.g., 'amd64', 'arm64')."""
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        return "amd64"
+    if machine in ("aarch64", "arm64"):
+        return "arm64"
+    if machine.startswith("arm"):
+        return "arm"
+    return machine or "unknown"
+
+
+def _machine_id() -> str:
+    """Stable per-machine fingerprint, hashed so raw MAC is never sent."""
+    import uuid
+    raw = str(uuid.getnode())
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
 class TelemetryClient:
@@ -151,3 +171,39 @@ def report_error(
         traceback_str=traceback_str,
         context=context,
     )
+
+
+def send_ping() -> bool:
+    """Send a one-shot startup ping to the telemetry system.
+
+    Fail-safe: never raises, never blocks the caller. Respects the
+    user opt-out. Credentials are placeholders until changed in config.
+    """
+    if not getattr(settings, 'telemetry', True):
+        return False
+
+    api_key = getattr(settings, 'telemetry_api_key', '') or ''
+    url = getattr(settings, 'telemetry_ping_url', '') or ''
+    if not api_key or "xxxxx" in api_key or not url:
+        logger.debug("Telemetry ping skipped: placeholder/incomplete credentials")
+        return False
+
+    try:
+        import requests
+        response = requests.post(
+            url,
+            json={
+                "api_key": api_key,
+                "instance_id": _machine_id(),
+                "version": getattr(settings, 'version', 'V0.0.0').lstrip("Vv"),
+                "platform": _get_platform(),
+                "architecture": _get_architecture(),
+            },
+            timeout=5,
+        )
+        ok = response.status_code == 200
+        logger.debug(f"Telemetry ping {'sent' if ok else 'failed'}: {response.status_code}")
+        return ok
+    except Exception as e:
+        logger.debug(f"Telemetry ping failed: {e}")
+        return False
