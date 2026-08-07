@@ -62,9 +62,15 @@ class De4pyTester:
         self.log_result("System", "Python Version", is_py_ver_ok, f"Found {major}.{minor}. Expected 3.8-3.14")
 
         # 2. Architecture
+        from de4py.utils.platform_utils import IS_WINDOWS
         arch = platform.architecture()[0]
-        is_arch_ok = arch == '64bit'
-        self.log_result("System", "Architecture", is_arch_ok, f"Found {arch}. 64-bit required for native components.")
+        if IS_WINDOWS:
+            is_arch_ok = arch == '64bit'
+            arch_note = "64-bit required for native components."
+        else:
+            is_arch_ok = True
+            arch_note = "64-bit not enforced on non-Windows."
+        self.log_result("System", "Architecture", is_arch_ok, f"Found {arch}. {arch_note}")
 
         # 3. Internet
         has_internet = False
@@ -105,8 +111,11 @@ class De4pyTester:
             self.log_result("Integrity", "Checksum Load", False, str(e))
             return
 
+        from de4py.utils.platform_utils import IS_WINDOWS
         mismatched = []
         for rel_path, expected in checksums.items():
+            if not IS_WINDOWS and rel_path.lower().endswith(('.exe', '.dll')):
+                continue
             full_path = os.path.join(self.target_dir, rel_path)
             if not os.path.exists(full_path):
                 mismatched.append(f"Missing: {rel_path}")

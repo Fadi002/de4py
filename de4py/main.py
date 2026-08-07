@@ -13,6 +13,7 @@ import argparse
 
 from de4py.core.telemetry_ping import start as _start_telemetry_ping
 from de4py.config.config import settings
+from de4py.utils.platform_utils import IS_WINDOWS
 
 
 def check_dependencies():
@@ -25,9 +26,10 @@ def check_dependencies():
         "pypresence": "pypresence",
         "xdis": "xdis",
         "sentry_sdk": "sentry-sdk",
-        "pefile": "pefile",
-        "msvcrt": "msvcrt"
+        "pefile": "pefile"
     }
+    if IS_WINDOWS:
+        REQUIRED_LIBS["msvcrt"] = "msvcrt"
 
     missing = []
     for module_name, pip_name in REQUIRED_LIBS.items():
@@ -118,9 +120,7 @@ def main():
     colorama.init(autoreset=True)
     setup_logging()
     sentry.init()
-    
-    _IS_WINDOWS = sys.platform == "win32"
-    
+
     tui.clear_console()
     print(tui.__BANNER__)
 

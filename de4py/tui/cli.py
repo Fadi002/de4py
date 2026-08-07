@@ -7,7 +7,7 @@
 #
 # See the LICENSE file for details.
 
-import colorama, msvcrt, platform, signal, os
+import colorama, platform, signal, os
 from tkinter import Tk, filedialog
 from de4py.engines.legacy.detector import detect_obfuscator
 from de4py.engines.analyzers import (
@@ -20,6 +20,7 @@ from de4py.engines.analyzers import (
 from de4py.config.config import settings
 from de4py.utils import tui, rpc, fade_type
 from de4py.utils.errors import custom_error
+from de4py.utils.platform_utils import supports
 from de4py._meta import PROJECT_SIGNATURE
 from colorama import Fore, Style
 import socket
@@ -46,7 +47,7 @@ file_path = None
 
 
 def home_tab():
-    tui.linux_prompt()
+    tui.shell_prompt()
     choice = input()
     commands = {
         "help": "Displays a list of available commands.",
@@ -67,7 +68,10 @@ def home_tab():
     elif choice == "deobfuscator":
         deobfuscator_tab()
     elif choice == "pyshell":
-        pyshell_tab()
+        if supports("pyshell"):
+            pyshell_tab()
+        else:
+            print(f"{Fore.RED}PyShell is only available on Windows.{Style.RESET_ALL}")
     elif choice == "analyzer":
         analyzer_tab()
     elif choice == "about":
@@ -102,7 +106,7 @@ def deobfuscator_tab():
         "exit": "Exits the program.",
     }
     while 1:
-        tui.linux_prompt("deobfuscator")
+        tui.shell_prompt("deobfuscator")
         choice = input()
         if choice == "help":
             print(f"\n{Fore.CYAN}=== Available Commands ==={Style.RESET_ALL}")
@@ -158,7 +162,7 @@ def analyzer_tab():
         "exit": "Exits the program.",
     }
     while 1:
-        tui.linux_prompt("analyzer")
+        tui.shell_prompt("analyzer")
         choice = input()
         if choice == "help":
             print(f"\n{Fore.CYAN}=== Available Commands ==={Style.RESET_ALL}")
@@ -261,7 +265,7 @@ def fetch_info():
     global platform_info
     if not platform.architecture()[0].startswith("64"):
         tui.fade_type(
-            f"{colorama.Fore.YELLOW}your pc arch is not x64 bit please note this tool was tested on windows x64 bit{colorama.Style.RESET_ALL}\n"
+            f"{colorama.Fore.YELLOW}your pc arch is not x64 bit. native components are tested on x64 systems.{colorama.Style.RESET_ALL}\n"
         )
     change_log = requests.get(settings.changelog_url).json()
     platform_info = get_info()
@@ -378,7 +382,7 @@ Y88b 888 Y8b.           888  888 d88P Y88b 888
 
 def neofetch():
     print("\n")
-    info = f"""                       {Fore.GREEN}de4py@{Fore.CYAN}{os.getenv('Username')}{Style.RESET_ALL}
+    info = f"""                       {Fore.GREEN}de4py@{Fore.CYAN}{tui.get_username()}{Style.RESET_ALL}
     {Fore.CYAN}-----------------------------------------------{Style.RESET_ALL}
     {Fore.CYAN}OS: {platform.system()}{Style.RESET_ALL}
     {Fore.CYAN}Version: {platform.version()}{Style.RESET_ALL}
@@ -386,9 +390,9 @@ def neofetch():
     {Fore.CYAN}Machine: {platform.machine()}{Style.RESET_ALL}
     {Fore.CYAN}Processor: {platform.processor()}{Style.RESET_ALL}
     {Fore.CYAN}Hostname: {socket.gethostname()}{Style.RESET_ALL}
-    {Fore.CYAN}User: {os.getenv('Username')}{Style.RESET_ALL}
+    {Fore.CYAN}User: {tui.get_username()}{Style.RESET_ALL}
     {Fore.CYAN}Tool: de4py@{settings.version}{Style.RESET_ALL}"""
-    print(tui.Add.Add(tui.windows_logo, info, 4))
+    print(tui.Add.Add(tui.get_logo(), info, 4))
 
 
 def start():
@@ -441,7 +445,7 @@ def pyshell_tab():
     }
 
     while True:
-        tui.linux_prompt(f"pyshell({pid})")
+        tui.shell_prompt(f"pyshell({pid})")
         choice = input()
         
         if choice == "inject":
