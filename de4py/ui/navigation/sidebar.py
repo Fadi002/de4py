@@ -19,6 +19,7 @@ from PySide6.QtGui import QIcon, QColor
 
 from de4py.lang import tr
 from de4py.ui.constants import NAV_ITEMS, SIDEBAR_WIDTH, SPACING_SM
+from de4py.utils.platform_utils import supports
 from de4py.ui.widgets.core_animations import AnimatedButton
 from de4py.ui.motion.spring import spring_gentle
 
@@ -102,6 +103,8 @@ class Sidebar(QWidget):
         base_path = os.path.dirname(os.path.abspath(__file__))
 
         for nav_id, label_key, icon_file in NAV_ITEMS:
+            if nav_id == "pyshell" and not supports("pyshell"):
+                continue
             btn = AnimatedButton(tr(label_key))
             btn.setObjectName("NavButton")
             btn.setProperty("nav_id", nav_id)

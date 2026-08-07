@@ -343,6 +343,10 @@ class MainWindow(QMainWindow):
         self.screen_stack.fade_to_index(SCREEN_BEHAVIOR_MONITOR)
 
     def navigate_to_pyshell(self):
+        from de4py.utils.platform_utils import supports
+        if not supports("pyshell"):
+            self._navigate_to("home")
+            return
         self._ensure_screen(SCREEN_PYSHELL)
         self.screen_stack.fade_to_index(SCREEN_PYSHELL)
         self.sidebar.set_active("pyshell")
