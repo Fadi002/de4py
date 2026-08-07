@@ -14,6 +14,7 @@ from PySide6.QtCore import Qt
 
 from de4py.config.config import settings
 from de4py.lang import tr, translation_manager
+from de4py.utils.platform_utils import IS_WINDOWS
 from de4py.lang.keys import (
     SCREEN_TITLE_SETTINGS, SETTINGS_LANGUAGE, SETTINGS_RPC,
     SETTINGS_STEALTH, SETTINGS_PLUGINS, SETTINGS_RESTART_NOTE,
@@ -81,6 +82,8 @@ class SettingsScreen(QWidget):
 
         self.transparent_checkbox = QCheckBox(tr(SETTINGS_TRANSPARENT_UI))
         self.transparent_checkbox.stateChanged.connect(self._on_transparent_ui_changed)
+        if not IS_WINDOWS:
+            self.transparent_checkbox.hide()
         frame_layout.addWidget(self.transparent_checkbox)
 
         self.telemetry_checkbox = QCheckBox(tr(SETTINGS_TELEMETRY))

@@ -23,6 +23,7 @@ from PySide6.QtGui import QIcon
 from de4py.config.config import settings
 from de4py.lang import translation_manager
 from de4py.ui.motion.manager import MotionManager
+from de4py.utils.platform_utils import IS_WINDOWS
 from de4py.ui.widgets.hamburger_button import HamburgerButton
 from de4py.ui.constants import (
     WINDOW_WIDTH, WINDOW_HEIGHT, SIDEBAR_WIDTH, SPACING_MD,
@@ -137,6 +138,8 @@ class MainWindow(QMainWindow):
             pass
 
     def set_transparent_ui(self, enabled: bool):
+        if not IS_WINDOWS:
+            return
         try:
             from de4py.ui.platform.win32_blur import enable_dynamic_blur, disable_blur
 
