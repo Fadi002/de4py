@@ -13,7 +13,67 @@ import argparse
 
 from de4py.core.telemetry_ping import start as _start_telemetry_ping
 from de4py.config.config import settings
-from de4py.utils.platform_utils import IS_WINDOWS
+from de4py.utils.platform_utils import IS_WINDOWS, IS_LINUX, IS_BSD
+
+
+def check_qt_xcb():
+    if not (IS_LINUX or IS_BSD):
+        return
+    import ctypes
+
+    required = {
+        "libxcb-cursor.so.0": "libxcb-cursor",
+        "libxcb-icccm.so.4": "libxcb-icccm4",
+        "libxcb-keysyms.so.1": "libxcb-keysyms1",
+        "libxcb-image.so.0": "libxcb-image0",
+        "libxcb-randr.so.0": "libxcb-randr0",
+        "libxcb-render-util.so.0": "libxcb-render-util0",
+        "libxcb-shape.so.0": "libxcb-shape0",
+        "libxcb-xinerama.so.0": "libxcb-xinerama0",
+        "libxcb-xkb.so.1": "libxcb-xkb1",
+        "libxkbcommon-x11.so.0": "libxkbcommon-x11-0",
+    }
+
+    missing = []
+    for lib in required:
+        try:
+            ctypes.CDLL(lib)
+        except OSError:
+            missing.append(lib)
+
+    if not missing:
+        return
+
+    distro = None
+    try:
+        with open("/etc/os-release", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("ID="):
+                    distro = line.split("=", 1)[1].strip().strip('"')
+                    break
+    except OSError:
+        pass
+
+    id_lower = (distro or "").lower()
+    if id_lower in ("debian", "ubuntu", "kali", "linuxmint", "elementary", "pop", "zorin"):
+        install = "sudo apt install " + " ".join(sorted(required[lib] for lib in missing))
+    elif id_lower in ("arch", "manjaro", "endeavouros", "arcolinux"):
+        install = "sudo pacman -S --needed " + " ".join(sorted(required[lib] for lib in missing))
+    elif id_lower in ("fedora", "centos", "rhel", "rocky", "alma"):
+        install = "sudo dnf install -y " + " ".join(sorted(required[lib] for lib in missing))
+    else:
+        install = "install the missing Qt xcb platform libraries for your distribution"
+
+    print("\n" + "!" * 60)
+    print("[!] Qt xcb platform dependencies are missing on this system.")
+    print("[!] The GUI cannot create a window until they are installed.")
+    print("\n    Missing libraries:")
+    for lib in missing:
+        print(f"        - {lib}")
+    print("\n[!] Install them with:")
+    print(f"    {install}")
+    print("!" * 60 + "\n")
+    sys.exit(1)
 
 
 def check_dependencies():
@@ -140,6 +200,8 @@ def main():
             from de4py.tui import cli
             cli.start()
             return
+
+    check_qt_xcb()
 
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
