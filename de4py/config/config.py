@@ -57,7 +57,7 @@ class Settings:
     rpc: bool = True
     stealth_title: bool = True
     load_plugins: bool = True
-    build_num: str = "3.2.2.260704542-stable-de4py"
+    build_num: str = "3.3.2.260812416-stable-de4py"
     api_base_url: str = "https://de4py-api.vercel.app"
     api_timeout: int = 700
     poll_interval: float = 2.0
