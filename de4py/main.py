@@ -118,6 +118,12 @@ def load_stylesheet(app):
         if file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
             stream = QTextStream(file)
             qss = stream.readAll()
+            check_svg = os.path.join(os.path.dirname(__file__), "ui", "resources", "check.svg")
+            if os.path.exists(check_svg):
+                qss = qss.replace("{CHECK_SVG}", check_svg.replace("\\", "/"))
+            chevron_svg = os.path.join(os.path.dirname(__file__), "ui", "resources", "chevron-down.svg")
+            if os.path.exists(chevron_svg):
+                qss = qss.replace("{CHEVRON_DOWN_SVG}", chevron_svg.replace("\\", "/"))
             app.setStyleSheet(qss)
             file.close()
             DEFAULT_QSS = qss
