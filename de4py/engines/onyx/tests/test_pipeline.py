@@ -21,6 +21,16 @@ def pipeline_no_llm():
     return Pipeline(use_llm=False)
 
 
+def test_pipeline_ai_defaults_derive_from_settings(monkeypatch):
+    from de4py.config import config as config_module
+    monkeypatch.setattr(config_module.settings, "ai_enabled", True)
+    monkeypatch.setattr(config_module.settings, "ai_annotate", True)
+    p = Pipeline()
+    assert p.use_llm is True
+    assert p.annotate is True
+    assert p.llm is not None
+
+
 def test_clean_code_passes_through(pipeline_no_llm):
     source = "def hello():\n    return 'world'\n"
     result = pipeline_no_llm.run(source, "hello.py")

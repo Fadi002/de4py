@@ -35,14 +35,29 @@ class ConstantExprFolder(ast.NodeTransformer):
     def __init__(self, env: Optional[dict] = None):
         super().__init__()
         self.env = env
+        self.changed = False
+        self._tainted: dict = {}
+
+    def _tainted_subtree(self, node: ast.AST) -> bool:
+        cached = self._tainted.get(id(node))
+        if cached is not None and cached[0] is node:
+            return cached[1]
+        if isinstance(node, ast.NamedExpr):
+            result = True
+        else:
+            result = any(
+                self._tainted_subtree(child)
+                for child in ast.iter_child_nodes(node)
+            )
+        self._tainted[id(node)] = (node, result)
+        return result
 
     def _fold(self, node: ast.AST) -> ast.AST:
-        # A walrus binds a name as a side effect of evaluation, so folding
-        # the subtree would erase a binding later reads depend on. Leave it.
-        if any(isinstance(n, ast.NamedExpr) for n in ast.walk(node)):
+        if self._tainted_subtree(node):
             return node
         ok, val = _safe_eval(node, self.env)
         if ok:
+            self.changed = True
             return ast.copy_location(ast.Constant(value=val), node)
         return node
 
@@ -72,7 +87,9 @@ class ConstantExprFolder(ast.NodeTransformer):
             ast.copy_location(attr_node, node)
             ok, val = _safe_eval(attr_node)
             if ok:
+                self.changed = True
                 return ast.copy_location(ast.Constant(value=val), node)
+            self.changed = True
             return attr_node
 
         return self._fold(node)
@@ -814,11 +831,10 @@ def _unmarshal_best_effort(raw: bytes):
 
 def _run_fold(tree: ast.AST, passes: int = 8, env: Optional[dict] = None) -> ast.AST:
     for _ in range(passes):
-        new = ConstantExprFolder(env).visit(tree)
-        ast.fix_missing_locations(new)
-        if ast.dump(new) == ast.dump(tree):
+        folder = ConstantExprFolder(env)
+        tree = folder.visit(tree)
+        if not folder.changed:
             break
-        tree = new
     return tree
 
 
@@ -832,8 +848,6 @@ def fold_constants(source: str) -> str:
     original_dump = ast.dump(tree)
 
     try:
-        ast.fix_missing_locations(tree)
-
         # Names the module's own import statements introduce (`from base64
         # import b64decode`, `import hashlib as ybgsl`, ...) so the folder
         # resolves them the same way it already resolves the module-qualified
@@ -844,7 +858,6 @@ def fold_constants(source: str) -> str:
         # Pass 0: eval(b'name') → Name('name') — must be FIRST so subsequent
         # folds can see getattr/exec/etc. as plain names
         tree = EvalNameUnwrapper().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 1: fold constants so lambda args become string literals
         tree = _run_fold(tree, 8, env)
@@ -853,16 +866,13 @@ def fold_constants(source: str) -> str:
         # where <expr> folds (via the full interpreter, not the scalar-only
         # folder above) to a same-length tuple of scalars.
         tree = TupleUnpackConstantFolder().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 2: resolve globals()['key'] → Name('key')
         tree = GlobalsBuiltinResolver().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 2b: re-run EvalNameUnwrapper after first fold (some eval(b'x') may
         # only be visible after the first fold unlocks them)
         tree = EvalNameUnwrapper().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 3: fold again (may unlock more after globals resolution)
         env = build_import_env(tree)
@@ -870,41 +880,33 @@ def fold_constants(source: str) -> str:
 
         # Pass 4: unwrap builtins-dict subscript calls
         tree = BuiltinsDictUnwrapper().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 5: propagate module-level constants (for multi-variable b64 patterns)
         tree = ASTConstantPropagator().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 6: final fold (string concat of propagated constants, etc.)
         tree = _run_fold(tree, 4, env)
 
         # Pass 7: inline pure XOR/decode functions at call sites
         tree = PureFunctionInliner().visit(tree)
-        ast.fix_missing_locations(tree)
         tree = _run_fold(tree, 2, env)
 
         # Pass 8: remove dead constant assignments in functions
         tree = DeadAssignmentEliminator().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 9: remove functions/classes never referenced
         tree = DeadFunctionEliminator().visit(tree)
-        ast.fix_missing_locations(tree)
         tree = DeadClassEliminator().visit(tree)
 
         # Pass 10: eval(b'exec')(payload) → exec(payload)
         tree = EvalExecUnwrapper().visit(tree)
-        ast.fix_missing_locations(tree)
         tree = _run_fold(tree, 2)
 
         # Pass 11: evaluate any remaining pure functions with constant args
         tree = PureFunctionEvaluator().visit(tree)
-        ast.fix_missing_locations(tree)
         tree = _run_fold(tree, 2)
         # Re-eliminate dead functions exposed by inlining
         tree = DeadFunctionEliminator().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 11b: evaluate for-loops over constant data with exec payloads
         # Collect current module-level constants (including lists) for sandbox
@@ -920,26 +922,21 @@ def fold_constants(source: str) -> str:
                         and all(isinstance(_e, ast.Constant) for _e in _v.elts)):
                     _cmap[_s.targets[0].id] = [_e.value for _e in _v.elts]
         tree = ConstantForLoopEvaluator(_cmap).visit(tree)
-        ast.fix_missing_locations(tree)
         tree = _run_fold(tree, 2)
         tree = DeadFunctionEliminator().visit(tree)
         tree = DeadClassEliminator().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 11c: recover exec(marshal.loads(BYTES)) compiled-bytecode payloads
         tree = MarshalPayloadEvaluator().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 11d: recover exec(<expr>) when <expr> folds to source text.
         # After the marshal pass: bytes that happen to parse as Python must
         # not be mistaken for source when they were meant for marshal.loads.
         tree = TopLevelExecUnwrapper().visit(tree)
-        ast.fix_missing_locations(tree)
         tree = _run_fold(tree, 4, env)
 
         # Pass 12: remove junk no-op expression statements
         tree = JunkStatementCleaner().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 13: normalize import aliases for known-safe modules
         tree = ImportAliasNormalizer().visit(tree)
@@ -1126,7 +1123,7 @@ class JunkStatementCleaner(ast.NodeTransformer):
                     and not isinstance(stmt.value, (ast.Yield, ast.YieldFrom, ast.Await))
                     and _is_pure_expr(stmt.value)
                     and not isinstance(stmt.value, ast.Constant)):
-                continue  # drop it
+                continue
             result.append(stmt)
         return result
 

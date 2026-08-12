@@ -57,9 +57,9 @@ class FlowDeobfuscator:
         try:
             changed = True
             passes  = 0
+            before = ast.unparse(tree)
             while changed and passes < 8:
                 passes += 1
-                before = ast.unparse(tree)
 
                 tree = self._resolve_constant_aliases(tree)
                 tree = self._resolve_local_constant_aliases(tree)
@@ -76,6 +76,7 @@ class FlowDeobfuscator:
                 ast.fix_missing_locations(tree)
                 after = ast.unparse(tree)
                 changed = (before != after)
+                before = after
 
             return ast.unparse(tree)
         except RecursionError:
@@ -329,7 +330,6 @@ class FlowDeobfuscator:
                 result = []
                 for stmt in stmts:
                     stmt = Sub().visit(stmt)
-                    ast.fix_missing_locations(stmt)
                     result.append(stmt)
                 return result
 
@@ -820,7 +820,6 @@ class _ConstFnInliner(ast.NodeTransformer):
                         and isinstance(stmt.targets[0], ast.Name)):
                     subst = _copy.deepcopy(stmt.value)
                     subst = _SubstCallsWithKnown(self.fn_values).visit(subst)
-                    ast.fix_missing_locations(subst)
                     ok, val = safe_eval(subst, local_env)
                     if not ok:
                         return False, None
@@ -830,7 +829,6 @@ class _ConstFnInliner(ast.NodeTransformer):
 
             subst_ret = _copy.deepcopy(ret_val)
             subst_ret = _SubstCallsWithKnown(self.fn_values).visit(subst_ret)
-            ast.fix_missing_locations(subst_ret)
             ok, result = safe_eval_scalar(subst_ret, local_env)
             if ok:
                 return True, result
@@ -857,7 +855,6 @@ class _ConstFnInliner(ast.NodeTransformer):
                 ret = node.body[0].value
                 substituted = _copy.deepcopy(ret)
                 substituted = _SubstCallsWithKnown(self.fn_values).visit(substituted)
-                ast.fix_missing_locations(substituted)
                 ok, val = safe_eval_scalar(substituted)
                 if ok:
                     self.fn_values[node.name] = val
@@ -866,7 +863,6 @@ class _ConstFnInliner(ast.NodeTransformer):
     def _try_eval_with_arg(self, expr_node, arg_name: str, arg_val) -> tuple:
         import copy as _copy
         substituted = _SubstituteConst(arg_name, arg_val).visit(_copy.deepcopy(expr_node))
-        ast.fix_missing_locations(substituted)
         return safe_eval(substituted)
 
     def visit_Call(self, node: ast.Call) -> ast.expr:

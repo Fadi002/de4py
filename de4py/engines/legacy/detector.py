@@ -54,7 +54,7 @@ obfuscators = [
 ]
 
 
-def detect_obfuscator(file_path):
+def detect_obfuscator(file_path, ai_overrides=None):
     try:
         with open(file_path, 'r', encoding='utf8', errors='ignore') as f:
             file_data = f.read()
@@ -72,6 +72,6 @@ def detect_obfuscator(file_path):
     try:
         from de4py.engines.onyx.engine import OnyxAlpha
         pipeline = OnyxAlpha()
-        return pipeline.deobfuscate(file_path)
+        return pipeline.deobfuscate(file_path, ai_overrides)
     except Exception as e:
         return f"de4py Onyx-Alpha pipeline failed:\n{e}\n\nCant detect the obfuscator\nsend the sample to add it https://de4py.000.pe/"

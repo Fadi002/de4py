@@ -411,6 +411,9 @@ def _method_allowed(obj, attr: str) -> bool:
     return False
 
 
+_HANDLER_CACHE: dict = {}
+
+
 class SafeEvaluator:
     """Evaluates a restricted expression grammar without executing sample code."""
 
@@ -425,10 +428,18 @@ class SafeEvaluator:
 
     def _eval(self, node, env):
         self.budget.step()
-        handler = getattr(self, "_n_" + type(node).__name__, None)
+        name = type(node).__name__
+        cls = type(self)
+        cache = _HANDLER_CACHE.get(cls)
+        if cache is None:
+            cache = _HANDLER_CACHE[cls] = {}
+        handler = cache.get(name)
         if handler is None:
-            raise SafeEvalError(f"unsupported node: {type(node).__name__}")
-        return handler(node, env)
+            handler = getattr(cls, "_n_" + name, None)
+            if handler is None:
+                raise SafeEvalError(f"unsupported node: {type(node).__name__}")
+            cache[name] = handler
+        return handler(self, node, env)
 
 
     def _n_Expression(self, node, env):
@@ -911,6 +922,9 @@ class _Continue(Exception):
     pass
 
 
+_S_HANDLER_CACHE: dict = {}
+
+
 class SafeFunctionRunner(SafeEvaluator):
     """
     Interprets straight-line function bodies (assign / if / for / while / return).
@@ -954,10 +968,18 @@ class SafeFunctionRunner(SafeEvaluator):
 
     def _exec(self, node, env):
         self.budget.step()
-        handler = getattr(self, "_s_" + type(node).__name__, None)
+        name = type(node).__name__
+        cls = type(self)
+        cache = _S_HANDLER_CACHE.get(cls)
+        if cache is None:
+            cache = _S_HANDLER_CACHE[cls] = {}
+        handler = cache.get(name)
         if handler is None:
-            raise SafeEvalError(f"unsupported statement: {type(node).__name__}")
-        handler(node, env)
+            handler = getattr(cls, "_s_" + name, None)
+            if handler is None:
+                raise SafeEvalError(f"unsupported statement: {type(node).__name__}")
+            cache[name] = handler
+        handler(self, node, env)
 
     def _s_Pass(self, node, env):
         return

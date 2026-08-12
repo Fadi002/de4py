@@ -289,6 +289,7 @@ class _SMTransformer(ast.NodeTransformer):
     def __init__(self) -> None:
         super().__init__()
         self.control_names: Set[str] = set()
+        self.changed = False
 
     def _deobfuscate_block(self, stmts: List[ast.stmt]) -> List[ast.stmt]:
         result = []
@@ -298,6 +299,7 @@ class _SMTransformer(ast.NodeTransformer):
             if isinstance(stmt, ast.While) and _is_state_machine(stmt):
                 linearized = self._linearize(stmt, result)  # result = context so far
                 if linearized is not None:
+                    self.changed = True
                     result.extend(linearized)
                     i += 1
                     continue
@@ -515,15 +517,14 @@ class MatchCaseDeobfuscator:
         try:
             control: Set[str] = set()
             for _ in range(6):
-                before = ast.unparse(tree)
                 transformer = _SMTransformer()
                 tree = transformer.visit(tree)
-                ast.fix_missing_locations(tree)
                 control |= transformer.control_names
-                if ast.unparse(tree) == before:
+                if not transformer.changed:
                     break
 
             tree = _drop_dead_control_bindings(tree, control)
+            ast.fix_missing_locations(tree)
             return ast.unparse(tree)
         except RecursionError:
             return source

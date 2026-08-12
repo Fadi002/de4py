@@ -160,6 +160,28 @@ def test_regression_class_attribute_constant_pool_inlines(pipeline_no_llm):
     assert "b'hello world :((('" in result.cleaned
 
 
+def test_regression_strip_builtins_detects_nested_removal():
+    """Nested builtins-assignment strip must set the convergence flag."""
+    from de4py.engines.onyx.proxy_cleaner import ProxyCleaner
+    cleaner = ProxyCleaner()
+    tree = ast.parse(
+        "def f():\n"
+        "    __import__('builtins').exec = 1\n"
+        "    return 0\n"
+    )
+    out_tree, changed = cleaner._strip_builtins(tree)
+    assert changed is True, (
+        "nested builtins-assignment strip must set the convergence flag "
+        "even though module-body length is unchanged"
+    )
+    func = out_tree.body[0]
+    assert isinstance(func, ast.FunctionDef)
+    assert all(not (
+        isinstance(s, ast.Assign)
+        and any(isinstance(t, ast.Attribute) for t in s.targets)
+    ) for s in func.body), out_tree
+
+
 def test_regression_pure_function_evaluator_folds_container_results():
     """
     Regression for: a module-level decoder helper whose return value is a

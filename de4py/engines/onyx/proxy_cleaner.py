@@ -74,23 +74,30 @@ class ProxyCleaner:
 
         try:
             for _ in range(8):
-                before = ast.unparse(tree)
+                changed = False
                 env = self._collect_env(tree)
                 if env:
                     tree, inlined = self._inline(tree, env)
+                    if inlined:
+                        changed = True
                     # A binding is only redundant once its value replaced a real use of it;
                     # a name with no Load reference is data the analyst still needs to see.
-                    tree = self._remove_assignments(tree, inlined)
-                tree = self._strip_builtins(tree)
-                tree = self._fold_calls(tree, env)
-                tree = self._inline_class_attr_pools(tree)
-                ast.fix_missing_locations(tree)
-                try:
-                    if ast.unparse(tree) == before:
-                        break
-                except Exception:
+                    tree, removed = self._remove_assignments(tree, inlined)
+                    if removed:
+                        changed = True
+                tree, stripped = self._strip_builtins(tree)
+                if stripped:
+                    changed = True
+                tree, folded = self._fold_calls(tree, env)
+                if folded:
+                    changed = True
+                tree, pools_changed = self._inline_class_attr_pools(tree)
+                if pools_changed:
+                    changed = True
+                if not changed:
                     break
 
+            ast.fix_missing_locations(tree)
             return ast.unparse(tree)
         except RecursionError:
             return source
@@ -175,11 +182,6 @@ class ProxyCleaner:
     def _collect_env(self, tree: ast.Module) -> Dict[str, Any]:
         protected = self._find_state_machine_vars(tree)
 
-        read_names: set = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-                read_names.add(node.id)
-
         env: Dict[str, Any] = {}
         for stmt in tree.body:
             if not isinstance(stmt, ast.Assign):
@@ -236,11 +238,12 @@ class ProxyCleaner:
         return Inliner().visit(tree), inlined
 
 
-    def _remove_assignments(self, tree: ast.Module, names: Set[str]) -> ast.Module:
+    def _remove_assignments(self, tree: ast.Module, names: Set[str]):
         # `names` only contains bindings that were actually inlined, so their reads
         # are already gone — "is it still read?" would always say no. Mangling is
         # the only signal left that distinguishes an obfuscator proxy from a
         # legitimate variable whose value we merely propagated.
+        before = len(tree.body)
         new_body = []
         for stmt in tree.body:
             if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
@@ -254,10 +257,10 @@ class ProxyCleaner:
                     continue
             new_body.append(stmt)
         tree.body = new_body
-        return tree
+        return tree, len(tree.body) != before
 
 
-    def _strip_builtins(self, tree: ast.Module) -> ast.Module:
+    def _strip_builtins(self, tree: ast.Module):
         def _is_builtins_call(node):
             return (isinstance(node, ast.Call)
                     and isinstance(node.func, ast.Name)
@@ -267,23 +270,33 @@ class ProxyCleaner:
                     and node.args[0].value == 'builtins')
 
         class Stripper(ast.NodeTransformer):
+            def __init__(self):
+                self.removed = 0
+
             def visit_Assign(self, node):
                 self.generic_visit(node)
                 for t in node.targets:
                     if isinstance(t, ast.Attribute) and _is_builtins_call(t.value):
+                        self.removed += 1
                         return None
                     if isinstance(t, ast.Tuple) and all(
                         isinstance(e, ast.Attribute) and _is_builtins_call(e.value)
                         for e in t.elts
                     ):
+                        self.removed += 1
                         return None
                 return node
 
-        return Stripper().visit(tree)
+        stripper = Stripper()
+        tree = stripper.visit(tree)
+        return tree, stripper.removed > 0
 
 
-    def _fold_calls(self, tree: ast.Module, env: Dict[str, Any]) -> ast.Module:
+    def _fold_calls(self, tree: ast.Module, env: Dict[str, Any]):
         class Folder(ast.NodeTransformer):
+            def __init__(self):
+                self.changed = False
+
             def visit_Call(self, node):
                 self.generic_visit(node)
 
@@ -299,13 +312,16 @@ class ProxyCleaner:
                         if len(result) > 1000: return node
                         if isinstance(result, str) and not result.isprintable() and not is_chr:
                             return node
+                    self.changed = True
                     return ast.Constant(value=result)
                 return node
 
-        return Folder().visit(tree)
+        folder = Folder()
+        tree = folder.visit(tree)
+        return tree, folder.changed
 
 
-    def _inline_class_attr_pools(self, tree: ast.Module) -> ast.Module:
+    def _inline_class_attr_pools(self, tree: ast.Module):
         """Inline a constant pool wrapped in a synthetic class
         (``class _x: _y = const``, read once each). Only classes whose whole
         body is constant assignments qualify."""
@@ -330,7 +346,7 @@ class ProxyCleaner:
                 pool_classdefs[stmt.name] = stmt
 
         if not pools:
-            return tree
+            return tree, False
 
         # An attribute is only safe to inline where it is read exactly once -
         # more than one use would duplicate the literal instead of collapsing
@@ -374,4 +390,4 @@ class ProxyCleaner:
                 if not (isinstance(s, ast.ClassDef) and s.name in classes_to_drop)
             ]
 
-        return tree
+        return tree, bool(inlined_attrs) or bool(classes_to_drop)

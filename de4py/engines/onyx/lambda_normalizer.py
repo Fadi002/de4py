@@ -68,10 +68,10 @@ class LambdaNormalizer(ast.NodeTransformer):
         for _ in range(8):
             self.changes = 0
             tree = self.visit(tree)
-            ast.fix_missing_locations(tree)
             if self.changes == 0:
                 break
 
+        ast.fix_missing_locations(tree)
         try:
             return ast.unparse(tree)
         except Exception:
@@ -296,6 +296,9 @@ class _TopLevelBoolOpFlattener(ast.NodeTransformer):
     Converts them into sequential assignments / call statements.
     """
 
+    def __init__(self):
+        self.changed = False
+
     def _flatten_boolop(self, values: list) -> list:
         stmts = []
         for v in values:
@@ -340,6 +343,7 @@ class _TopLevelBoolOpFlattener(ast.NodeTransformer):
         if isinstance(node.value, ast.BoolOp) and self._has_walrus(node.value):
             stmts = self._flatten_boolop(node.value.values)
             if stmts:
+                self.changed = True
                 return stmts
         return node
 
@@ -349,6 +353,8 @@ class _TopLevelBoolOpFlattener(ast.NodeTransformer):
         for stmt in node.body:
             if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.BoolOp) and self._has_walrus(stmt.value):
                 flattened = self._flatten_boolop(stmt.value.values)
+                if flattened:
+                    self.changed = True
                 new_body.extend(flattened)
             else:
                 new_body.append(stmt)
@@ -365,15 +371,11 @@ def _flatten_walrus_boolops(source: str) -> str:
     except SyntaxError:
         return source
     for _ in range(5):
-        before = ast.unparse(tree)
         flattener = _TopLevelBoolOpFlattener()
         tree = flattener.visit(tree)
-        ast.fix_missing_locations(tree)
-        try:
-            if ast.unparse(tree) == before:
-                break
-        except Exception:
+        if not flattener.changed:
             break
+    ast.fix_missing_locations(tree)
     try:
         return ast.unparse(tree)
     except Exception:

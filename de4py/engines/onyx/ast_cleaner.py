@@ -42,7 +42,6 @@ class ASTCleaner(ast.NodeTransformer):
             for _ in range(5):
                 prev_changes = self.changes_made
                 tree = self.visit(tree)
-                ast.fix_missing_locations(tree)
                 if self.changes_made == prev_changes:
                     break
 
@@ -490,7 +489,6 @@ def _propagate_local_constants(stmts: list) -> list:
                 active = {k: v for k, v in const_map.items() if k not in reassigned}
             if active:
                 stmt = _ConstSubstituter(active).visit(stmt)
-                ast.fix_missing_locations(stmt)
 
         if (isinstance(stmt, ast.Assign)
                 and len(stmt.targets) == 1
