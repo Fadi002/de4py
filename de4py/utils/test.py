@@ -56,12 +56,10 @@ class De4pyTester:
     def run_environment_checks(self):
         colored_print(BLUE, "\n--- Environment Diagnostics ---", bold=True)
         
-        # 1. Python Version
         major, minor = sys.version_info[:2]
         is_py_ver_ok = (3, 8) <= (major, minor) <= (3, 14)
         self.log_result("System", "Python Version", is_py_ver_ok, f"Found {major}.{minor}. Expected 3.8-3.14")
 
-        # 2. Architecture
         from de4py.utils.platform_utils import IS_WINDOWS
         arch = platform.architecture()[0]
         if IS_WINDOWS:
@@ -72,7 +70,6 @@ class De4pyTester:
             arch_note = "64-bit not enforced on non-Windows."
         self.log_result("System", "Architecture", is_arch_ok, f"Found {arch}. {arch_note}")
 
-        # 3. Internet
         has_internet = False
         try:
             socket.create_connection(("8.8.8.8", 53), timeout=3)

@@ -12,7 +12,6 @@ import re
 import requests
 from PySide6.QtCore import QThread, Signal
 
-from de4py.config.config import settings
 
 DOWNLOAD_DIR = os.path.join(os.path.expanduser("~"), ".de4py", "updates")
 

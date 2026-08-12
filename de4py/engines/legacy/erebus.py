@@ -14,19 +14,15 @@ Provides: Deobfuscator, Result (deobfuscation runner), unwrap (blob extractor).
 """
 
 from ast import NodeTransformer, parse, unparse
-from ast import unparse
 from functools import reduce
 from operator import add
-from typing import Any, Dict, List
-from typing import Any, Dict, Tuple, Type
-from typing import List
+from typing import Any, Dict, List, Tuple, Type
 import ast
 import logging
-import string
 import zlib
 
+from de4py.engines.onyx.safe_eval import safe_eval_scalar
 
-# ── Blob Unwrapper ──────────────────────────────────────────────────────────
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +48,6 @@ def unwrap(code: str) -> str:
     logger.info(f"Found blob of length {len(blob)}")
     return zlib.decompress(blob).decode()
 
-
-# ── AST Transformers ─────────────────────────────────────────────────────────
 
 CONSTANTS = (
     ast.Name,
@@ -89,10 +83,9 @@ class StringSubscriptSimple(ast.NodeTransformer):
 
     def visit_Subscript(self, node: ast.Subscript):
         if (isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)) and isinstance(node.slice, ast.Slice):
-            code = unparse(node.slice.step)
-            if all(s not in code for s in string.ascii_letters):
-                s = node.value.value[:: eval(unparse(node.slice.step))]
-                return ast.Constant(value=s)
+            ok, step = safe_eval_scalar(node.slice.step)
+            if ok and isinstance(step, int) and step != 0:
+                return ast.Constant(value=node.value.value[::step])
         return super().generic_visit(node)
 
 
@@ -118,7 +111,6 @@ class InlineConstants(ast.NodeTransformer):
                 node.targets[0], ast.Name
             ):
                 constants[node.targets[0].id] = node.value
-                # delete the assignment
                 return ast.Module(body=[], type_ignores=[])
             return super().generic_visit(node)
 
@@ -127,7 +119,6 @@ class InlineConstants(ast.NodeTransformer):
         return super().visit(node)
 
     def visit_Name(self, node: ast.Name) -> Any:
-        """Replace the name with the constant if it's in the constants dict"""
         if node.id in constants:
             return constants[node.id]
         return super().generic_visit(node)
@@ -299,8 +290,6 @@ class RemoveFromBuiltins(ast.NodeTransformer):
             return ast.Module(body=[], type_ignores=[])
         return super().generic_visit(node)
 
-
-# ── Deobfuscator ─────────────────────────────────────────────────────────────
 
 class Result:
     def __init__(self, code: str, passes: int, variables: Dict[str, Any]) -> None:

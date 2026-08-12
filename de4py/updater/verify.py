@@ -8,7 +8,6 @@
 # See the LICENSE file for details.
 
 import os
-import json
 import zipfile
 import tempfile
 import requests

@@ -9,8 +9,6 @@
 
 from PySide6.QtCore import QThread, Signal
 
-from de4py.ui.controllers import deobfuscator_controller
-
 
 class DeobfuscatorWorker(QThread):
     finished = Signal(str)
@@ -24,7 +22,8 @@ class DeobfuscatorWorker(QThread):
         from de4py.utils import sentry
         with sentry.transaction("Deobfuscator Task", "worker.deobfuscator"):
             try:
-                result = deobfuscator_controller.run_detect_obfuscator(self._file_path)
+                from de4py.engines.legacy.detector import detect_obfuscator
+                result = detect_obfuscator(self._file_path)
                 self.finished.emit(str(result))
             except Exception as e:
                 self.error.emit(f"Error: {e}")

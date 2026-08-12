@@ -14,6 +14,7 @@ One task only, emits result signal, no direct UI updates
 from PySide6.QtCore import QThread, Signal
 
 from de4py.ui.controllers import pyshell_controller
+from de4py.utils.shell import inject_shell, stealth_inject_shell, show_console
 
 
 class InjectionWorker(QThread):
@@ -30,9 +31,9 @@ class InjectionWorker(QThread):
         with sentry.transaction("PyShell Injection Task", "worker.pyshell.inject"):
             try:
                 if self._stealth:
-                    result = pyshell_controller.stealth_inject_shell(self._pid)
+                    result = stealth_inject_shell(self._pid)
                 else:
-                    result = pyshell_controller.inject_shell(self._pid)
+                    result = inject_shell(self._pid)
 
                 if result and result[1]:
                     pyshell_controller.set_handle(result[0])
@@ -71,7 +72,7 @@ class ShowConsoleWorker(QThread):
 
     def run(self):
         try:
-            result = pyshell_controller.show_console(self._pid)
+            result = show_console(self._pid)
             self.finished.emit(result or False)
         except Exception as e:
             self.error.emit(str(e))

@@ -126,7 +126,11 @@ class TriageEngine:
             return result
 
         for name, (weight, pattern) in OBFUSCATION_SIGNATURES.items():
-            if pattern.search(source, re.MULTILINE | re.DOTALL):
+            # `Pattern.search(s, pos, endpos)` takes a start offset, not flags:
+            # passing re.MULTILINE|re.DOTALL here made every signature begin
+            # scanning at character 24, silently missing markers near the top of
+            # the file. Flags belong on the pattern, which already carries them.
+            if pattern.search(source):
                 result.flags.append(name)
                 result.score = min(10.0, result.score + weight)
                 logging.debug("Found indicator: %s (+%s)", name, weight)

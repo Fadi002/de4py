@@ -18,7 +18,7 @@ from PySide6.QtCore import (
     QSize, QPointF,
     QRectF
 )
-from PySide6.QtGui import QColor, QCursor, QPainter, QIcon
+from PySide6.QtGui import QColor, QCursor, QPainter, QIcon, QPen
 
 from de4py.utils import sentry
 from de4py.ui.motion.material import MaterialState, MaterialPainter

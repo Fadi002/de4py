@@ -81,3 +81,29 @@ def test_while_false_removed(cleaner):
     assert "while False" not in result
     assert "y = 2" in result
 
+
+def test_walrus_binding_survives_constant_folding():
+    """
+    Regression for: constant-folding an expression that contains a walrus
+    assignment (`(x := 98).__mod__.__name__[2:-2][::-1]`, a real pattern from
+    challenge.py) correctly computed the fold's *value* but replaced the
+    *whole expression* with that value, silently erasing the `x = 98`
+    binding the walrus performs as a side effect. A later, unrelated use of
+    `x` was then a genuine NameError in the "cleaned" output - a worse
+    outcome than leaving the ugly-but-correct original expression alone.
+    """
+    from de4py.engines.onyx.constant_eval import fold_constants
+    import ast
+    source = (
+        "value = (x := 98).__mod__.__name__[2:-2][::-1]\n"
+        "print(x)\n"
+    )
+    out = fold_constants(source)
+    tree = ast.parse(out)
+    walrus_targets = {n.target.id for n in ast.walk(tree)
+                      if isinstance(n, ast.NamedExpr) and isinstance(n.target, ast.Name)}
+    loads = {n.id for n in ast.walk(tree)
+             if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+    assert "x" in walrus_targets, f"walrus binding was erased: {out!r}"
+    assert "x" in loads, f"the later read of x disappeared too: {out!r}"
+

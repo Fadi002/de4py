@@ -11,9 +11,10 @@ import sys
 import os
 import argparse
 
-from de4py.core.telemetry_ping import start as _start_telemetry_ping
 from de4py.config.config import settings
 from de4py.utils.platform_utils import IS_WINDOWS, IS_LINUX, IS_BSD
+
+DEFAULT_QSS = ""
 
 
 def check_qt_xcb():
@@ -109,8 +110,7 @@ def check_dependencies():
         sys.exit(1)
 
 def load_stylesheet(app):
-    """Loads the dark theme QSS stylesheet."""
-    global DEFAULT_QSS  # noqa: needed for stylesheet caching
+    global DEFAULT_QSS
     from PySide6.QtCore import QFile, QTextStream
     theme_path = os.path.join(os.path.dirname(__file__), "ui", "themes", "dark_theme.qss")
     if os.path.exists(theme_path):
@@ -125,18 +125,14 @@ def load_stylesheet(app):
     return ""
 
 def set_stealth_title():
-    """Sets a random console title for stealth if enabled."""
+    if not IS_WINDOWS or not settings.stealth_title:
+        return None
     import random
     import string
     import ctypes
-    if settings.stealth_title:
-        random_title = ''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(10, 40)))
-        try:
-            ctypes.windll.kernel32.SetConsoleTitleW(random_title)
-            return random_title
-        except Exception:
-            pass
-    return None
+    random_title = ''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(10, 40)))
+    ctypes.windll.kernel32.SetConsoleTitleW(random_title)
+    return random_title
 
 def main():
 
@@ -162,7 +158,9 @@ def main():
 
 
     check_dependencies()
-    _start_telemetry_ping()
+
+    from de4py.api.telemetry import start_ping_async
+    start_ping_async()
 
     import logging
     import colorama
@@ -264,12 +262,9 @@ def main():
         def _on_stealth_changed(enabled):
             if enabled:
                 set_stealth_title()
-            else:
-                try:
-                    import ctypes
-                    ctypes.windll.kernel32.SetConsoleTitleW("de4py")
-                except Exception:
-                    pass
+            elif IS_WINDOWS:
+                import ctypes
+                ctypes.windll.kernel32.SetConsoleTitleW("de4py")
 
         def _initialize_optional_services():
             try:

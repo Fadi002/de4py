@@ -63,7 +63,6 @@ class LogPanel(QWidget):
         self.log_list.addItem(text)
         self.log_list.scrollToBottom()
         
-        # Color coding
         item = self.log_list.item(self.log_list.count() - 1)
         if level == "ERROR": item.setForeground(Qt.red)
         elif level == "WARNING": item.setForeground(Qt.yellow)

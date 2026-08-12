@@ -405,15 +405,12 @@ class MainWindow(QMainWindow):
         from de4py.lang import tr, keys
         self.setWindowTitle(tr(keys.APP_NAME))
 
-        if hasattr(self.sidebar, 'retranslate_ui'):
-            self.sidebar.retranslate_ui()
+        self.sidebar.retranslate_ui()
 
-        if hasattr(self, 'hamburger_btn'):
-            self.hamburger_btn.setToolTip(tr(TOOLTIP_HAMBURGER))
-            self.hamburger_btn.setAccessibleName(tr(TOOLTIP_HAMBURGER))
+        self.hamburger_btn.setToolTip(tr(TOOLTIP_HAMBURGER))
+        self.hamburger_btn.setAccessibleName(tr(TOOLTIP_HAMBURGER))
 
-        if hasattr(self, 'title_bar'):
-            self.title_bar.retranslate_ui()
+        self.title_bar.retranslate_ui()
 
         for widget in self._screen_widgets.values():
             if hasattr(widget, 'retranslate_ui'):

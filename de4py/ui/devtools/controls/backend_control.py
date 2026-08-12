@@ -26,7 +26,6 @@ class BackendControl(QWidget):
         self.layout.setContentsMargins(10, 10, 10, 10)
         self.layout.setSpacing(10)
         
-        # 1. API Mode (Horizontal Row)
         self.layout.addWidget(QLabel(f"<b>{tr(keys.DEV_BACKEND_STATE_TITLE)}</b>"))
         self.mode_group = QButtonGroup(self)
         mode_row = QHBoxLayout()
@@ -44,7 +43,6 @@ class BackendControl(QWidget):
             mode_row.addWidget(radio)
         self.layout.addLayout(mode_row)
             
-        # 2. Latency (Compact)
         latency_box = QHBoxLayout()
         latency_box.addWidget(QLabel(tr(keys.DEV_BACKEND_LATENCY)))
         self.latency_spin = QSpinBox()
@@ -56,7 +54,6 @@ class BackendControl(QWidget):
         latency_box.addStretch()
         self.layout.addLayout(latency_box)
         
-        # 3. Network Presets (Grid)
         self.layout.addWidget(QLabel(f"<b>{tr(keys.DEV_BACKEND_CONDITIONS_TITLE)}</b>"))
         grid = QGridLayout()
         grid.setSpacing(5)

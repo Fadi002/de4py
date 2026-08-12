@@ -9,25 +9,13 @@
 
 import logging
 import os
-from de4py.core.interfaces import Deobfuscator
+import threading
 from de4py.engines.onyx.pipeline import Pipeline
 
 logger = logging.getLogger(__name__)
 
 
-class OnyxAlpha(Deobfuscator):
-    @property
-    def name(self) -> str:
-        return "de4py Onyx-Alpha"
-
-    @property
-    def description(self) -> str:
-        return "Multi-pass pipeline: triage, string decoding, AST cleaning, and rule-based renaming. Uses Ollama local LLM for extreme cases."
-
-    @property
-    def version(self) -> str:
-        return "1.1.0"
-
+class OnyxAlpha:
     def deobfuscate(self, file_path: str) -> str:
         if not os.path.exists(file_path):
             return f"Error: File not found: {file_path}"
@@ -44,13 +32,9 @@ class OnyxAlpha(Deobfuscator):
                 feed_sample_bg(file_path)
             except Exception:
                 pass
-        
-        import threading
-        threading.Thread(target=_feed, daemon=True).start()
 
         filename = os.path.basename(file_path)
-        
-        # Build the pipeline — wrapped in a top-level guard so the app never crashes
+
         try:
             pipeline = Pipeline(
                 use_llm=True,
@@ -83,7 +67,6 @@ class OnyxAlpha(Deobfuscator):
                 f"# Original code preserved below:\n\n{source}"
             )
         
-        # Build the output text shown in the UI
         if not result.success:
             return (
                 f"de4py Onyx-Alpha failed (Syntax Error in output)\n{'-'*40}\n"
@@ -92,7 +75,7 @@ class OnyxAlpha(Deobfuscator):
             )
             
         header = [
-            f"# Cleaned by de4py Onyx-Alpha",
+            "# Cleaned by de4py Onyx-Alpha",
             f"# Engines used: {', '.join(result.log) if result.log else 'None'}",
             f"# Triage Score: {result.triage.score:.1f}/10.0" if result.triage else "",
             "\n"

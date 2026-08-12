@@ -14,15 +14,8 @@ Centralized constants for all translation keys.
 Using constants prevents typos and enables IDE autocomplete.
 """
 
-# =============================================================================
-# Global
-# =============================================================================
 APP_NAME = "common.app_name"
 
-# =============================================================================
-# Navigation
-
-# =============================================================================
 NAV_HOME = "nav.home"
 NAV_DEOBFUSCATOR = "nav.deobfuscator"
 NAV_PYSHELL = "nav.pyshell"
@@ -32,9 +25,6 @@ NAV_PYLINGUAL = "nav.pylingual"
 NAV_SETTINGS = "nav.settings"
 NAV_ABOUT = "nav.about"
 
-# =============================================================================
-# Screen Titles
-# =============================================================================
 SCREEN_TITLE_HOME = "screen.home.title"
 SCREEN_TITLE_DEOBFUSCATOR = "screen.deobfuscator.title"
 SCREEN_TITLE_PYSHELL = "screen.pyshell.title"
@@ -45,18 +35,12 @@ SCREEN_TITLE_SETTINGS = "screen.settings.title"
 SCREEN_TITLE_ABOUT = "screen.about.title"
 SCREEN_TITLE_BEHAVIOR = "screen.behavior.title"
 
-# =============================================================================
-# Home Screen
-# =============================================================================
 HOME_CHANGELOG_TITLE = "screen.home.changelog"
 HOME_ENV_INFO = "screen.home.env_info"
 HOME_PYTHON_VERSION = "screen.home.python_version"
 HOME_ARCH = "screen.home.arch"
 HOME_OS = "screen.home.os"
 
-# =============================================================================
-# Settings Screen
-# =============================================================================
 SETTINGS_LANGUAGE = "screen.settings.language"
 SETTINGS_RPC = "screen.settings.rpc"
 SETTINGS_STEALTH = "screen.settings.stealth"
@@ -75,18 +59,12 @@ SETTINGS_UPDATE_AVAILABLE = "screen.settings.update_available"
 SETTINGS_UPDATE_DOWNLOAD_BTN = "screen.settings.update_download_btn"
 SETTINGS_UPDATE_OPENING_DIALOG = "screen.settings.update_opening_dialog"
 
-# =============================================================================
-# Deobfuscator Screen
-# =============================================================================
 DEOBF_SELECT_FILE = "screen.deobfuscator.select_file"
 DEOBF_DEOBFUSCATE = "screen.deobfuscator.deobfuscate"
 DEOBF_OUTPUT = "screen.deobfuscator.output"
 DEOBF_PROCESSING = "screen.deobfuscator.processing"
 DEOBF_RESEARCH_NOTE = "screen.deobfuscator.research_note"
 
-# =============================================================================
-# PyShell Screen
-# =============================================================================
 PYSHELL_ATTACH = "screen.pyshell.attach"
 PYSHELL_DETACH = "screen.pyshell.detach"
 PYSHELL_EXECUTE = "screen.pyshell.execute"
@@ -119,10 +97,6 @@ PYSHELL_CMD_FAILED = "screen.pyshell.msg.failed"
 PYSHELL_BTN_STEALTH = "screen.pyshell.btn.stealth"
 
 
-
-# =============================================================================
-# Analyzer Screen
-# =============================================================================
 ANALYZER_SELECT_FILE = "screen.analyzer.select_file"
 ANALYZER_ANALYZE = "screen.analyzer.analyze"
 ANALYZER_RESULTS = "screen.analyzer.results"
@@ -136,9 +110,6 @@ ANALYZER_ONLY_EXE = "screen.analyzer.msg.only_exe"
 ANALYZER_EXECUTED = "screen.analyzer.msg.executed"
 
 
-# =============================================================================
-# Plugins Screen
-# =============================================================================
 PLUGINS_INSTALLED = "screen.plugins.installed"
 PLUGINS_APPLY = "screen.plugins.apply"
 PLUGINS_RESET = "screen.plugins.reset"
@@ -153,9 +124,6 @@ PLUGINS_THEME_FAILED = "screen.plugins.msg.theme_failed"
 PLUGINS_THEME_RESET = "screen.plugins.msg.theme_reset"
 
 
-# =============================================================================
-# PyLingual Screen
-# =============================================================================
 PYLINGUAL_MODE_OFFLINE = "screen.pylingual.mode_offline"
 PYLINGUAL_MODE_ONLINE = "screen.pylingual.mode_online"
 PYLINGUAL_OFFLINE = "screen.pylingual.mode_offline"
@@ -182,10 +150,6 @@ PYLINGUAL_PLACEHOLDER_RESULT = "screen.pylingual.placeholder.result"
 PYLINGUAL_PLACEHOLDER_SELECTED = "screen.pylingual.placeholder.selected"
 
 
-
-# =============================================================================
-# Behavior Monitor Screen
-# =============================================================================
 BEHAVIOR_START = "screen.behavior.start"
 BEHAVIOR_STOP = "screen.behavior.stop"
 BEHAVIOR_NO_PROCESS = "screen.behavior.no_process"
@@ -199,18 +163,12 @@ BM_PYC_DUMPER = "screen.behavior.pyc_dumper"
 BM_BACK_TO_MENU = "screen.behavior.back_to_menu"
 
 
-# =============================================================================
-# About Screen
-# =============================================================================
 ABOUT_VERSION = "screen.about.version"
 ABOUT_BUILD = "screen.about.build"
 ABOUT_CREDITS = "screen.about.credits"
 ABOUT_GITHUB = "screen.about.github"
 ABOUT_DISCORD = "screen.about.discord"
 
-# =============================================================================
-# Common UI Elements
-# =============================================================================
 BTN_APPLY = "common.btn.apply"
 BTN_CANCEL = "common.btn.cancel"
 BTN_OK = "common.btn.ok"
@@ -224,9 +182,6 @@ BTN_CLEAR = "common.btn.clear"
 LBL_OUTPUT = "common.lbl.output"
 
 
-# =============================================================================
-# Common Messages
-# =============================================================================
 MSG_LOADING = "common.msg.loading"
 MSG_ERROR = "common.msg.error"
 MSG_SUCCESS = "common.msg.success"
@@ -240,17 +195,11 @@ MSG_FILE_NOT_FOUND = "common.msg.file_not_found"
 MSG_OPERATION_COMPLETE = "common.msg.operation_complete"
 MSG_OPERATION_FAILED = "common.msg.operation_failed"
 
-# =============================================================================
-# Plural Forms
-# =============================================================================
 PLURAL_FILES = "plural.files"
 PLURAL_ITEMS = "plural.items"
 PLURAL_SECONDS = "plural.seconds"
 PLURAL_MINUTES = "plural.minutes"
 
-# =============================================================================
-# Tooltips
-# =============================================================================
 TOOLTIP_HAMBURGER = "tooltip.hamburger"
 TOOLTIP_MINIMIZE = "tooltip.minimize"
 TOOLTIP_CLOSE = "tooltip.close"
@@ -260,9 +209,6 @@ TOOLTIP_PYSHELL_SELECT = "tooltip.pyshell.select"
 TOOLTIP_PYSHELL_EXECUTE = "tooltip.pyshell.execute"
 
 
-# =============================================================================
-# Dialogs
-# =============================================================================
 DIALOG_FILE_SELECT = "dialog.file_select"
 DIALOG_SAVE_AS = "dialog.save_as"
 DIALOG_CONFIRM_EXIT = "dialog.confirm_exit"
@@ -271,16 +217,10 @@ DIALOG_VALUE_LABEL = "dialog.value_label"
 DIALOG_SUBMIT_BTN = "dialog.submit_btn"
 
 
-# =============================================================================
-# Notifications
-# =============================================================================
 NOTIF_COPIED = "notification.copied"
 NOTIF_SAVED = "notification.saved"
 NOTIF_LANGUAGE_CHANGED = "notification.language_changed"
 
-# =============================================================================
-# DevTools
-# =============================================================================
 DEV_TITLE = "devtools.title"
 DEV_TAB_APP = "devtools.tabs.app"
 DEV_TAB_UI = "devtools.tabs.ui"

@@ -8,6 +8,32 @@
 # See the LICENSE file for details.
 
 import traceback, base64, ast
+
+from de4py.engines.onyx.safe_eval import SafeFunctionRunner, SafeEvalError
+
+
+def _resolve_trust(tree: ast.Module):
+    """
+    Recover the module-level ``trust`` binding without running the file.
+
+    The original implementation exec'd the whole sample to read one variable,
+    which meant any file merely containing the word "trust" was executed on the
+    analyst's machine. Interpreting the module under the bounded evaluator gives
+    the same value for real devtool output and refuses everything else.
+    """
+    runner = SafeFunctionRunner({})
+    env = runner.env
+    for stmt in tree.body:
+        if not isinstance(stmt, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+            continue
+        try:
+            runner._exec(stmt, env)
+        except (SafeEvalError, Exception):
+            continue
+    value = env.get('trust')
+    return value if isinstance(value, (str, bytes)) else None
+
+
 def devtool(file_path):
         try:
             print('= development tools deobfuscator start =')
@@ -15,15 +41,14 @@ def devtool(file_path):
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
                 file_content = ''.join(file.readlines()[:-1])
             parsed_content = ast.parse(file_content, filename=file_path)
-            global_vars = {}
-            local_vars = {}
-            exec(compile(parsed_content, filename=file_path, mode='exec'), global_vars, local_vars)
-            trust_value = local_vars.get('trust')
+            trust_value = _resolve_trust(parsed_content)
             if not trust_value:
                 return f"Error: 'trust' variable not found in {file_path}"
-                
-            code = base64.b64decode(trust_value.encode()).decode()
-            del local_vars, global_vars, parsed_content, file_content
+
+            if isinstance(trust_value, str):
+                trust_value = trust_value.encode()
+            code = base64.b64decode(trust_value).decode()
+            del parsed_content, file_content
             cleaned_filename = filename.split('.')[0]+"-cleaned.py"
             with open(cleaned_filename, 'w', encoding='utf-8') as f:
                  f.write('# cleaned with de4py\n\n' + code)

@@ -73,3 +73,30 @@ def test_unchanged_clean_code(decoder):
     result = decoder.decode_all(source)
     assert result == source
 
+
+def test_chr_chain_does_not_corrupt_attribute_access(decoder):
+    """
+    Regression for: `_decode_chr_chains`'s regex matched `chr(N)` anywhere in
+    the text, including as the tail of an attribute access
+    (`__builtins__.chr(78)`, a common builtins-indirection idiom to defeat a
+    static "chr(" grep). Substituting only the `chr(78)` span for the
+    decoded literal left the attribute-access dot dangling
+    (`__builtins__.'N'`), which is not valid Python and broke the whole
+    file's syntax on the very next AST-based pass.
+    """
+    import ast
+    source = "x = __builtins__.chr(78)\n"
+    result = decoder.decode_all(source)
+    ast.parse(result)  # must stay syntactically valid
+    assert "__builtins__.chr(78)" in result, (
+        f"an attribute-accessed chr() call must be left alone, got: {result!r}"
+    )
+
+
+def test_chr_chain_still_folds_bare_calls(decoder):
+    """The attribute-access guard must not stop the bare-name case from folding."""
+    source = "x = chr(104) + chr(105)\n"
+    result = decoder.decode_all(source)
+    assert "hi" in result
+    assert "chr(" not in result
+

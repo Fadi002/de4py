@@ -14,6 +14,8 @@ Normalizes deeply obfuscated Python code by folding lambdas, walrus chains, and 
 import ast
 import re
 import copy
+
+from de4py.engines.onyx.safe_eval import safe_eval
 from typing import List, Optional, Tuple, Union
 
 
@@ -38,14 +40,7 @@ def _is_inlineable_value(node: ast.expr) -> bool:
 
 def _try_eval_const(node: ast.expr) -> Tuple[bool, object]:
     """Safely evaluate a node if it's a pure constant expression."""
-    try:
-        result = eval(
-            compile(ast.Expression(body=node), "<eval>", "eval"),
-            {"__builtins__": {"chr": chr, "ord": ord, "len": len, "str": str, "int": int, "bool": bool, "abs": abs, "min": min, "max": max, "sum": sum, "range": range, "list": list, "tuple": tuple, "dict": dict, "set": set, "bytes": bytes, "bytearray": bytearray, "type": type, "isinstance": isinstance, "getattr": getattr, "hasattr": hasattr, "map": map, "filter": filter, "zip": zip, "enumerate": enumerate, "reversed": reversed, "sorted": sorted}},
-        )
-        return True, result
-    except Exception:
-        return False, None
+    return safe_eval(node)
 
 
 def _is_lambda_identity(node: ast.Lambda) -> bool:
@@ -82,61 +77,6 @@ class LambdaNormalizer(ast.NodeTransformer):
         except Exception:
             return source
 
-    def visit_Call(self, node: ast.Call) -> ast.expr:
-        """(lambda x: body)(arg)  →  inline substitution where safe."""
-        self.generic_visit(node)
-
-        if (
-            isinstance(node.func, ast.Lambda)
-            and not node.keywords
-            and len(node.args) == len(node.func.args.args)
-            and not node.func.args.vararg
-            and not node.func.args.kwonlyargs
-        ):
-            lam   = node.func
-            body  = lam.body
-
-            # Single-arg identity: (lambda x: x)(val) → val
-            if _is_lambda_identity(lam) and len(node.args) == 1:
-                self.changes += 1
-                return node.args[0]
-
-            # No-arg: (lambda: expr)()  →  expr
-            if len(lam.args.args) == 0 and len(node.args) == 0:
-                self.changes += 1
-                return body
-
-            # Constant-arg, pure body: (lambda x: x+1)(5)  →  6
-            if all(_is_const_like_node(a) for a in node.args):
-                ok, val = _try_eval_const(node)
-                if ok:
-                    self.changes += 1
-                    return ast.Constant(value=val)
-
-        # getattr(obj, "a" + "b")  →  getattr(obj, "ab")
-        if (
-            isinstance(node.func, ast.Name)
-            and node.func.id == "getattr"
-            and len(node.args) == 2
-        ):
-            ok, val = _try_eval_const(node.args[1])
-            if ok and isinstance(val, str):
-                node.args[1] = ast.Constant(value=val)
-                self.changes += 1
-
-        # __import__("%c%s" % (...))  →  simplify the string
-        if (
-            isinstance(node.func, ast.Name)
-            and node.func.id == "__import__"
-            and len(node.args) == 1
-        ):
-            ok, val = _try_eval_const(node.args[0])
-            if ok and isinstance(val, str):
-                node.args[0] = ast.Constant(value=val)
-                self.changes += 1
-
-        return node
-
     def visit_BinOp(self, node: ast.BinOp) -> ast.expr:
         """Fold  "%c" % N  →  chr(N) character literal, and  "%s%s" % (a,b)  →  str."""
         self.generic_visit(node)
@@ -147,7 +87,6 @@ class LambdaNormalizer(ast.NodeTransformer):
                 self.changes += 1
                 return ast.Constant(value=val)
 
-        # String addition constant fold
         if isinstance(node.op, ast.Add):
             ok, val = _try_eval_const(node)
             if ok and isinstance(val, (str, int, float)):
@@ -219,19 +158,17 @@ class LambdaNormalizer(ast.NodeTransformer):
                     )
                 )
             elif isinstance(val, ast.Constant):
-                pass  # skip bare True/False/None/... sentinels
+                pass
             elif isinstance(val, ast.Name):
-                pass  # skip bare variable references
+                pass
             elif isinstance(val, ast.Call):
                 # Keep calls as expression statements (they may have side effects)
                 stmts.append(ast.Expr(value=val, lineno=getattr(val, 'lineno', 1), col_offset=getattr(val, 'col_offset', 0)))
             elif isinstance(val, ast.BoolOp):
-                # Nested BoolOp — try to recurse
                 sub = self._extract_walrus_chain(val.values)
                 if sub:
                     has_walrus = True
                     stmts.extend(sub)
-            # else: skip other complex expressions as sentinels
         return stmts if (stmts and has_walrus) else None
 
     def visit_NamedExpr(self, node: ast.NamedExpr) -> ast.NamedExpr:
@@ -244,10 +181,6 @@ class LambdaNormalizer(ast.NodeTransformer):
         return node
 
     def visit_Assign(self, node: ast.Assign) -> ast.Assign:
-        """
-        x = (lambda: False)  →  x = False
-        x = (lambda: "string")  →  x = "string"
-        """
         self.generic_visit(node)
 
         if isinstance(node.value, ast.Lambda) and not node.value.args.args:
@@ -279,41 +212,34 @@ class LambdaNormalizer(ast.NodeTransformer):
             return ast.Constant(value=ord(node.args[0].value))
         return node
 
-    def visit_Call(self, node: ast.Call) -> ast.expr:  # noqa: F811
-        """Dispatch to specialized call handlers."""
+    def visit_Call(self, node: ast.Call) -> ast.expr:
         self.generic_visit(node)
 
-        # chr() folding
         if isinstance(node.func, ast.Name) and node.func.id == "chr":
             r = self.visit_Call_chr(node)
             if r is not node:
                 return r
 
-        # ord() folding
         if isinstance(node.func, ast.Name) and node.func.id == "ord":
             r = self.visit_Call_ord(node)
             if r is not node:
                 return r
 
-        # (lambda x: body)(arg) IIFE
         if isinstance(node.func, ast.Lambda):
             lam = node.func
             if not node.keywords and len(node.args) == len(lam.args.args):
                 if len(lam.args.args) == 0:
-                    # (lambda: expr)()
                     self.changes += 1
                     return lam.body
                 if _is_lambda_identity(lam) and len(node.args) == 1:
                     self.changes += 1
                     return node.args[0]
-                # constant args (scalars or const collections)
                 if all(_is_const_like_node(a) for a in node.args):
                     ok, val = _try_eval_const(node)
                     if ok and isinstance(val, (str, int, float, bool, type(None))):
                         self.changes += 1
                         return ast.Constant(value=val)
 
-        # getattr string folding
         if (isinstance(node.func, ast.Name) and node.func.id == "getattr"
                 and len(node.args) == 2):
             ok, val = _try_eval_const(node.args[1])
@@ -321,7 +247,6 @@ class LambdaNormalizer(ast.NodeTransformer):
                 node.args[1] = ast.Constant(value=val)
                 self.changes += 1
 
-        # __import__ string folding
         if (isinstance(node.func, ast.Name) and node.func.id == "__import__"
                 and len(node.args) == 1):
             ok, val = _try_eval_const(node.args[0])
@@ -329,7 +254,6 @@ class LambdaNormalizer(ast.NodeTransformer):
                 node.args[0] = ast.Constant(value=val)
                 self.changes += 1
 
-        # General constant-call folding
         ok, val = _try_eval_const(node)
         if ok and isinstance(val, (str, int, float, bool, type(None))):
             self.changes += 1
@@ -351,7 +275,6 @@ def _normalize_percent_format(source: str) -> str:
     Statically evaluate simple '%c' % N  and  '%s' % "x"  patterns
     in the source text before AST parsing.
     """
-    # "%c" % 65  →  'A'
     def repl_c(m: re.Match) -> str:
         try:
             n = int(m.group(1).strip())
@@ -392,17 +315,16 @@ class _TopLevelBoolOpFlattener(ast.NodeTransformer):
                     col_offset=getattr(v, 'col_offset', 0),
                 ))
             elif isinstance(v, ast.Constant):
-                pass  # sentinel values — skip
+                pass
             elif isinstance(v, ast.Name):
-                pass  # bare variable reads — skip
+                pass
             elif isinstance(v, ast.Tuple) and not v.elts:
-                pass  # empty tuple () sentinel — skip
+                pass
             elif isinstance(v, ast.Dict) and not v.keys:
-                pass  # empty dict {} sentinel — skip
+                pass
             elif isinstance(v, ast.List) and not v.elts:
-                pass  # empty list [] sentinel — skip
+                pass
             else:
-                # Unknown expression — keep as Expr stmt
                 stmts.append(ast.Expr(
                     value=v,
                     lineno=getattr(v, 'lineno', 1),
@@ -411,7 +333,6 @@ class _TopLevelBoolOpFlattener(ast.NodeTransformer):
         return stmts
 
     def _has_walrus(self, node: ast.expr) -> bool:
-        """Return True if the expression contains any walrus operators."""
         return any(isinstance(n, ast.NamedExpr) for n in ast.walk(node))
 
     def visit_Expr(self, node: ast.Expr):
@@ -512,10 +433,7 @@ def _propagate_constants(source: str) -> str:
 class LambdaChainDeobfuscator:
 
     def deobfuscate(self, source: str) -> str:
-        """
-        Apply all lambda/walrus/string normalization passes.
-        Returns cleaned source, or the original source on any failure.
-        """
+        """Apply all lambda/walrus/string normalization passes."""
         try:
             source = _preprocess_string_escapes(source)
             source = _normalize_percent_format(source)

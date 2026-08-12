@@ -38,7 +38,7 @@ def custom_error(exc_type, exc_value, exc_traceback):
     print(f"{Fore.RED}=== End of Traceback ==={Style.RESET_ALL}")
 
     from de4py.config.config import settings
-    if not getattr(settings, "telemetry", True):
+    if not settings.telemetry:
         return
 
     try:

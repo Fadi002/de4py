@@ -167,7 +167,7 @@ class SettingsScreen(QWidget):
             self.stealth_checkbox.setChecked(settings.stealth_title)
             self.plugins_checkbox.setChecked(settings.load_plugins)
             self.transparent_checkbox.setChecked(settings.transparent_ui)
-            self.telemetry_checkbox.setChecked(getattr(settings, "telemetry", True))
+            self.telemetry_checkbox.setChecked(settings.telemetry)
             self.auto_update_check_checkbox.setChecked(settings.auto_update_check)
             self.auto_install_checkbox.setChecked(settings.auto_update_install)
             idx = self.lang_combo.findData(settings.language)

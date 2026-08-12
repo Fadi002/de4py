@@ -99,7 +99,6 @@ class PyLingualClient:
         
         raw_pct = response.get("percentage")
         if raw_pct is None:
-            # Check other possible keys
             raw_pct = response.get("progress", response.get("percent", 0.0))
         
         try:
@@ -132,7 +131,6 @@ class PyLingualClient:
         file_path: str,
         progress_callback: Optional[Callable[[str, float, str], None]] = None,
     ) -> DecompileResult:
-        # Step 1: Upload
         if progress_callback:
             progress_callback("uploading", 0.0, "Uploading file...")
         
@@ -143,7 +141,6 @@ class PyLingualClient:
             if progress_callback:
                 progress_callback(STAGE_DONE, 100.0, "Retrieved from cache")
         else:
-            # Step 2: Poll for completion
             while True:
                 progress = self.check_progress(upload.identifier)
                 
@@ -165,7 +162,6 @@ class PyLingualClient:
                 
                 time.sleep(self.poll_interval)
         
-        # Step 3: Get result
         return self.get_result(upload.identifier)
     
     def close(self):

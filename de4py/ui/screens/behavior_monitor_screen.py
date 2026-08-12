@@ -127,6 +127,13 @@ class BehaviorMonitorScreen(QWidget):
     def _add_output(self, text: str):
         self.output.append_text(text)
 
+    def _create_dump_file(self, filename: str) -> str:
+        dump_path = os.path.join(os.getcwd(), filename)
+        if not os.path.exists(dump_path):
+            with open(dump_path, 'w'):
+                pass
+        return dump_path
+
     def _on_monitor_files(self, state):
         try:
             if state == Qt.CheckState.Checked.value:
@@ -165,11 +172,8 @@ class BehaviorMonitorScreen(QWidget):
 
     def _on_dump_socket(self, state):
         try:
-            dump_path = os.path.join(os.getcwd(), "SocketDump.txt")
             if state == Qt.CheckState.Checked.value:
-                if not os.path.exists(dump_path):
-                    with open(dump_path, 'w'):
-                        pass
+                dump_path = self._create_dump_file("SocketDump.txt")
                 pyshell_controller.write_to_pipe(f"DumpConnections||{dump_path}")
                 self._add_output("starting to dump sockets content to the current script directory.")
             else:
@@ -180,11 +184,8 @@ class BehaviorMonitorScreen(QWidget):
 
     def _on_dump_ssl(self, state):
         try:
-            dump_path = os.path.join(os.getcwd(), "OpenSSLDump.txt")
             if state == Qt.CheckState.Checked.value:
-                if not os.path.exists(dump_path):
-                    with open(dump_path, 'w'):
-                        pass
+                dump_path = self._create_dump_file("OpenSSLDump.txt")
                 result = pyshell_controller.write_to_pipe_detailed(f"DumpOpenSSL||{dump_path}")
                 self._add_output(result)
             else:

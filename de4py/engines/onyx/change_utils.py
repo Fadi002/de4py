@@ -40,13 +40,8 @@ def ast_changed(before_tree: ast.AST, after_tree: ast.AST) -> bool:
 
 
 def source_changed(before: str, after: str) -> bool:
-    """
-    Return True only when the source changed meaningfully.
-
-    Preferred path compares AST structure so whitespace / trailing-newline /
-    unparsing-only differences do not count as a real transform.
-    Falls back to normalized text when parsing is unavailable.
-    """
+    """True only when the source changed meaningfully; whitespace-only diffs
+    don't count. Falls back to normalized text when parsing is unavailable."""
     if before == after:
         return False
 

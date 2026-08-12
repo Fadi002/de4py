@@ -10,10 +10,11 @@
 import ast
 from typing import List, Union
 
+from de4py.engines.onyx.safe_eval import safe_eval_scalar
 
 
 def _is_safe_block(stmts) -> bool:
-    """Return True if the block has no function calls (safe to strip bare except:pass)."""
+    """True when the block has no calls or raises (safe to strip bare except:pass)."""
     for stmt in stmts:
         for node in ast.walk(stmt):
             if isinstance(node, ast.Call):
@@ -29,11 +30,7 @@ class ASTCleaner(ast.NodeTransformer):
         self.changes_made = 0
 
     def clean(self, source: str) -> str:
-        """
-        Parse source, apply all transforms, unparse back to source string.
-        Returns original source unchanged if parsing fails.
-        Runs up to 5 passes to handle cascading simplifications.
-        """
+        """Parse, transform, and unparse; source is returned unchanged on failure."""
         self.changes_made = 0
         try:
             tree = ast.parse(source)
@@ -47,7 +44,7 @@ class ASTCleaner(ast.NodeTransformer):
                 tree = self.visit(tree)
                 ast.fix_missing_locations(tree)
                 if self.changes_made == prev_changes:
-                    break  # Converged
+                    break
 
             tree = _ensure_valid_bodies(tree)
             ast.fix_missing_locations(tree)
@@ -58,7 +55,6 @@ class ASTCleaner(ast.NodeTransformer):
             return source
 
     def visit_BinOp(self, node: ast.BinOp) -> ast.expr:
-        """Evaluate constant arithmetic/string ops at compile time, including string*N"""
         self.generic_visit(node)
 
         if isinstance(node.left, ast.Constant) and isinstance(node.right, ast.Constant):
@@ -69,31 +65,24 @@ class ASTCleaner(ast.NodeTransformer):
                     ast.LShift, ast.RShift,
                 )
                 if isinstance(node.op, safe_ops):
-                    # Extra guard: don't fold huge string reps (e.g. 'x' * 1_000_000)
+                    # Guard against huge string repeats (e.g. 'x' * 1_000_000)
                     if isinstance(node.op, ast.Mult):
                         a, b = node.left.value, node.right.value
                         if isinstance(a, str) and isinstance(b, int) and len(a) * b > 4096:
                             return node
                         if isinstance(b, str) and isinstance(a, int) and len(b) * a > 4096:
                             return node
-                    result = eval(
-                        compile(ast.Expression(body=node), '<fold>', 'eval'),
-                        {"__builtins__": {}},
-                    )
-                    self.changes_made += 1
-                    return ast.Constant(value=result)
+                    ok, result = safe_eval_scalar(node)
+                    if ok:
+                        self.changes_made += 1
+                        return ast.Constant(value=result)
             except Exception:
                 pass
         return node
 
     def visit_UnaryOp(self, node: ast.UnaryOp) -> ast.expr:
-        """
-        Fold unary ops on constants.
-        Also eliminate double negation: not not x → x (when in boolean context).
-        """
         self.generic_visit(node)
 
-        # not (not x) → x  (eliminates obfuscator trick)
         if (
             isinstance(node.op, ast.Not)
             and isinstance(node.operand, ast.UnaryOp)
@@ -104,10 +93,9 @@ class ASTCleaner(ast.NodeTransformer):
 
         if isinstance(node.operand, ast.Constant):
             try:
-                result = eval(
-                    compile(ast.Expression(body=node), '<fold>', 'eval'),
-                    {"__builtins__": {}},
-                )
+                ok, result = safe_eval_scalar(node)
+                if not ok:
+                    return node
                 self.changes_made += 1
                 return ast.Constant(value=result)
             except Exception:
@@ -115,12 +103,9 @@ class ASTCleaner(ast.NodeTransformer):
         return node
 
     def visit_Compare(self, node: ast.Compare) -> ast.expr:
-        """Evaluate constant comparisons: 1 == 1 → True, 5 > 10 → False.
-        Also catches opaque predicates like len('') == 0 → True,
-        and type(N) == str → False, type(N) == int → True, etc."""
         self.generic_visit(node)
 
-        # Opaque: type(CONSTANT) == TYPENAME  →  fold to bool
+        # Opaque predicates: type(CONST) == TYPENAME  →  bool
         if (len(node.ops) == 1
                 and isinstance(node.ops[0], (ast.Eq, ast.NotEq, ast.Is, ast.IsNot))
                 and isinstance(node.left, ast.Call)
@@ -145,16 +130,15 @@ class ASTCleaner(ast.NodeTransformer):
             isinstance(c, ast.Constant) for c in node.comparators
         ):
             try:
-                result = eval(
-                    compile(ast.Expression(body=node), '<fold>', 'eval'),
-                    {"__builtins__": {}},
-                )
+                ok, result = safe_eval_scalar(node)
+                if not ok:
+                    return node
                 self.changes_made += 1
                 return ast.Constant(value=result)
             except Exception:
                 pass
 
-        # Opaque: len("literal") op constant  →  fold
+        # Opaque predicates: len("literal") op constant  →  fold
         if (
             isinstance(node.left, ast.Call)
             and isinstance(node.left.func, ast.Name)
@@ -167,16 +151,14 @@ class ASTCleaner(ast.NodeTransformer):
             try:
                 left_val = len(node.left.args[0].value)
                 comparators = [c.value for c in node.comparators]
-                # Rebuild with concrete values and fold
                 new_node = ast.Compare(
                     left=ast.Constant(value=left_val),
                     ops=node.ops,
                     comparators=[ast.Constant(value=v) for v in comparators],
                 )
-                result = eval(
-                    compile(ast.Expression(body=new_node), '<fold>', 'eval'),
-                    {"__builtins__": {}},
-                )
+                ok, result = safe_eval_scalar(new_node)
+                if not ok:
+                    return node
                 self.changes_made += 1
                 return ast.Constant(value=result)
             except Exception:
@@ -185,71 +167,65 @@ class ASTCleaner(ast.NodeTransformer):
         return node
 
     def visit_BoolOp(self, node: ast.BoolOp) -> ast.expr:
-        """Simplify boolean ops on constants. Also short-circuit mixed operands."""
         self.generic_visit(node)
 
-        # All constants — fully evaluate
+        # A failed fold falls through to the short-circuit rules below.
         if all(isinstance(v, ast.Constant) for v in node.values):
-            try:
-                result = eval(
-                    compile(ast.Expression(body=node), '<fold>', 'eval'),
-                    {"__builtins__": {}},
-                )
+            ok, result = safe_eval_scalar(node)
+            if ok:
                 self.changes_made += 1
                 return ast.Constant(value=result)
-            except Exception:
-                pass
 
-        # Short-circuit: (True and x) → x,  (False or x) → x
+        # A walrus operand binds a name as a side effect, so a deciding
+        # constant can trim the node but never collapse it.
+        has_named_expr = any(isinstance(v, ast.NamedExpr) for v in node.values)
+
         if isinstance(node.op, ast.And):
             new_vals = []
             for v in node.values:
                 if isinstance(v, ast.Constant):
-                    if not v.value:  # False and ... → False
+                    if not v.value:
+                        if has_named_expr:
+                            new_vals.append(v)
+                            break
                         self.changes_made += 1
                         return ast.Constant(value=False)
-                    # True and ... → skip this operand
                     self.changes_made += 1
                     continue
                 new_vals.append(v)
             if not new_vals:
                 return ast.Constant(value=True)
-            if len(new_vals) == 1:
+            if len(new_vals) == 1 and not has_named_expr:
                 return new_vals[0]
-            node.values = new_vals
+            if new_vals != node.values:
+                node.values = new_vals
 
         elif isinstance(node.op, ast.Or):
             new_vals = []
             for v in node.values:
                 if isinstance(v, ast.Constant):
-                    if v.value:  # True or ... → True
+                    if v.value:
+                        if has_named_expr:
+                            new_vals.append(v)
+                            break
                         self.changes_made += 1
                         return ast.Constant(value=True)
-                    # False or ... → skip
                     self.changes_made += 1
                     continue
                 new_vals.append(v)
             if not new_vals:
                 return ast.Constant(value=False)
-            if len(new_vals) == 1:
+            if len(new_vals) == 1 and not has_named_expr:
                 return new_vals[0]
-            node.values = new_vals
+            if new_vals != node.values:
+                node.values = new_vals
 
         return node
 
     def visit_Subscript(self, node: ast.Subscript) -> ast.expr:
-        """
-        Fold constant subscripts:
-          (1, 2, 3)[0]     → 1
-          "hello"[1]       → 'e'
-          "hello"[1:3]     → 'el'
-          [10, 20][1]      → 20
-          {'a': 1}['a']    → 1   (only for string/int keys)
-        """
         self.generic_visit(node)
 
         try:
-            # Only fold when both container and index are pure constants
             container = ast.literal_eval(node.value)
             idx = node.slice
 
@@ -274,16 +250,10 @@ class ASTCleaner(ast.NodeTransformer):
         return node
 
     def visit_If(self, node: ast.If) -> Union[ast.If, List[ast.stmt]]:
-        """
-        if True:  body         → body
-        if False: body else:x  → x
-        if False: body         → []
-        Also: if x: pass → [] when there's no else
-        """
         self.generic_visit(node)
-        # NOTE: do NOT run _remove_unused_junk_assignments on branch bodies here.
-        # Branch bodies are sub-scopes; the return/use of a variable may be outside
-        # the branch, making it appear unused locally when it is not.
+        # Do NOT run _remove_unused_junk_assignments on branch bodies: they are
+        # sub-scopes, and a variable used outside the branch would look locally
+        # unused.
 
         if isinstance(node.test, ast.Constant):
             self.changes_made += 1
@@ -292,7 +262,7 @@ class ASTCleaner(ast.NodeTransformer):
             else:
                 return node.orelse if node.orelse else []
 
-        # Deduplicate: if cond: X else: X  →  X  (condition irrelevant)
+        # Deduplicate: if cond: X else: X  →  X
         if (node.orelse
                 and len(node.body) == len(node.orelse)
                 and all(ast.dump(a) == ast.dump(b)
@@ -300,7 +270,6 @@ class ASTCleaner(ast.NodeTransformer):
             self.changes_made += 1
             return node.body
 
-        # Remove empty if branches: if x: pass  (no else)
         if (
             not node.orelse
             and len(node.body) == 1
@@ -309,17 +278,14 @@ class ASTCleaner(ast.NodeTransformer):
             self.changes_made += 1
             return []
 
-        # Remove redundant else after unconditional return/raise/continue/break
-        # if x: return y \n else: z  →  if x: return y \n z
+        # Else after an unconditional exit is dead; de-nest it.
         if node.orelse and _body_always_exits(node.body):
             self.changes_made += 1
-            # Return body + orelse flattened (de-nest the else)
             return [ast.If(test=node.test, body=node.body, orelse=[])] + node.orelse
 
         return node
 
     def visit_While(self, node: ast.While) -> Union[ast.While, List]:
-        """Remove while False: ... entirely. Also clean junk from while True bodies."""
         self.generic_visit(node)
 
         if isinstance(node.test, ast.Constant) and not node.test.value:
@@ -332,7 +298,6 @@ class ASTCleaner(ast.NodeTransformer):
         return node
 
     def visit_IfExp(self, node: ast.IfExp) -> ast.expr:
-        """x if True else y → x, x if False else y → y"""
         self.generic_visit(node)
 
         if isinstance(node.test, ast.Constant):
@@ -342,11 +307,7 @@ class ASTCleaner(ast.NodeTransformer):
         return node
 
     def visit_Assert(self, node: ast.Assert) -> Union[ast.Assert, List]:
-        """
-        assert True  → removed
-        assert False → kept (it's intentional, like a type guard or unreachable marker)
-        assert 1==1  → removed  (constant fold already happened)
-        """
+        # assert False stays: it is an intentional guard, not dead code.
         self.generic_visit(node)
         if isinstance(node.test, ast.Constant) and node.test.value:
             self.changes_made += 1
@@ -379,7 +340,9 @@ class ASTCleaner(ast.NodeTransformer):
         node.body = _remove_dead_code(node.body)
         node.body = _propagate_local_constants(node.body)
         node.body = _linearize_state_machines(node.body)
-        node.body = _remove_unused_junk_assignments(node.body)
+        # Do NOT run _remove_unused_junk_assignments on the module body: a
+        # top-level binding is still payload the analyst reads, and an importer
+        # may read it.
         node.body = _strip_redundant_pass(node.body)
         return node
 
@@ -398,21 +361,15 @@ class ASTCleaner(ast.NodeTransformer):
         return node
 
     def visit_Try(self, node: ast.Try) -> Union[ast.Try, List]:
-        """
-        Remove try blocks with empty bodies after cleaning.
-        Remove bare except: pass handlers that catch nothing meaningful.
-        Clean dead code inside handler bodies.
-        """
         self.generic_visit(node)
 
-        # Clean dead code inside each handler body
         for h in node.handlers:
             h.body = _remove_dead_code(h.body)
             h.body = _remove_unused_junk_assignments(h.body)
             h.body = _strip_redundant_pass(h.body)
 
-        # Strip except handlers that are pure pass AND only when the try body is safe
-        # (no function calls). This prevents stripping legitimate error-suppression patterns.
+        # Only strip a bare except:pass when the try body has no calls, so real
+        # error-suppression patterns survive.
         body_is_safe = _is_safe_block(node.body)
         node.handlers = [
             h for h in node.handlers
@@ -423,7 +380,12 @@ class ASTCleaner(ast.NodeTransformer):
                     and not h.name)
         ]
 
-        # If body is empty after cleaning, replace try with finally block only
+        # Stripping every handler can leave a try with neither except nor
+        # finally, which is invalid syntax; unwrap to the body instead.
+        if not node.handlers and not getattr(node, 'finalbody', None):
+            self.changes_made += 1
+            return node.body
+
         if not node.body or all(isinstance(s, ast.Pass) for s in node.body):
             if getattr(node, 'finalbody', None):
                 self.changes_made += 1
@@ -433,10 +395,7 @@ class ASTCleaner(ast.NodeTransformer):
 
         return node
 
-    # ── Useless assignment removal ────────────────────────────────────────────
-
     def visit_Assign(self, node: ast.Assign) -> Union[ast.Assign, List]:
-        """Remove x = x (self-assignment no-ops)"""
         self.generic_visit(node)
 
         if (
@@ -451,31 +410,24 @@ class ASTCleaner(ast.NodeTransformer):
         return node
 
     def visit_Expr(self, node: ast.Expr) -> Union[ast.Expr, List]:
-        """Remove standalone constant expressions (not docstrings in position)."""
         self.generic_visit(node)
-        # Remove pure numeric/bool constant expressions (obfuscator decoys)
-        # But keep strings (possible docstrings), Ellipsis, and None (used as sentinels)
+        # Strip pure numeric/bool decoys, but keep strings (possible
+        # docstrings), Ellipsis, and None (used as sentinels).
         if isinstance(node.value, ast.Constant):
             val = node.value.value
             if isinstance(val, (int, float)) and not isinstance(val, bool):
                 self.changes_made += 1
                 return []
-        # Remove bare Name expressions that are just variable references with no effect
-        # EXCEPT when they could have side effects — only strip simple names that are
-        # clearly obfuscation padding (single/double char, pure obfuscated names)
+        # Short lowercase bare names are obfuscation padding.
         if isinstance(node.value, ast.Name):
             name = node.value.id
-            # Only strip if it looks like an obfuscated padding variable (e.g. bare `a;a;a;`)
             if len(name) <= 2 and name.isidentifier() and name.islower():
                 self.changes_made += 1
                 return []
         return node
 
 
-
-
 class _ConstSubstituter(ast.NodeTransformer):
-    """Replace Name(x) with Constant(v) for known local constants."""
     def __init__(self, const_map: dict):
         self._map = const_map
 
@@ -491,26 +443,55 @@ class _ConstSubstituter(ast.NodeTransformer):
     visit_Lambda = visit_FunctionDef
 
 
+def _assigned_names(node: ast.AST) -> set:
+    names: set = set()
+    for child in ast.walk(node):
+        if isinstance(child, ast.Assign):
+            for target in child.targets:
+                names.update(_target_names(target))
+        elif isinstance(child, (ast.AugAssign, ast.AnnAssign, ast.NamedExpr)):
+            names.update(_target_names(child.target))
+        elif isinstance(child, (ast.For, ast.comprehension)):
+            names.update(_target_names(child.target))
+        elif isinstance(child, ast.Nonlocal):
+            # nonlocal rebinds the enclosing scope, not a local.
+            names.update(child.names)
+    return names
+
+
+def _target_names(target: ast.AST) -> set:
+    if isinstance(target, ast.Name):
+        return {target.id}
+    if isinstance(target, (ast.Tuple, ast.List)):
+        found: set = set()
+        for elt in target.elts:
+            found |= _target_names(elt)
+        return found
+    return set()
+
+
 def _propagate_local_constants(stmts: list) -> list:
-    """
-    Forward-propagate simple constant assignments within a statement list.
-    Example:
-        x = 0
-        if x > 0:  → if 0 > 0:  → if False:  (folded in next cleaner pass)
-    Invalidates the mapping when the variable is reassigned.
-    """
+    """Forward-propagate constant assignments, invalidating on reassignment."""
     if not stmts:
         return stmts
 
-    const_map= {}
+    const_map = {}
     result = []
     for stmt in stmts:
-        # Substitute known constants into this statement (skip defs)
         if const_map and not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            stmt = _ConstSubstituter(const_map).visit(stmt)
-            ast.fix_missing_locations(stmt)
+            active = const_map
+            if isinstance(stmt, (ast.While, ast.For, ast.If, ast.Try, ast.With,
+                                 ast.AsyncFor, ast.AsyncWith)):
+                # A value that holds on entry need not hold at every point
+                # inside: a compound statement may rebind the name in one
+                # branch before a later branch reads it. Substituting there
+                # rewrites an accumulated value back to its initializer.
+                reassigned = _assigned_names(stmt)
+                active = {k: v for k, v in const_map.items() if k not in reassigned}
+            if active:
+                stmt = _ConstSubstituter(active).visit(stmt)
+                ast.fix_missing_locations(stmt)
 
-        # Update the constant map
         if (isinstance(stmt, ast.Assign)
                 and len(stmt.targets) == 1
                 and isinstance(stmt.targets[0], ast.Name)):
@@ -523,28 +504,58 @@ def _propagate_local_constants(stmts: list) -> list:
             t = getattr(stmt, 'target', None)
             if t and isinstance(t, ast.Name):
                 const_map.pop(t.id, None)
+        elif isinstance(stmt, (ast.While, ast.For, ast.If, ast.Try, ast.With)):
+            for name in _assigned_names(stmt):
+                const_map.pop(name, None)
+        elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            # A nested def's locals shadow; only `nonlocal` names can
+            # invalidate this scope's map.
+            nonlocal_names: set = set()
+            for child in ast.walk(stmt):
+                if isinstance(child, ast.Nonlocal):
+                    nonlocal_names.update(child.names)
+            for name in nonlocal_names:
+                const_map.pop(name, None)
 
         result.append(stmt)
     return result
 
 def _remove_unused_junk_assignments(stmts: List[ast.stmt]) -> List[ast.stmt]:
     """
-    Remove assignments of the form: name = constant
-    where `name` is never read anywhere in the same statement list.
-    Only removes trivially-pure constant assignments (int, float, str, bool, None, tuple of consts).
-    Never removes assignments to names that appear in f-strings, returns, or nested scopes.
+    Remove trivially-pure constant assignments to names never read in the same
+    statement list. Never touches names read via f-strings, returns, or nested
+    scopes.
     """
     if not stmts:
         return stmts
 
-    # Collect all names that are READ anywhere in the block (including nested expressions)
     read_names: set = set()
     for stmt in stmts:
         for node in ast.walk(stmt):
             if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
                 read_names.add(node.id)
+            # `acc += x` reads the old value, but its target is a Store, so the
+            # scan above misses it. Dropping the initializer of an accumulator
+            # leaves an unbound name and silently changes the program.
+            elif isinstance(node, ast.AugAssign):
+                for sub in ast.walk(node.target):
+                    if isinstance(sub, ast.Name):
+                        read_names.add(sub.id)
+            # `obj[i] = v` and `obj.attr = v` read `obj` in order to mutate it.
+            elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+                targets = (node.targets if isinstance(node, ast.Assign)
+                           else [node.target])
+                for target in targets:
+                    for sub in ast.walk(target):
+                        if isinstance(sub, (ast.Subscript, ast.Attribute)):
+                            for inner in ast.walk(sub.value):
+                                if isinstance(inner, ast.Name):
+                                    read_names.add(inner.id)
+            # `nonlocal x` / `global x` makes an assignment visible to another
+            # scope, so this scan cannot prove the name dead.
+            elif isinstance(node, (ast.Nonlocal, ast.Global)):
+                read_names.update(node.names)
 
-    # Find trivial constant assignments where the name is never read
     def _has_side_effects(val_node) -> bool:
         """True if val_node contains any function call (conservative)."""
         for n in ast.walk(val_node):
@@ -561,7 +572,6 @@ def _remove_unused_junk_assignments(stmts: List[ast.stmt]) -> List[ast.stmt]:
             return isinstance(val_node.operand, ast.Constant)
         if isinstance(val_node, (ast.Tuple, ast.List)):
             return all(_is_trivial_const(e) for e in val_node.elts)
-        # If-expression with no calls is also trivial
         if isinstance(val_node, ast.IfExp) and not _has_side_effects(val_node):
             return True
         if isinstance(val_node, ast.Attribute) and not _has_side_effects(val_node):
@@ -575,18 +585,14 @@ def _remove_unused_junk_assignments(stmts: List[ast.stmt]) -> List[ast.stmt]:
                 and isinstance(stmt.targets[0], ast.Name)
                 and _is_trivial_const(stmt.value)
                 and stmt.targets[0].id not in read_names):
-            continue  # unused pure-constant assignment — always safe to drop
+            continue
         result.append(stmt)
-    # Never return an empty body - keep at least one pass to maintain valid structure
+    # Keep at least one pass so no body becomes empty
     return result if result else stmts
 
 
 def _ensure_valid_bodies(tree: ast.AST) -> ast.AST:
-    """
-    Walk the AST and ensure no compound statement has an empty body.
-    Empty bodies (if/while/for/with/try/except/def/class) are invalid Python —
-    insert Pass() to prevent SyntaxError in ast.unparse().
-    """
+    """Insert Pass() into any compound body that would otherwise be empty."""
     for node in ast.walk(tree):
         for field in ('body', 'orelse', 'finalbody'):
             val = getattr(node, field, None)
@@ -602,10 +608,6 @@ def _ensure_valid_bodies(tree: ast.AST) -> ast.AST:
 
 
 def _body_always_exits(stmts: List[ast.stmt]) -> bool:
-    """
-    Return True if the last meaningful statement in stmts is
-    a guaranteed exit (return, raise, break, continue).
-    """
     if not stmts:
         return False
     last = stmts[-1]
@@ -613,24 +615,17 @@ def _body_always_exits(stmts: List[ast.stmt]) -> bool:
 
 
 def _remove_dead_code(stmts: List[ast.stmt]) -> List[ast.stmt]:
-    """
-    Remove all statements after the first unconditional exit
-    (return / raise / break / continue) at the same block level.
-    """
+    """Drop everything after the first unconditional exit at this block level."""
     result = []
     for stmt in stmts:
         result.append(stmt)
         if isinstance(stmt, (ast.Return, ast.Raise, ast.Break, ast.Continue)):
-            # Everything after this is dead
             break
     return result
 
 
 def _linearize_state_machines(stmts: List[ast.stmt]) -> List[ast.stmt]:
-    """
-    Detect while True: loops that are state machine dispatchers and
-    replace them with linearized sequential code.
-    """
+    """Replace while True: state-machine dispatchers with linearized code."""
     result = []
     i = 0
     while i < len(stmts):
@@ -644,9 +639,7 @@ def _linearize_state_machines(stmts: List[ast.stmt]) -> List[ast.stmt]:
     return result
 
 
-
 def _is_state_machine_loop(node: ast.stmt) -> bool:
-    """Detect while True: loops used as state machine dispatchers."""
     if not isinstance(node, ast.While):
         return False
     if not (isinstance(node.test, ast.Constant) and node.test.value in (True, 1)):
@@ -688,7 +681,6 @@ def _is_state_assignment(stmt: ast.stmt, state_var_name: str) -> bool:
 
 
 def _get_state_next(body: List[ast.stmt], state_var_name: str):
-    """Return the integer constant the state var is set to in body, or None."""
     for s in reversed(body):
         if (isinstance(s, ast.Assign)
                 and len(s.targets) == 1
@@ -701,10 +693,8 @@ def _get_state_next(body: List[ast.stmt], state_var_name: str):
 
 
 def _collect_if_elif_branches(if_node: ast.If, state_var_name: str) -> dict:
-    """
-    Walk the if/elif chain and collect {state_int: (real_stmts, next_state_or_None)}.
-    """
-    branches= {}
+    """Collect {state_int: (real_stmts, next_state_or_None)} from the if/elif chain."""
+    branches = {}
     current = if_node
 
     while isinstance(current, ast.If) and _is_state_comparison(current.test):
@@ -727,7 +717,6 @@ def _collect_if_elif_branches(if_node: ast.If, state_var_name: str) -> dict:
 
 
 def _simulate_state_machine(branches: dict, init_state: int) -> List[ast.stmt]:
-    """Follow state transitions and return linearised statements."""
     result: List[ast.stmt] = []
     visited: set = set()
     state = init_state
@@ -742,7 +731,6 @@ def _simulate_state_machine(branches: dict, init_state: int) -> List[ast.stmt]:
         real_stmts, next_state = branches[state]
         result.extend(real_stmts)
 
-        # If the real stmts end with an unconditional exit, stop linearising
         if real_stmts and isinstance(real_stmts[-1], (ast.Return, ast.Raise)):
             break
 
@@ -756,7 +744,6 @@ def _simulate_state_machine(branches: dict, init_state: int) -> List[ast.stmt]:
 def _extract_state_machine_body(while_node: ast.While) -> List[ast.stmt]:
     body = while_node.body
 
-    # Determine state var name from first state-comparison if
     state_var_name = None
     for s in body:
         if isinstance(s, ast.If) and _is_state_comparison(s.test):
@@ -765,18 +752,16 @@ def _extract_state_machine_body(while_node: ast.While) -> List[ast.stmt]:
     if state_var_name is None:
         return [while_node]
 
-    # Collect branches from BOTH patterns:
+    # Collect branches from both patterns:
     # Pattern A: elif chain starting from first stmt
     # Pattern B: multiple separate if-statements in the body
     branches = {}
 
     first = body[0]
     if isinstance(first, ast.If) and _is_state_comparison(first.test):
-        # Try elif chain first
         branches = _collect_if_elif_branches(first, state_var_name)
 
-    # Also scan for separate if-stmts (Pattern B) — they may add states
-    # missing from the elif chain (or replace it entirely)
+    # Pattern B may add states missing from the elif chain (or replace it).
     sep_branches = {}
     for s in body:
         if isinstance(s, ast.If) and _is_state_comparison(s.test):
@@ -789,7 +774,7 @@ def _extract_state_machine_body(while_node: ast.While) -> List[ast.stmt]:
             ]
             sep_branches[state_num] = (real_stmts, next_state)
 
-    # Merge: prefer sep_branches when they have more coverage
+    # Prefer sep_branches when they cover more states.
     if len(sep_branches) >= len(branches):
         branches = sep_branches
 
@@ -803,10 +788,7 @@ def _extract_state_machine_body(while_node: ast.While) -> List[ast.stmt]:
 
 
 def _strip_redundant_pass(stmts: List[ast.stmt]) -> List[ast.stmt]:
-    """
-    Remove pass statements from bodies that already have real statements.
-    Keep exactly one pass if the body would otherwise be empty.
-    """
+    """Drop pass statements unless the body would otherwise be empty."""
     non_pass = [s for s in stmts if not isinstance(s, ast.Pass)]
     if non_pass:
         return non_pass

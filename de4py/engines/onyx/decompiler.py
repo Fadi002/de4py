@@ -17,10 +17,7 @@ from typing import Optional
 class Decompiler:
 
     def decompile(self, pyc_path: str) -> str:
-        """
-        Attempt to decompile a .pyc file to Python source.
-        Returns the source string, or a comment explaining failure.
-        """
+        """Decompile a .pyc file; returns source or a comment explaining failure."""
         methods = [
             ("decompile3",  self._try_decompile3),
             ("pycdc",       self._try_pycdc),
@@ -77,7 +74,7 @@ class Decompiler:
                 timeout=60,
             )
             if result.returncode == 0 and result.stdout.strip():
-                # pycdc sometimes outputs non-Python header lines â€” strip them
+                # pycdc sometimes emits non-Python header lines — strip them
                 lines = result.stdout.splitlines()
                 py_lines = [l for l in lines if not l.startswith("#\t") or "decompiled" in l.lower()]
                 return "\n".join(py_lines)

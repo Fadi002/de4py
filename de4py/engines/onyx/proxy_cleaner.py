@@ -7,27 +7,8 @@
 #
 # See the LICENSE file for details.
 
-"""
-engines/proxy_cleaner.py
-
-Resolves proxy / alias obfuscation patterns:
-
-  1. Tuple-unpack aliases (BlankOBF / cff.py style):
-       a, b, c = (int, bytes, 193)
-     → builds value map and inlines all uses
-
-  2. Simple name aliases:
-       muwener = __import__  →  replace muwener with __import__
-
-  3. Constant proxy-call folding:
-       int.from_bytes(bytes([x ^ 193 for x in b'\xa0']), 'big')  →  int
-
-  4. Builtins injection stripping:
-       __import__('builtins').x = ...  →  removed
-
-  5. Unicode confusable normalization:
-       Cyrillic/Greek lookalikes → ASCII equivalents
-"""
+"""Resolves proxy/alias obfuscation: name aliases, constant proxies,
+builtins injection, and unicode confusable normalization."""
 
 import ast
 import copy
@@ -38,9 +19,8 @@ import tokenize
 from typing import Any, Dict, Optional, Set, Tuple
 
 from de4py.engines.onyx.rule_renamer import is_mangled
+from de4py.engines.onyx.safe_eval import safe_eval
 
-
-# ─── Confusable unicode → ASCII map ──────────────────────────────────────────
 
 _CONFUSABLES: Dict[str, str] = {
     'А':'A','В':'B','С':'C','Е':'E','Н':'H','І':'I','К':'K','М':'M',
@@ -62,31 +42,20 @@ _SAFE_ENV: Dict[str, Any] = {
 
 
 def _try_eval(node: ast.expr, env: Dict[str, Any]) -> Tuple[bool, Any]:
-    try:
-        merged = {**_SAFE_ENV, **env}
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            code = compile(ast.Expression(body=copy.deepcopy(node)), '<proxy>', 'eval')
-            return True, eval(code, {'__builtins__': _SAFE_ENV}, merged)
-    except Exception:
-        return False, None
+    return safe_eval(node, env)
 
 
 def _val_to_ast(val: Any) -> Optional[ast.expr]:
-    """Return an AST node for the value, or None if not safely expressible."""
-    # Only inline primitive constants — never inline callables/types as Name nodes.
-    # Inlining e.g. 'int' as a Name causes SyntaxWarnings when the proxy_cleaner's
-    # eval engine tries int([...]) and hits the actual int type.
+    # Never inline callables/types as Name nodes: inlining e.g. 'int' triggers
+    # SyntaxWarnings when the eval engine calls int([...]) with the real type.
     if isinstance(val, (bool,)):
         return ast.Constant(value=val)
     if isinstance(val, int) and not isinstance(val, bool):
         return ast.Constant(value=val)
     if isinstance(val, (float, str, bytes, type(None))):
-        # String/bytes may contain non-printable chars or be too long
         if isinstance(val, (str, bytes)) and len(val) > 1000:
             return None
         return ast.Constant(value=val)
-    # Don't inline callables, types, or modules — leave them as-is
     return None
 
 
@@ -108,10 +77,13 @@ class ProxyCleaner:
                 before = ast.unparse(tree)
                 env = self._collect_env(tree)
                 if env:
-                    tree = self._inline(tree, env)
-                    tree = self._remove_assignments(tree, set(env.keys()))
+                    tree, inlined = self._inline(tree, env)
+                    # A binding is only redundant once its value replaced a real use of it;
+                    # a name with no Load reference is data the analyst still needs to see.
+                    tree = self._remove_assignments(tree, inlined)
                 tree = self._strip_builtins(tree)
                 tree = self._fold_calls(tree, env)
+                tree = self._inline_class_attr_pools(tree)
                 ast.fix_missing_locations(tree)
                 try:
                     if ast.unparse(tree) == before:
@@ -125,7 +97,6 @@ class ProxyCleaner:
         except Exception:
             return source
 
-    # ── Unicode normalization ─────────────────────────────────────────────────
 
     def _normalize_unicode(self, source: str) -> str:
         if not any(c in _CONFUSABLES for c in source):
@@ -137,6 +108,12 @@ class ProxyCleaner:
 
         rename: Dict[str, str] = {}
         existing = {t.string for t in tokens if t.type == tokenize.NAME}
+        # Distinct confusable identifiers commonly normalize to the same ASCII
+        # string on purpose (that resemblance is the obfuscation), so the target
+        # set has to grow as each name claims one — checking only the original
+        # `existing` tokens lets a second and third identifier collide on the
+        # same already-claimed name instead of being disambiguated.
+        claimed = set(existing)
         for tok in tokens:
             if tok.type == tokenize.NAME and any(c in _CONFUSABLES for c in tok.string):
                 old = tok.string
@@ -144,10 +121,11 @@ class ProxyCleaner:
                     new = ''.join(_CONFUSABLES.get(c, c) for c in old)
                     i = 0
                     cand = new
-                    while cand in existing and cand != old:
+                    while cand in claimed and cand != old:
                         i += 1
                         cand = f"{new}_u{i}"
                     rename[old] = cand
+                    claimed.add(cand)
 
         if not rename:
             return source
@@ -158,7 +136,6 @@ class ProxyCleaner:
             sr, sc = tok.start
             er, ec = tok.end
             pr, pc = prev
-            # fill gap
             if sr == pr:
                 out.append(lines[sr-1][pc:sc] if sr <= len(lines) else '')
             else:
@@ -170,7 +147,6 @@ class ProxyCleaner:
             prev = (er, ec)
         return ''.join(out)
 
-    # ── Collect proxy environment ─────────────────────────────────────────────
 
     def _find_state_machine_vars(self, tree: ast.Module) -> set:
         """
@@ -181,10 +157,8 @@ class ProxyCleaner:
         for node in ast.walk(tree):
             if not isinstance(node, ast.While):
                 continue
-            # while True: or while 1:
             if not (isinstance(node.test, ast.Constant) and node.test.value):
                 continue
-            # Check if body contains if-chains with `name == constant` comparisons
             for stmt in node.body:
                 if isinstance(stmt, ast.If):
                     test = stmt.test
@@ -199,10 +173,8 @@ class ProxyCleaner:
         return state_vars
 
     def _collect_env(self, tree: ast.Module) -> Dict[str, Any]:
-        # Don't inline state machine variables
         protected = self._find_state_machine_vars(tree)
 
-        # Collect all names read in the entire module
         read_names: set = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
@@ -216,7 +188,6 @@ class ProxyCleaner:
                 continue
             t = stmt.targets[0]
 
-            # Simple: name = expr
             if isinstance(t, ast.Name):
                 if t.id in protected:
                     continue
@@ -224,7 +195,6 @@ class ProxyCleaner:
                 if ok and self._worthy(val):
                     env[t.id] = val
 
-            # Tuple unpack: a, b, c = (e1, e2, e3)
             elif isinstance(t, ast.Tuple) and isinstance(stmt.value, (ast.Tuple, ast.List)):
                 names = [e.id for e in t.elts if isinstance(e, ast.Name)]
                 vals  = stmt.value.elts
@@ -247,53 +217,45 @@ class ProxyCleaner:
             return True
         return False
 
-    # ── Inline proxy values ───────────────────────────────────────────────────
 
-    def _inline(self, tree: ast.Module, env: Dict[str, Any]) -> ast.Module:
+    def _inline(self, tree: ast.Module, env: Dict[str, Any]) -> Tuple[ast.Module, Set[str]]:
         ast_map = {n: _val_to_ast(v) for n, v in env.items()}
         ast_map = {n: node for n, node in ast_map.items() if node is not None}
         if not ast_map:
-            return tree
+            return tree, set()
+
+        inlined: Set[str] = set()
 
         class Inliner(ast.NodeTransformer):
             def visit_Name(self, node):
                 if isinstance(node.ctx, ast.Load) and node.id in ast_map:
+                    inlined.add(node.id)
                     return copy.deepcopy(ast_map[node.id])
                 return node
 
-        return Inliner().visit(tree)
+        return Inliner().visit(tree), inlined
 
-    # ── Remove proxy assignments ──────────────────────────────────────────────
 
     def _remove_assignments(self, tree: ast.Module, names: Set[str]) -> ast.Module:
-        # Collect all names read in the entire module
-        read_names: set = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-                read_names.add(node.id)
-
+        # `names` only contains bindings that were actually inlined, so their reads
+        # are already gone — "is it still read?" would always say no. Mangling is
+        # the only signal left that distinguishes an obfuscator proxy from a
+        # legitimate variable whose value we merely propagated.
         new_body = []
         for stmt in tree.body:
             if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
                 t = stmt.targets[0]
-                # Only remove assignments if:
-                # 1. The target is one of the names we inlined
-                # 2. AND it is mangled OR it's not read anywhere else.
-                # This ensures we don't accidentally remove legitimate variables
-                # that were constant-folded but still have meaningful names.
-                if isinstance(t, ast.Name) and t.id in names:
-                    if is_mangled(t.id) or t.id not in read_names:
-                        continue
+                if isinstance(t, ast.Name) and t.id in names and is_mangled(t.id):
+                    continue
                 if (isinstance(t, ast.Tuple)
                         and all(isinstance(e, ast.Name) and e.id in names
-                                and (is_mangled(e.id) or e.id not in read_names)
+                                and is_mangled(e.id)
                                 for e in t.elts)):
                     continue
             new_body.append(stmt)
         tree.body = new_body
         return tree
 
-    # ── Strip builtins injections ─────────────────────────────────────────────
 
     def _strip_builtins(self, tree: ast.Module) -> ast.Module:
         def _is_builtins_call(node):
@@ -319,7 +281,6 @@ class ProxyCleaner:
 
         return Stripper().visit(tree)
 
-    # ── Fold constant proxy calls ─────────────────────────────────────────────
 
     def _fold_calls(self, tree: ast.Module, env: Dict[str, Any]) -> ast.Module:
         class Folder(ast.NodeTransformer):
@@ -342,3 +303,75 @@ class ProxyCleaner:
                 return node
 
         return Folder().visit(tree)
+
+
+    def _inline_class_attr_pools(self, tree: ast.Module) -> ast.Module:
+        """Inline a constant pool wrapped in a synthetic class
+        (``class _x: _y = const``, read once each). Only classes whose whole
+        body is constant assignments qualify."""
+        pools: Dict[str, Dict[str, ast.expr]] = {}
+        pool_classdefs: Dict[str, ast.ClassDef] = {}
+        for stmt in tree.body:
+            if not (isinstance(stmt, ast.ClassDef) and not stmt.bases
+                    and not stmt.keywords and not stmt.decorator_list):
+                continue
+            attrs: Dict[str, ast.expr] = {}
+            is_pool = True
+            for item in stmt.body:
+                if (isinstance(item, ast.Assign) and len(item.targets) == 1
+                        and isinstance(item.targets[0], ast.Name)
+                        and isinstance(item.value, ast.Constant)):
+                    attrs[item.targets[0].id] = item.value
+                else:
+                    is_pool = False
+                    break
+            if is_pool and attrs:
+                pools[stmt.name] = attrs
+                pool_classdefs[stmt.name] = stmt
+
+        if not pools:
+            return tree
+
+        # An attribute is only safe to inline where it is read exactly once -
+        # more than one use would duplicate the literal instead of collapsing
+        # a proxy, which is a different transformation than this pass makes.
+        use_counts: Dict[Tuple[str, str], int] = {}
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load)
+                    and isinstance(node.value, ast.Name) and node.value.id in pools
+                    and node.attr in pools[node.value.id]):
+                key = (node.value.id, node.attr)
+                use_counts[key] = use_counts.get(key, 0) + 1
+
+        inlined_attrs: Set[Tuple[str, str]] = set()
+
+        class Inliner(ast.NodeTransformer):
+            def visit_Attribute(self, node):
+                self.generic_visit(node)
+                if not (isinstance(node.ctx, ast.Load) and isinstance(node.value, ast.Name)
+                        and node.value.id in pools and node.attr in pools[node.value.id]):
+                    return node
+                key = (node.value.id, node.attr)
+                if use_counts.get(key) != 1:
+                    return node
+                inlined_attrs.add(key)
+                return copy.deepcopy(pools[node.value.id][node.attr])
+
+        tree = Inliner().visit(tree)
+
+        # A class only disappears once every attribute it defines was
+        # actually inlined - one left over means something still reads the
+        # class directly (or a duplicate-use attribute was skipped above),
+        # and removing the class would break that reference.
+        classes_to_drop: Set[str] = set()
+        for class_name, attrs in pools.items():
+            if all((class_name, attr) in inlined_attrs for attr in attrs):
+                classes_to_drop.add(class_name)
+
+        if classes_to_drop:
+            tree.body = [
+                s for s in tree.body
+                if not (isinstance(s, ast.ClassDef) and s.name in classes_to_drop)
+            ]
+
+        return tree

@@ -16,8 +16,6 @@ from typing import Optional, List, Tuple
 logger = logging.getLogger(__name__)
 
 
-# --- Constants ----------------------------------------------------------------
-
 OLLAMA_BASE_URL = "http://localhost:11434"
 GENERATE_URL    = f"{OLLAMA_BASE_URL}/api/generate"
 TAGS_URL        = f"{OLLAMA_BASE_URL}/api/tags"
@@ -25,8 +23,6 @@ TAGS_URL        = f"{OLLAMA_BASE_URL}/api/tags"
 # Maximum source length to send to the LLM per chunk
 MAX_CHUNK_CHARS = 3000
 
-
-# --- Prompts ------------------------------------------------------------------
 
 RENAME_PROMPT = """\
 You are an expert Python code analyst specializing in reverse engineering and deobfuscation.
@@ -80,7 +76,6 @@ Broken Code:
 {code}
 """
 
-# --- Engine -------------------------------------------------------------------
 
 class LLMRenamer:
 
@@ -262,7 +257,6 @@ class LLMRenamer:
             logger.error("[LLM] Error during syntax fix: %s", e)
             return code
 
-    # --- Source extraction ----------------------------------------------------
 
     def _ast_repair(self, source: str) -> str:
         """Fast AST-based structural repair: fix empty bodies, strip bad lines."""
@@ -298,7 +292,6 @@ class LLMRenamer:
         except SyntaxError as e:
             err_lineno = getattr(e, 'lineno', 1) or 1
 
-        # Strip the offending line
         lines = source.splitlines(keepends=True)
         idx = err_lineno - 1
         if 0 <= idx < len(lines):
@@ -334,7 +327,6 @@ class LLMRenamer:
 
         return results
 
-    # --- Structural validation ------------------------------------------------
 
     def _is_structurally_valid(self, renamed_source: str, original_node: ast.FunctionDef) -> bool:
         """
@@ -388,7 +380,6 @@ class LLMRenamer:
 
         return True
 
-    # --- Indentation normalisation --------------------------------------------
 
     def _match_indentation(self, original: str, renamed: str) -> str:
         """
@@ -410,7 +401,6 @@ class LLMRenamer:
                 reindented_lines.append(line)
         return "".join(reindented_lines)
 
-    # --- LLM call -------------------------------------------------------------
 
     def _call_llm(self, code: str, task: str) -> Optional[str]:
         """Make a single Ollama API call for the given task."""
@@ -462,7 +452,6 @@ class LLMRenamer:
         if not raw or not raw.strip():
             return None
 
-        # Try ```python ... ``` blocks first
         if "```python" in raw:
             parts = raw.split("```python")
             if len(parts) > 1:
@@ -470,7 +459,6 @@ class LLMRenamer:
                 if code:
                     return self._clean_extracted(code)
 
-        # Try ``` ... ``` blocks
         if "```" in raw:
             parts = raw.split("```")
             if len(parts) > 1:
@@ -483,7 +471,6 @@ class LLMRenamer:
 
         stripped = raw.strip()
 
-        # Remove common LLM preambles
         preamble_patterns = [
             "Here is the renamed", "Here's the renamed", "Here is the fixed",
             "Here's the fixed", "The fixed code", "Renamed function:",
@@ -499,7 +486,6 @@ class LLMRenamer:
         if any(stripped.startswith(s) for s in valid_starts):
             return self._clean_extracted(stripped)
 
-        # Last resort: find the first def/class line
         for i, line in enumerate(stripped.splitlines()):
             if line.strip().startswith(("def ", "async def ", "class ")):
                 return self._clean_extracted("\n".join(stripped.splitlines()[i:]))
@@ -511,7 +497,6 @@ class LLMRenamer:
         if not code or not code.strip():
             return None
         lines = code.splitlines()
-        # Find last non-empty line that is valid Python continuation
         # Strategy: try progressively shorter versions until it parses
         for end in range(len(lines), 0, -1):
             candidate = "\n".join(lines[:end]).strip()
@@ -523,7 +508,6 @@ class LLMRenamer:
                 return candidate
             except SyntaxError:
                 continue
-        # Return original if nothing parses
         return code.strip() or None
 
     def _is_valid_python(self, source: str) -> bool:

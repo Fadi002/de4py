@@ -62,7 +62,7 @@ class Settings:
     active_theme: Optional[str] = None
     language: str = "en"
     transparent_ui: bool = False
-    telemetry: bool = True
+    telemetry: bool = False
     telemetry_api_key: str = "os_live_2a8c6be308a4e15defb587d0eb76b78b90ebc0e52ab6465b2060f8b51a9b0a7c"
     telemetry_ping_url: str = "https://chimpanzee.pythonanywhere.com/api/v1/ping"
     auto_update_check: bool = True
@@ -80,11 +80,13 @@ class Settings:
                 data = json.load(f)
             _saved_version = self.version
             for key, value in data.items():
+                # pre-v2.1.2 config.json used '__RPC__'-style keys
                 normalized_key = key.lower().strip('_')
                 if hasattr(self, normalized_key):
                      setattr(self, normalized_key, value)
                 elif hasattr(self, key):
                      setattr(self, key, value)
+            # INFO/version is the source of truth; a stale config.json must not downgrade it
             self.version = _saved_version
         except Exception as e:
             logging.error(f"Failed to load config: {e}")
@@ -111,11 +113,3 @@ class Settings:
 
 
 settings = Settings()
-
-
-def get_config() -> dict:
-    return asdict(settings)
-
-
-def update_json(key: str, value) -> None:
-    settings.set_and_emit(key, value)

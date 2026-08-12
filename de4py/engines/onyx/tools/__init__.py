@@ -6,7 +6,3 @@
 # Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
 #
 # See the LICENSE file for details.
-
-from de4py.core.interfaces import Deobfuscator, Analyzer
-from de4py.core.manager import EngineManager
-
