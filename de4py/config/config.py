@@ -16,6 +16,8 @@ from typing import Optional
 from PySide6.QtCore import QObject, Signal as QSignal
 
 
+
+
 def _read_local_version() -> str:
     info_path = os.path.join(os.path.dirname(__file__), '..', '..', 'INFO', 'version')
     try:
@@ -67,6 +69,25 @@ class Settings:
     telemetry_ping_url: str = "https://chimpanzee.pythonanywhere.com/api/v1/ping"
     auto_update_check: bool = True
     auto_update_install: bool = False
+    ai_enabled: bool = False
+    ai_provider: str = "ollama"
+    ai_annotate: bool = False
+    ai_explain: bool = False
+    ai_simplify: bool = False
+    #: Per-provider privacy consent (cloud providers only).
+    ai_consent: dict = field(default_factory=dict)
+    ai_ollama_model: str = ""
+    ai_ollama_base_url: str = ""
+    ai_openai_model: str = ""
+    ai_openai_base_url: str = ""
+    ai_openrouter_model: str = ""
+    ai_openrouter_base_url: str = ""
+    ai_opencode_model: str = ""
+    ai_opencode_base_url: str = ""
+    ai_gemini_model: str = ""
+    ai_gemini_base_url: str = ""
+    ai_custom_model: str = ""
+    ai_custom_base_url: str = ""
     _path: str = field(default=os.path.join(os.path.dirname(__file__), 'config.json'), repr=False, init=False)
 
     def __post_init__(self):
@@ -80,13 +101,11 @@ class Settings:
                 data = json.load(f)
             _saved_version = self.version
             for key, value in data.items():
-                # pre-v2.1.2 config.json used '__RPC__'-style keys
                 normalized_key = key.lower().strip('_')
                 if hasattr(self, normalized_key):
                      setattr(self, normalized_key, value)
                 elif hasattr(self, key):
                      setattr(self, key, value)
-            # INFO/version is the source of truth; a stale config.json must not downgrade it
             self.version = _saved_version
         except Exception as e:
             logging.error(f"Failed to load config: {e}")
@@ -95,8 +114,10 @@ class Settings:
         try:
             data = asdict(self)
             data.pop('_path', None)
-            with open(self._path, 'w', encoding='utf-8') as f:
+            tmp_path = f"{self._path}.tmp"
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4)
+            os.replace(tmp_path, self._path)
         except Exception as e:
             logging.error(f"Failed to save config: {e}")
 
