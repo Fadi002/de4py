@@ -10,13 +10,14 @@
 import logging
 import os
 import threading
+from typing import Optional
 from de4py.engines.onyx.pipeline import Pipeline
 
 logger = logging.getLogger(__name__)
 
 
 class OnyxAlpha:
-    def deobfuscate(self, file_path: str) -> str:
+    def deobfuscate(self, file_path: str, ai_overrides: Optional[dict] = None) -> str:
         if not os.path.exists(file_path):
             return f"Error: File not found: {file_path}"
 
@@ -35,12 +36,14 @@ class OnyxAlpha:
 
         filename = os.path.basename(file_path)
 
+        pipeline_kwargs = {}
+        if ai_overrides:
+            for key in ("use_llm", "annotate", "ai_explain", "ai_simplify"):
+                if key in ai_overrides:
+                    pipeline_kwargs[key] = ai_overrides[key]
+
         try:
-            pipeline = Pipeline(
-                use_llm=True,
-                llm_model="qwen2.5-coder:1.5b",
-                llm_threshold=7.0
-            )
+            pipeline = Pipeline(**pipeline_kwargs)
             
             result = pipeline.run(source, filename=filename)
         except RecursionError:
@@ -80,5 +83,14 @@ class OnyxAlpha:
             f"# Triage Score: {result.triage.score:.1f}/10.0" if result.triage else "",
             "\n"
         ]
+        
+        if result.ai_summary:
+            summary_block = "\n".join(
+                f"# {line}" if line else "#"
+                for line in result.ai_summary.splitlines()
+            )
+            header.append(f"# {'='*50} AI REVIEW START {'='*50}")
+            header.append(f"# AI Analysis:\n{summary_block}")
+            header.append(f"# {'='*50} AI REVIEW END {'='*51}")
         
         return "\n".join(header) + "\n" + result.cleaned
