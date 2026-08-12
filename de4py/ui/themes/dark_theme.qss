@@ -262,9 +262,13 @@ QScrollArea#ChangelogArea QScrollBar:vertical {
 
 /* Checkbox inputs and indicators */
 QCheckBox {
-	spacing: 8px;
+	spacing: 10px;
 	color: #ffffff;
 	background-color: transparent;
+}
+
+QCheckBox:disabled {
+	color: #8b949e;
 }
 
 QCheckBox::indicator {
@@ -275,8 +279,34 @@ QCheckBox::indicator {
 	background-color: rgba(34,34,34,0.85);
 }
 
+QCheckBox::indicator:hover {
+	border-color: #3fb6ff;
+	background-color: rgba(50,50,50,0.9);
+}
+
+QCheckBox::indicator:pressed {
+	border-color: #0264a3;
+}
+
 QCheckBox::indicator:checked {
 	background-color: #0287CF;
+	border-color: #0287CF;
+	image: url({CHECK_SVG});
+}
+
+QCheckBox::indicator:checked:hover {
+	background-color: #3fb6ff;
+	border-color: #3fb6ff;
+}
+
+QCheckBox::indicator:disabled {
+	border-color: #3d444d;
+	background-color: rgba(34,34,34,0.35);
+}
+
+QCheckBox::indicator:checked:disabled {
+	background-color: #24465c;
+	border-color: #24465c;
 }
 
 /* General labels and text */
@@ -291,6 +321,14 @@ QLabel#TitleLabel {
 	font-weight: 800;
 	color: #ffffff;
 	letter-spacing: 0.5px;
+}
+
+/* Settings section title */
+QLabel#SettingsSectionTitle {
+	font-size: 15px;
+	font-weight: 700;
+	color: #0287CF;
+	margin-top: 4px;
 }
 
 /* Secondary headers */
@@ -437,6 +475,14 @@ QComboBox:focus {
 QComboBox::drop-down {
     border: none;
     width: 30px;
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+}
+
+QComboBox::down-arrow {
+    image: url("{CHEVRON_DOWN_SVG}");
+    width: 12px;
+    height: 12px;
 }
 
 QComboBox QAbstractItemView {

@@ -7,6 +7,6 @@
 #
 # See the LICENSE file for details.
 
-from .config import Settings, settings, get_config, update_json  # noqa: F401
+from .config import Settings, settings  # noqa: F401
 
-__all__ = ["Settings", "settings", "get_config", "update_json"]
+__all__ = ["Settings", "settings"]

@@ -47,6 +47,8 @@ sdist/
 var/
 wheels/
 site/
+build-logs/
+de4py/engines/onyx/tools/reports/
 # =========================
 # Python
 # =========================

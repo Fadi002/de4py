@@ -32,7 +32,7 @@ def _get_settings():
 
 
 def _is_active():
-    return ENABLED and getattr(_get_settings(), 'telemetry', True)
+    return ENABLED and _get_settings().telemetry
 
 
 def init():

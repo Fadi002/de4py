@@ -5,77 +5,59 @@
 #
 # Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
 
-"""
-Pre-lift AST constant folding + deobfuscation passes.
-
-Handles:
-  - b64decode / b85decode call chains (direct-import and module style)
-  - chr(ord(i) - N) join comprehensions
-  - int.__xor__ XOR decode patterns (style-2 obfuscation)
-  - True+True+True arithmetic, len("literal"), int("N") etc.
-  - globals()['__builtins__'] access → direct Name
-  - builtins-dict subscript calls: d['any'](...) → any(...)
-  - getattr(obj, 'attr') → obj.attr chain flattening
-  - Pure XOR wrapper function inlining at call sites
-  - Module-level constant variable propagation
-  - Dead unused constant assignment elimination
-"""
+"""Pre-lift AST constant folding + deobfuscation passes."""
 
 import ast
+import importlib.util
 import re
-from base64 import b64decode, b85decode
+import subprocess
+import sys
+from typing import Any, Optional
 
-import base64 as _b64mod, zlib as _zlibmod, bz2 as _bz2mod, lzma as _lzmamod
-import builtins as _builtins_mod
-
-_SAFE_MODS = {
-    'base64': _b64mod, 'zlib': _zlibmod, 'bz2': _bz2mod,
-    'lzma': _lzmamod, 'builtins': _builtins_mod,
-}
-
-def _safe_import(name, *args, **kwargs):
-    if name in _SAFE_MODS:
-        return _SAFE_MODS[name]
-    raise ImportError(f"Module '{name}' not allowed in safe eval")
-
-_SAFE_BUILTINS_DICT = {'__import__': _safe_import}
-for _pyside_key in ('__orig_import__', '__feature_import__', 'qApp'):
-    if hasattr(_builtins_mod, _pyside_key):
-        _SAFE_BUILTINS_DICT[_pyside_key] = getattr(_builtins_mod, _pyside_key)
-
-_SAFE_ENV= {
-    'b64decode': b64decode,
-    'b85decode': b85decode,
-    'chr': chr, 'ord': ord, 'len': len, 'int': int,
-    'str': str, 'bytes': bytes, 'list': list, 'range': range,
-    'True': True, 'False': False, 'None': None,
-    '__import__': _safe_import,
-    '__builtins__': _SAFE_BUILTINS_DICT,
-}
+from de4py.engines.onyx.safe_eval import (
+    ExecSink,
+    SafeFunctionRunner,
+    build_import_env,
+    resolves_to_builtins_module,
+    safe_call_function,
+    safe_eval,
+    safe_eval_scalar,
+)
 
 
-def _safe_eval(node: ast.AST):
-    """Evaluate a node as a constant. Returns (ok, value)."""
-    try:
-        val = eval(compile(ast.Expression(body=node), '<fold>', 'eval'), _SAFE_ENV)
-        if isinstance(val, (int, float, str, bytes, bool, type(None))):
-            return True, val
-    except Exception:
-        pass
-    return False, None
+def _safe_eval(node: ast.AST, env: Optional[dict] = None):
+    return safe_eval_scalar(node, env)
 
 
 class ConstantExprFolder(ast.NodeTransformer):
-    """
-    Bottom-up constant folder.
-    Folds any expression whose value is statically determinable using the
-    safe environment (b64/b85 decode, chr/ord arithmetic, XOR, int, len…).
-    Also restructures getattr(obj, 'attr') → obj.attr for readability.
-    """
+    """Bottom-up folder over the safe evaluator; also flattens getattr chains."""
+
+    def __init__(self, env: Optional[dict] = None):
+        super().__init__()
+        self.env = env
+        self.changed = False
+        self._tainted: dict = {}
+
+    def _tainted_subtree(self, node: ast.AST) -> bool:
+        cached = self._tainted.get(id(node))
+        if cached is not None and cached[0] is node:
+            return cached[1]
+        if isinstance(node, ast.NamedExpr):
+            result = True
+        else:
+            result = any(
+                self._tainted_subtree(child)
+                for child in ast.iter_child_nodes(node)
+            )
+        self._tainted[id(node)] = (node, result)
+        return result
 
     def _fold(self, node: ast.AST) -> ast.AST:
-        ok, val = _safe_eval(node)
+        if self._tainted_subtree(node):
+            return node
+        ok, val = _safe_eval(node, self.env)
         if ok:
+            self.changed = True
             return ast.copy_location(ast.Constant(value=val), node)
         return node
 
@@ -103,10 +85,11 @@ class ConstantExprFolder(ast.NodeTransformer):
                 ctx=ast.Load()
             )
             ast.copy_location(attr_node, node)
-            # Try to constant-fold the attribute access
             ok, val = _safe_eval(attr_node)
             if ok:
+                self.changed = True
                 return ast.copy_location(ast.Constant(value=val), node)
+            self.changed = True
             return attr_node
 
         return self._fold(node)
@@ -153,12 +136,7 @@ class GlobalsBuiltinResolver(ast.NodeTransformer):
 
 
 class BuiltinsDictUnwrapper(ast.NodeTransformer):
-    """
-    Resolves builtins-dict subscript pattern used in style-2 obfuscation.
-    Pattern:
-        x = __builtins__  (or via isinstance+__dict__ guard)
-        y['any'](...) → any(...)
-    """
+    """Resolve builtins-dict subscript calls (`y['any'](...)` → `any(...)`)."""
 
     def __init__(self):
         self._builtins_src: set = {'__builtins__'}
@@ -181,6 +159,14 @@ class BuiltinsDictUnwrapper(ast.NodeTransformer):
 
             if isinstance(val, ast.Name) and val.id in self._builtins_src:
                 self._builtins_src.add(name)
+                self._builtins_dict.add(name)
+            elif (isinstance(val, ast.Call) and isinstance(val.func, ast.Name)
+                    and val.func.id == 'vars' and len(val.args) == 1
+                    and not val.keywords
+                    and isinstance(val.args[0], ast.Name)
+                    and val.args[0].id in self._builtins_src):
+                # vars(__builtins__) is the builtins module's own __dict__ —
+                # the same lookup table __builtins__['name'] would use.
                 self._builtins_dict.add(name)
             elif isinstance(val, ast.IfExp):
                 body_name = val.body.id if isinstance(val.body, ast.Name) else None
@@ -208,15 +194,7 @@ class BuiltinsDictUnwrapper(ast.NodeTransformer):
 
 
 class ASTConstantPropagator(ast.NodeTransformer):
-    """
-    Propagates module-level constant variable assignments.
-    Pattern:
-        x = 'some_constant'      ← assignment from a Constant
-        func(x + y)              → func('some_constant' + y)
-
-    Used primarily for test_obf.py style: 4 variables holding b64 slices
-    are inlined at their use site so string concatenation can be further folded.
-    """
+    """Inline module-level constant assignments so their uses can fold."""
 
     def __init__(self):
         self._const_map= {}
@@ -248,21 +226,88 @@ class ASTConstantPropagator(ast.NodeTransformer):
         return node
 
 
-class DeadAssignmentEliminator(ast.NodeTransformer):
-    """
-    Removes unused constant-value assignments in function/method bodies.
-    Pattern:
-        def f(x):
-            _unused = 746    ← assigned but never read → remove
-            ...
+_SAFE_SCALAR = (str, int, float, bool, bytes, type(None))
 
-    Only removes assignments where:
-    - RHS is a Constant (no side effects)
-    - The target Name is never read in the same function body
+
+def _as_literal_node(value: Any) -> Optional[ast.expr]:
+    """ast node reproducing ``value``, or None if it holds anything unsafe.
+    Recurses so containers of containers fold in one shot."""
+    if isinstance(value, _SAFE_SCALAR):
+        return ast.Constant(value=value)
+    if isinstance(value, (list, tuple)):
+        raw = [_as_literal_node(v) for v in value]
+        if any(e is None for e in raw):
+            return None
+        elts = [e for e in raw if e is not None]
+        cls = ast.List if isinstance(value, list) else ast.Tuple
+        return cls(elts=elts, ctx=ast.Load())
+    if isinstance(value, dict):
+        keys, vals = [], []
+        for k, v in value.items():
+            kn, vn = _as_literal_node(k), _as_literal_node(v)
+            if kn is None or vn is None:
+                return None
+            keys.append(kn)
+            vals.append(vn)
+        return ast.Dict(keys=keys, values=vals)
+    return None
+
+
+class TupleUnpackConstantFolder(ast.NodeTransformer):
     """
+    Evaluates constant-pool assignments — ``a, b, c = <expr>`` or
+    ``name = <expr>`` — where the RHS folds to a container.
+
+    ``safe_eval_scalar`` deliberately refuses container results, so this
+    pass uses the full interpreter. Tuple unpack is gated on a same-length
+    flat name LHS, since an unpack changes meaning when lengths disagree.
+    """
+
+    def visit_Assign(self, node: ast.Assign):
+        self.generic_visit(node)
+        if len(node.targets) != 1:
+            return node
+        target = node.targets[0]
+
+        if isinstance(target, ast.Name):
+            if isinstance(node.value, (ast.Constant, ast.List, ast.Tuple, ast.Dict)):
+                return node
+            ok, value = safe_eval(node.value)
+            if not ok or not isinstance(value, (list, tuple, dict)):
+                return node
+            literal = _as_literal_node(value)
+            if literal is None:
+                return node
+            node.value = ast.copy_location(literal, node.value)
+            return node
+
+        if not (isinstance(target, (ast.Tuple, ast.List))
+                and target.elts
+                and all(isinstance(e, ast.Name) for e in target.elts)):
+            return node
+        if isinstance(node.value, (ast.Tuple, ast.List)):
+            return node
+
+        ok, value = safe_eval(node.value)
+        if not ok or not isinstance(value, (tuple, list)):
+            return node
+        if len(value) != len(target.elts):
+            return node
+        if not all(isinstance(v, _SAFE_SCALAR) for v in value):
+            return node
+
+        node.value = ast.copy_location(
+            ast.Tuple(elts=[ast.Constant(value=v) for v in value], ctx=ast.Load()),
+            node.value,
+        )
+        return node
+
+
+class DeadAssignmentEliminator(ast.NodeTransformer):
+    """Remove function-local constant assignments whose name is never read.
+    Only constants (no side effects) targeting a name never loaded again."""
 
     def _eliminate(self, stmts: list) -> list:
-        # Collect all Name-load uses in these statements
         used: set = set()
         for stmt in stmts:
             for n in ast.walk(stmt):
@@ -271,13 +316,12 @@ class DeadAssignmentEliminator(ast.NodeTransformer):
 
         result = []
         for stmt in stmts:
-            # Remove simple constant assignments to unused variables
             if (isinstance(stmt, ast.Assign)
                     and len(stmt.targets) == 1
                     and isinstance(stmt.targets[0], ast.Name)
                     and isinstance(stmt.value, ast.Constant)
                     and stmt.targets[0].id not in used):
-                continue  # drop
+                continue
             result.append(stmt)
         return result
 
@@ -293,24 +337,10 @@ class DeadAssignmentEliminator(ast.NodeTransformer):
 
 
 class PureFunctionInliner(ast.NodeTransformer):
-    """
-    Detects simple pure functions (XOR decoders, join-chr, etc.) and inlines
-    their call sites when arguments are all literals.
-
-    Patterns recognized:
-      def _xor_XXX(lst):
-          return bytes([c ^ KEY for c in lst]).decode(ENC)
-
-      def _join_XXX(lst):
-          return ''.join(chr(c) for c in lst)
-
-    At call sites with a literal list arg, evaluates and replaces with string.
-    """
+    """Inline pure decode helpers at call sites whose arguments are literals."""
 
     def __init__(self):
-        # func_name → (key, encoding) for XOR decoders
         self._xor_funcs= {}
-        # func_name → encoding for join-chr decoders
         self._join_funcs= {}
 
     def visit_Module(self, node: ast.Module):
@@ -328,17 +358,12 @@ class PureFunctionInliner(ast.NodeTransformer):
             if ret is None:
                 continue
             name = stmt.name
-            # Pattern: bytes([c ^ KEY for c in lst]).decode(ENC)
             xor_info = self._extract_xor_pattern(ret, stmt)
             if xor_info:
                 self._xor_funcs[name] = xor_info
 
     def _extract_xor_pattern(self, expr, func_def):
-        """
-        Match: bytes([VAR ^ KEY for VAR in PARAM]).decode(ENC)
-        or:    getattr(bytes([VAR ^ KEY for VAR in PARAM]), 'decode')(ENC)
-        Returns (key, encoding) or None.
-        """
+        """Match bytes([VAR ^ KEY for VAR in PARAM]).decode(ENC); return (key, enc) or None."""
         # Normalize getattr(..., 'decode')(enc) → ....decode(enc)
         if (isinstance(expr, ast.Call)
                 and isinstance(expr.func, ast.Attribute)
@@ -348,7 +373,6 @@ class PureFunctionInliner(ast.NodeTransformer):
         else:
             return None
 
-        # inner must be bytes([...])
         if not (isinstance(inner, ast.Call)
                 and isinstance(inner.func, ast.Name)
                 and inner.func.id == 'bytes'
@@ -359,7 +383,6 @@ class PureFunctionInliner(ast.NodeTransformer):
         if not isinstance(comp, ast.ListComp):
             return None
 
-        # Listcomp: c ^ KEY for c in PARAM
         if len(comp.generators) != 1:
             return None
         gen = comp.generators[0]
@@ -370,7 +393,6 @@ class PureFunctionInliner(ast.NodeTransformer):
         loop_var = gen.target.id
         param_var = gen.iter.id
 
-        # Check param_var is the function's first parameter
         if not func_def.args.args or func_def.args.args[0].arg != param_var:
             return None
 
@@ -399,7 +421,6 @@ class PureFunctionInliner(ast.NodeTransformer):
 
         if func_name and func_name in self._xor_funcs and len(node.args) == 1:
             arg = node.args[0]
-            # Must be a literal list of integers
             if (isinstance(arg, ast.List)
                     and all(isinstance(e, ast.Constant) and isinstance(e.value, int)
                             for e in arg.elts)):
@@ -413,16 +434,31 @@ class PureFunctionInliner(ast.NodeTransformer):
         return node
 
 
+def _is_library_module(node: ast.Module) -> bool:
+    """True when the module only defines things and never runs code at import.
+    Its top-level names are public API, so dead-definition removal would
+    destroy the file; obfuscated payloads always execute at top level."""
+    for stmt in node.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+                             ast.Import, ast.ImportFrom)):
+            continue
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
+            continue
+        if isinstance(stmt, (ast.Assign, ast.AnnAssign)) and not any(
+            isinstance(n, ast.Call) for n in ast.walk(stmt)
+        ):
+            continue
+        return False
+    return True
+
 
 class DeadFunctionEliminator(ast.NodeTransformer):
-    """
-    Removes module-level function definitions that are never called.
-    A function is dead if its name never appears as a Load Name in the module,
-    i.e. it's defined but never used anywhere (not passed, not called).
-    """
+    """Remove module-level functions whose name never appears as a Load."""
 
     def visit_Module(self, node: ast.Module):
-        # Collect all defined function names at module level
+        if _is_library_module(node):
+            return node
+
         defined = {
             stmt.name
             for stmt in node.body
@@ -431,8 +467,6 @@ class DeadFunctionEliminator(ast.NodeTransformer):
         if not defined:
             return node
 
-        # Collect all Load uses of Names anywhere in the tree
-        # Skip the function def's own name (in its def statement)
         used: set = set()
         for stmt in node.body:
             func_name = getattr(stmt, 'name', None)
@@ -457,15 +491,7 @@ class DeadFunctionEliminator(ast.NodeTransformer):
 
 
 class EvalNameUnwrapper(ast.NodeTransformer):
-    """
-    Converts eval(b'identifier') or X.eval(b'identifier') → Name('identifier').
-
-    Pattern used in test_obf.py to dynamically access builtins:
-        eval(b'exec')      → exec
-        eval(b'getattr')   → getattr
-        eval(b'__import__') → __import__
-        builtins.eval(b'decompress') → decompress  (when chained with getattr)
-    """
+    """Convert eval(b'name') / X.eval(b'name') → Name('name')."""
     _IDENT = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
     def _try_unwrap(self, node: ast.Call) -> ast.AST:
@@ -482,25 +508,18 @@ class EvalNameUnwrapper(ast.NodeTransformer):
 
     def visit_Call(self, node: ast.Call):
         self.generic_visit(node)
-        # eval(b'name')
         if isinstance(node.func, ast.Name) and node.func.id == 'eval':
             return self._try_unwrap(node)
-        # X.eval(b'name')
         if isinstance(node.func, ast.Attribute) and node.func.attr == 'eval':
             return self._try_unwrap(node)
         return node
 
 
 class EvalExecUnwrapper(ast.NodeTransformer):
-    """
-    Handles the pattern: eval(b'exec')(payload) → exec(payload)
-    and:                  eval('exec')(payload) → exec(payload)
-    Common in test_obf.py style payloads.
-    """
+    """eval(b'exec')(payload) → exec(payload)."""
 
     def visit_Call(self, node: ast.Call):
         self.generic_visit(node)
-        # Match: Call(Call(eval, [b'exec'|'exec']), [payload])
         if (isinstance(node.func, ast.Call)
                 and isinstance(node.func.func, ast.Name)
                 and node.func.func.id == 'eval'
@@ -517,20 +536,17 @@ class EvalExecUnwrapper(ast.NodeTransformer):
         return node
 
 
-
 class DeadClassEliminator(ast.NodeTransformer):
-    """Remove module-level class definitions that are never referenced."""
-
     def visit_Module(self, node: ast.Module):
+        if _is_library_module(node):
+            return node
+
         defined = {s.name for s in node.body if isinstance(s, ast.ClassDef)}
         if not defined:
             return node
         used: set = set()
         for stmt in node.body:
             for n in ast.walk(stmt):
-                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                    if n is not stmt:  # skip the def name itself at top level
-                        pass
                 if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
                     used.add(n.id)
         dead = defined - used
@@ -543,17 +559,15 @@ class DeadClassEliminator(ast.NodeTransformer):
 
 class ConstantForLoopEvaluator(ast.NodeTransformer):
     """
-    Evaluates for-loops where all referenced data is constant and the body
-    calls exec() with a computed payload.  Universal pattern:
+    Evaluates key-search for-loops whose body exec()s a computed payload:
 
         for key in range(1, N):
             if list[i] ^ key == list[j]:
                 exec(decompress(bytes(x ^ key for x in list[...])))
                 break
 
-    After fold_constants has resolved `list` to a Python list, this loop
-    can be fully evaluated. We run it in a sandbox with exec() captured,
-    decode the payload, and replace the for-loop with the decoded statements.
+    Runs the loop in the sandbox with exec captured, decodes the payload,
+    and replaces the for-loop with the decoded statements.
     """
 
     def __init__(self, const_map: dict):
@@ -577,56 +591,42 @@ class ConstantForLoopEvaluator(ast.NodeTransformer):
     def _try_eval_for(self, node: ast.AST):
         if not isinstance(node, ast.For):
             return None
-        # Must iterate over range(...)
         if not (isinstance(node.iter, ast.Call)
                 and isinstance(node.iter.func, ast.Name)
                 and node.iter.func.id == 'range'):
             return None
-        # Bounds must be constants
-        args = node.iter.args
-        try:
-            bounds = [eval(compile(ast.Expression(a), '<b>', 'eval'), _SAFE_ENV)
-                      for a in args]
-        except Exception:
+        bounds = []
+        for arg in node.iter.args:
+            ok, value = safe_eval_scalar(arg)
+            if not ok or not isinstance(value, int):
+                return None
+            bounds.append(value)
+        if not bounds:
             return None
-        rng = range(*bounds)
+        try:
+            rng = range(*bounds)
+        except (TypeError, ValueError):
+            return None
         if len(rng) > 100_000:  # sanity guard
             return None
 
-        # Safety check: only block real I/O / system ops.
-        # exec/eval are OK here — we replace them with a capture function.
-        _LOOP_DANGER = frozenset({'open', 'system', 'popen', 'connect',
-                                   'send', 'write', 'unlink', 'remove'})
-        for n in ast.walk(node):
-            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
-                if n.func.id in _LOOP_DANGER:
-                    return None
+        # The loop runs under the AST interpreter; exec/eval are bound to a
+        # sink that records the payload as data.
+        sink = ExecSink()
+        env = dict(self._const_map)
+        env['exec'] = sink
+        env['eval'] = sink
 
-        # Build sandbox: safe builtins + safe modules + known constants
-        sandbox = dict(_SAFE_BUILTINS_EXEC)
-        sandbox.update(_FULL_SAFE_MODS)
-        sandbox.update(self._const_map)
-
-        captured = []
-
-        def _capture(code, *a, **kw):
-            captured.append(code)
-
-        builtins = dict(sandbox['__builtins__'])
-        builtins['exec'] = _capture
-        sandbox['__builtins__'] = builtins
-        sandbox['exec'] = _capture  # in case exec is used directly
-
+        runner = SafeFunctionRunner(env)
         try:
-            code_str = ast.unparse(node)
-            exec(compile(ast.parse(code_str), '<for_eval>', 'exec'), sandbox)
+            runner._exec(node, runner.env)
         except Exception:
             return None
 
-        if not captured:
+        if not sink.captured:
             return None
 
-        payload = captured[0]
+        payload = sink.captured[0]
         if isinstance(payload, bytes):
             try:
                 payload = payload.decode('utf-8')
@@ -642,95 +642,271 @@ class ConstantForLoopEvaluator(ast.NodeTransformer):
         except SyntaxError:
             return None
 
-def _run_fold(tree: ast.AST, passes: int = 8) -> ast.AST:
+
+class MarshalPayloadEvaluator(ast.NodeTransformer):
+    """
+    Recovers ``exec(marshal.loads(BYTES))`` / bare ``marshal.loads(BYTES)``
+    payloads. ``marshal.loads`` only deserializes a code object and never
+    executes, so calling it directly is safe; the code object is handed to
+    the xdis-backed Decompiler for source recovery. When no backend
+    succeeds the call is replaced with a short note rather than a
+    multi-megabyte bytes literal.
+    """
+
+    MAX_BYTES = 8 * 1024 * 1024
+
+    def __init__(self):
+        self._spliced_ids = set()
+
+    def visit_Module(self, node: ast.Module):
+        # Statement positions are replaced first: only they can hold the
+        # recovered source. Anything visit_Call reaches is nested inside a
+        # larger expression, where the best outcome is a compact note.
+        node.body = self._process(node.body)
+        self.generic_visit(node)
+        return node
+
+    def _process(self, stmts: list) -> list:
+        out = []
+        for stmt in stmts:
+            replacement = self._try_replace_stmt(stmt)
+            out.extend(replacement if replacement is not None else [stmt])
+        return out
+
+    @staticmethod
+    def _is_marshal_loads(call) -> bool:
+        return (isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Attribute)
+                and call.func.attr == 'loads'
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == 'marshal'
+                and len(call.args) == 1 and not call.keywords)
+
+    def _eval_marshal_bytes(self, call) -> Any:
+        """Evaluate the argument through safe_eval rather than requiring a
+        pre-folded literal — it is usually a decode/decompress chain."""
+        if not self._is_marshal_loads(call) or id(call) in self._spliced_ids:
+            return None
+        ok, value = safe_eval(call.args[0])
+        if not ok or not isinstance(value, (bytes, bytearray)):
+            return None
+        value = bytes(value)
+        return value if len(value) <= self.MAX_BYTES else None
+
+    def visit_Call(self, node: ast.Call):
+        self.generic_visit(node)
+        raw = self._eval_marshal_bytes(node)
+        if raw is None:
+            return node
+        info = _unmarshal_best_effort(raw)
+        if info is None:
+            note = f"marshal payload ({len(raw)} bytes): could not be unmarshaled under any available Python interpreter"
+        else:
+            version, name, argcount, code_len = info
+            note = (f"marshal payload: verified code object under Python {version} "
+                     f"({code_len} bytecode bytes, name={name!r}, {argcount} args) — "
+                     "no decompiler backend available to recover source")
+        return ast.copy_location(ast.Constant(value=note), node)
+
+    def _try_replace_stmt(self, stmt):
+        call = None
+        if (isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call)
+                and isinstance(stmt.value.func, ast.Name)
+                and stmt.value.func.id == 'exec'
+                and len(stmt.value.args) == 1 and not stmt.value.keywords):
+            call = stmt.value.args[0]
+        elif isinstance(stmt, ast.Expr):
+            call = stmt.value
+
+        raw = self._eval_marshal_bytes(call) if call is not None else None
+        if raw is None:
+            return None
+        self._spliced_ids.add(id(call))
+
+        info = _unmarshal_best_effort(raw)
+        if info is None:
+            note = (f"marshal payload ({len(raw)} bytes): could not be unmarshaled "
+                     "under any available Python interpreter — bytecode format is "
+                     "version-specific, and none of the interpreters on this machine "
+                     "produced a valid code object")
+            return [ast.Expr(value=ast.Constant(value=note))]
+
+        version, name, argcount, code_len = info
+        if version == _THIS_PYTHON:
+            source = self._decompile(raw)
+            if source:
+                try:
+                    inner = ast.parse(source)
+                    ast.fix_missing_locations(inner)
+                    if inner.body:
+                        return inner.body
+                except SyntaxError:
+                    pass
+
+        note = (f"marshal payload: round-trip-verified as a code object under "
+                f"Python {version} ({code_len} top-level bytecode bytes, "
+                f"name={name!r}, {argcount} args) but no decompiler backend "
+                f"available — install decompile3/uncompyle6/pycdc to recover source")
+        return [ast.Expr(value=ast.Constant(value=note))]
+
+    def _decompile(self, raw: bytes) -> Optional[str]:
+        try:
+            from de4py.engines.onyx.decompiler import Decompiler
+            header = importlib.util.MAGIC_NUMBER + b"\x00" * 12
+            result = Decompiler().decompile_from_bytes(header + raw)
+        except Exception:
+            return None
+        if result and "ERROR: All decompilers failed" not in result:
+            return result
+        return None
+
+
+_THIS_PYTHON = "%d.%d" % sys.version_info[:2]
+
+_UNMARSHAL_PROBE = (
+    "import marshal,sys\n"
+    "data=sys.stdin.buffer.read()\n"
+    "try:\n"
+    "    code=marshal.loads(data)\n"
+    "    redumped=marshal.dumps(code)\n"
+    "except Exception:\n"
+    "    sys.exit(1)\n"
+    "co_code=getattr(code,'co_code',None)\n"
+    "if co_code is None or len(redumped)!=len(data):\n"
+    "    sys.exit(1)\n"
+    "sys.stdout.write('%r\\t%r\\t%d' % (code.co_name, code.co_argcount, len(co_code)))\n"
+)
+
+_interpreter_cache: Optional[list] = None
+
+
+def _candidate_interpreters() -> list:
+    """This machine's Python interpreters, current one first. Marshal bytecode
+    is tied to the exact build that compiled it, and the wrong interpreter can
+    silently produce a garbage code object, so one is not enough."""
+    global _interpreter_cache
+    if _interpreter_cache is not None:
+        return _interpreter_cache
+
+    candidates = [sys.executable]
+    try:
+        out = subprocess.run(["py", "-0p"], capture_output=True, text=True, timeout=5)
+        for line in out.stdout.splitlines():
+            path = line.strip().split()[-1] if line.strip() else ""
+            if path.lower().endswith((".exe",)) and path not in candidates:
+                candidates.append(path)
+    except Exception:
+        pass
+    _interpreter_cache = candidates
+    return candidates
+
+
+def _unmarshal_best_effort(raw: bytes):
+    """
+    Unmarshal ``raw`` as a code object, validating the result rather than
+    trusting a non-exception. Runs in a subprocess: ``marshal.loads`` is a
+    C-level deserializer with no safety contract against malformed input and
+    can genuinely segfault, so a crash must not take down the analysis.
+    Returns (version_str, co_name, co_argcount, len(co_code)) or None.
+    """
+    for interp in _candidate_interpreters():
+        try:
+            proc = subprocess.run(
+                [interp, "-c", _UNMARSHAL_PROBE],
+                input=raw, capture_output=True, timeout=10,
+            )
+        except Exception:
+            continue
+        if proc.returncode != 0 or not proc.stdout:
+            continue
+        try:
+            name_r, argcount_r, code_len_r = proc.stdout.decode().split("\t")
+            version = re.search(r"(\d+\.\d+)", interp)
+            version = version.group(1) if version else "?"
+            return version, ast.literal_eval(name_r), int(argcount_r), int(code_len_r)
+        except Exception:
+            continue
+    return None
+
+
+def _run_fold(tree: ast.AST, passes: int = 8, env: Optional[dict] = None) -> ast.AST:
     for _ in range(passes):
-        new = ConstantExprFolder().visit(tree)
-        ast.fix_missing_locations(new)
-        if ast.dump(new) == ast.dump(tree):
+        folder = ConstantExprFolder(env)
+        tree = folder.visit(tree)
+        if not folder.changed:
             break
-        tree = new
     return tree
 
 
 def fold_constants(source: str) -> str:
-    """
-    Full pre-lift deobfuscation pipeline on Python source text.
-
-    Pass order:
-    1. Fold constants (chr/ord, arithmetic, b64/b85, slice, XOR)
-    2. globals()['key'] → Name('key')
-    3. Fold again
-    4. Unwrap builtins-dict subscripts
-    5. Module-level constant propagation (for test_obf.py style)
-    6. Final fold (catches newly-constant expressions after propagation)
-    7. Pure function inlining (XOR decoders at call sites)
-    8. Dead constant assignment elimination
-    """
+    """Run the full pre-lift deobfuscation pipeline on Python source text."""
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return source
 
+    original_dump = ast.dump(tree)
+
     try:
-        ast.fix_missing_locations(tree)
+        # Names the module's own import statements introduce (`from base64
+        # import b64decode`, `import hashlib as ybgsl`, ...) so the folder
+        # resolves them the same way it already resolves the module-qualified
+        # spelling. Rebuilt every pass since a fold can surface new imports
+        # (e.g. after unwrapping a dynamic-import call).
+        env = build_import_env(tree)
 
         # Pass 0: eval(b'name') → Name('name') — must be FIRST so subsequent
         # folds can see getattr/exec/etc. as plain names
         tree = EvalNameUnwrapper().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 1: fold constants so lambda args become string literals
-        tree = _run_fold(tree, 8)
+        tree = _run_fold(tree, 8, env)
+
+        # Pass 1b: evaluate bulk constant-pool unpacks — `a, b, ... = <expr>`
+        # where <expr> folds (via the full interpreter, not the scalar-only
+        # folder above) to a same-length tuple of scalars.
+        tree = TupleUnpackConstantFolder().visit(tree)
 
         # Pass 2: resolve globals()['key'] → Name('key')
         tree = GlobalsBuiltinResolver().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 2b: re-run EvalNameUnwrapper after first fold (some eval(b'x') may
         # only be visible after the first fold unlocks them)
         tree = EvalNameUnwrapper().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 3: fold again (may unlock more after globals resolution)
-        tree = _run_fold(tree, 4)
+        env = build_import_env(tree)
+        tree = _run_fold(tree, 4, env)
 
         # Pass 4: unwrap builtins-dict subscript calls
         tree = BuiltinsDictUnwrapper().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 5: propagate module-level constants (for multi-variable b64 patterns)
         tree = ASTConstantPropagator().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 6: final fold (string concat of propagated constants, etc.)
-        tree = _run_fold(tree, 4)
+        tree = _run_fold(tree, 4, env)
 
         # Pass 7: inline pure XOR/decode functions at call sites
         tree = PureFunctionInliner().visit(tree)
-        ast.fix_missing_locations(tree)
-        tree = _run_fold(tree, 2)
+        tree = _run_fold(tree, 2, env)
 
         # Pass 8: remove dead constant assignments in functions
         tree = DeadAssignmentEliminator().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 9: remove functions/classes never referenced
         tree = DeadFunctionEliminator().visit(tree)
-        ast.fix_missing_locations(tree)
         tree = DeadClassEliminator().visit(tree)
 
         # Pass 10: eval(b'exec')(payload) → exec(payload)
         tree = EvalExecUnwrapper().visit(tree)
-        ast.fix_missing_locations(tree)
         tree = _run_fold(tree, 2)
 
         # Pass 11: evaluate any remaining pure functions with constant args
         tree = PureFunctionEvaluator().visit(tree)
-        ast.fix_missing_locations(tree)
         tree = _run_fold(tree, 2)
         # Re-eliminate dead functions exposed by inlining
         tree = DeadFunctionEliminator().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 11b: evaluate for-loops over constant data with exec payloads
         # Collect current module-level constants (including lists) for sandbox
@@ -746,96 +922,41 @@ def fold_constants(source: str) -> str:
                         and all(isinstance(_e, ast.Constant) for _e in _v.elts)):
                     _cmap[_s.targets[0].id] = [_e.value for _e in _v.elts]
         tree = ConstantForLoopEvaluator(_cmap).visit(tree)
-        ast.fix_missing_locations(tree)
         tree = _run_fold(tree, 2)
         tree = DeadFunctionEliminator().visit(tree)
         tree = DeadClassEliminator().visit(tree)
-        ast.fix_missing_locations(tree)
+
+        # Pass 11c: recover exec(marshal.loads(BYTES)) compiled-bytecode payloads
+        tree = MarshalPayloadEvaluator().visit(tree)
+
+        # Pass 11d: recover exec(<expr>) when <expr> folds to source text.
+        # After the marshal pass: bytes that happen to parse as Python must
+        # not be mistaken for source when they were meant for marshal.loads.
+        tree = TopLevelExecUnwrapper().visit(tree)
+        tree = _run_fold(tree, 4, env)
 
         # Pass 12: remove junk no-op expression statements
         tree = JunkStatementCleaner().visit(tree)
-        ast.fix_missing_locations(tree)
 
         # Pass 13: normalize import aliases for known-safe modules
         tree = ImportAliasNormalizer().visit(tree)
         ast.fix_missing_locations(tree)
-        ast.fix_missing_locations(tree)
 
+        if ast.dump(tree) == original_dump:
+            return source
         return ast.unparse(tree)
     except Exception:
         return source
 
 
-import hashlib as _hashlib_mod
-import binascii as _binascii_mod
-import struct as _struct_mod
-import codecs as _codecs_mod
-
-_FULL_SAFE_MODS = {
-    **_SAFE_MODS,
-    'hashlib': _hashlib_mod,
-    'binascii': _binascii_mod,
-    'struct': _struct_mod,
-    'codecs': _codecs_mod,
-}
-
-_SAFE_BUILTINS_EXEC_DICT = {
-    '__import__': _safe_import,
-    'len': len, 'range': range, 'enumerate': enumerate,
-    'zip': zip, 'map': map, 'filter': filter, 'reversed': reversed,
-    'bytes': bytes, 'bytearray': bytearray, 'chr': chr, 'ord': ord,
-    'str': str, 'int': int, 'float': float, 'bool': bool,
-    'list': list, 'tuple': tuple, 'dict': dict, 'set': set,
-    'abs': abs, 'min': min, 'max': max, 'sum': sum, 'any': any, 'all': all,
-    'isinstance': isinstance, 'issubclass': issubclass,
-    'repr': repr, 'hex': hex, 'oct': oct, 'bin': bin,
-    'Exception': Exception, 'ValueError': ValueError,
-    'TypeError': TypeError, 'print': print,
-}
-for _pyside_key in ('__orig_import__', '__feature_import__', 'qApp'):
-    if hasattr(_builtins_mod, _pyside_key):
-        _SAFE_BUILTINS_EXEC_DICT[_pyside_key] = getattr(_builtins_mod, _pyside_key)
-
-_SAFE_BUILTINS_EXEC = {
-    '__builtins__': _SAFE_BUILTINS_EXEC_DICT
-}
-
-_DANGEROUS_ATTRS = frozenset({
-    'open', 'exec', 'eval', 'compile', 'system', 'popen',
-    'subprocess', 'socket', 'connect', 'send', 'recv',
-    'write', 'unlink', 'remove', 'rmdir', 'makedirs',
-})
-
-
-def _is_safe_for_execution(funcdef: ast.FunctionDef) -> bool:
-    """Return True if the function only does computation — no I/O or shell."""
-    for node in ast.walk(funcdef):
-        if isinstance(node, (ast.Global, ast.Nonlocal)):
-            return False
-        if isinstance(node, ast.Call):
-            fname = ''
-            if isinstance(node.func, ast.Name):
-                fname = node.func.id
-            elif isinstance(node.func, ast.Attribute):
-                fname = node.func.attr
-            if fname in _DANGEROUS_ATTRS:
-                return False
-    return True
-
-
 class PureFunctionEvaluator(ast.NodeTransformer):
-    """
-    Evaluates pure module-level functions at call sites when all arguments are
-    constants. Handles any custom string-decryption, encoding-wrapping, or
-    arithmetic helper regardless of implementation.
-
-    The function is compiled and executed in a restricted sandbox that includes
-    base64, hashlib, binascii, struct, codecs — enough for common obfuscation
-    decode helpers.
-    """
+    """Evaluate module-level decode helpers at constant call sites.
+    The helper is never compiled or executed: its FunctionDef is kept as data
+    and re-interpreted by the bounded AST interpreter, so a helper reaching
+    for I/O or attribute escapes simply fails to fold."""
 
     def __init__(self):
-        self._funcs= {}   # name → callable
+        self._funcs = {}   # name → ast.FunctionDef
 
     def visit_Module(self, node: ast.Module):
         self._collect(node)
@@ -843,26 +964,9 @@ class PureFunctionEvaluator(ast.NodeTransformer):
         return node
 
     def _collect(self, module: ast.Module):
-        sandbox = dict(_SAFE_BUILTINS_EXEC)
-        sandbox.update(_FULL_SAFE_MODS)
-
         for stmt in module.body:
-            if not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            if not _is_safe_for_execution(stmt):
-                continue
-
-            try:
-                mod_node = ast.Module(body=[stmt], type_ignores=[])
-                ast.fix_missing_locations(mod_node)
-                code = compile(mod_node, '<pure_eval>', 'exec')
-                ns = dict(sandbox)
-                exec(code, ns)
-                fn = ns.get(stmt.name)
-                if callable(fn):
-                    self._funcs[stmt.name] = fn
-            except Exception:
-                pass
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                self._funcs[stmt.name] = stmt
 
     def visit_Call(self, node: ast.Call):
         self.generic_visit(node)
@@ -872,20 +976,23 @@ class PureFunctionEvaluator(ast.NodeTransformer):
                 and not node.keywords):
             return node
 
-        # All positional args must be constants
         args = []
         for a in node.args:
-            if isinstance(a, ast.Constant):
-                args.append(a.value)
-            else:
+            ok, value = safe_eval(a)
+            if not ok:
                 return node
+            args.append(value)
 
-        try:
-            result = self._funcs[node.func.id](*args)
-            if isinstance(result, (str, int, float, bytes, bool, type(None))):
-                return ast.copy_location(ast.Constant(value=result), node)
-        except Exception:
-            pass
+        ok, result = safe_call_function(self._funcs[node.func.id], args)
+        if not ok:
+            return node
+        if isinstance(result, (str, int, float, bytes, bool, type(None))):
+            return ast.copy_location(ast.Constant(value=result), node)
+        # Decoders commonly return a whole pool a VM indexes; reuse the
+        # recursive literal builder rather than dropping non-scalar results.
+        literal = _as_literal_node(result)
+        if literal is not None:
+            return ast.copy_location(literal, node)
 
         return node
 
@@ -912,7 +1019,6 @@ def _is_pure_expr(node: ast.AST) -> bool:
     if isinstance(node, ast.Dict):
         return all(_is_pure_expr(e) for e in (node.keys + node.values) if e)
     if isinstance(node, ast.Call):
-        # Pure builtins with no side effects
         func_name = ''
         if isinstance(node.func, ast.Name):
             func_name = node.func.id
@@ -924,14 +1030,91 @@ def _is_pure_expr(node: ast.AST) -> bool:
     return False
 
 
+class TopLevelExecUnwrapper(ast.NodeTransformer):
+    """
+    Splice ``exec(<expr>)`` in place when ``<expr>`` folds to Python source
+    text — the text-payload sibling of ``MarshalPayloadEvaluator``. The
+    argument is evaluated through safe_eval, never a real exec; the
+    recovered source is spliced in as data, never executed.
+    """
+
+    def __init__(self):
+        self._spliced_ids = set()
+
+    def visit_Module(self, node: ast.Module):
+        node.body = self._process(node.body)
+        self.generic_visit(node)
+        return node
+
+    def _process(self, stmts: list) -> list:
+        out = []
+        for stmt in stmts:
+            replacement = self._try_replace_stmt(stmt)
+            out.extend(replacement if replacement is not None else [stmt])
+        return out
+
+    @staticmethod
+    def _callee_is_exec(func: ast.expr) -> bool:
+        """Also recognize ``__import__('builtins').exec`` — both spellings
+        name the same real function."""
+        if isinstance(func, ast.Name):
+            return func.id == 'exec'
+        if isinstance(func, ast.Attribute) and func.attr == 'exec':
+            return resolves_to_builtins_module(func.value)
+        return False
+
+    @staticmethod
+    def _callee_is_compile(func: ast.expr) -> bool:
+        """Same recognition as :meth:`_callee_is_exec`, for ``compile(...)``."""
+        if isinstance(func, ast.Name):
+            return func.id == 'compile'
+        if isinstance(func, ast.Attribute) and func.attr == 'compile':
+            return resolves_to_builtins_module(func.value)
+        return False
+
+    def _payload_expr(self, call_arg: ast.expr) -> ast.expr:
+        """exec's real argument, peeling one layer of ``compile(source,
+        filename, mode)`` if present. compile stays on the dangerous-builtins
+        list, so the wrapper is peeled here; only ``source`` is evaluated."""
+        if (isinstance(call_arg, ast.Call) and self._callee_is_compile(call_arg.func)
+                and len(call_arg.args) >= 1):
+            return call_arg.args[0]
+        return call_arg
+
+    def _try_replace_stmt(self, stmt):
+        if not (isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call)
+                and self._callee_is_exec(stmt.value.func)
+                and len(stmt.value.args) in (1, 2) and not stmt.value.keywords):
+            return None
+        call = stmt.value
+        if id(call) in self._spliced_ids:
+            return None
+
+        ok, payload = safe_eval(self._payload_expr(call.args[0]))
+        if not ok or not isinstance(payload, (str, bytes)):
+            return None
+        if isinstance(payload, bytes):
+            try:
+                payload = payload.decode('utf-8')
+            except UnicodeDecodeError:
+                return None
+        if not payload.strip():
+            return None
+
+        try:
+            inner = ast.parse(payload)
+        except SyntaxError:
+            return None
+        ast.fix_missing_locations(inner)
+        if not inner.body:
+            return None
+
+        self._spliced_ids.add(id(call))
+        return inner.body
+
+
 class JunkStatementCleaner(ast.NodeTransformer):
-    """
-    Removes expression statements that have no side effects:
-      - Standalone arithmetic:  27 - 73
-      - Pure builtin calls:     len([]), dict(), sorted([])
-      - Constant expressions:   'dead string', 42
-      - Already-constant names
-    """
+    """Remove expression statements that have no side effects."""
 
     def _clean(self, stmts: list) -> list:
         result = []
@@ -940,7 +1123,7 @@ class JunkStatementCleaner(ast.NodeTransformer):
                     and not isinstance(stmt.value, (ast.Yield, ast.YieldFrom, ast.Await))
                     and _is_pure_expr(stmt.value)
                     and not isinstance(stmt.value, ast.Constant)):
-                continue  # drop it
+                continue
             result.append(stmt)
         return result
 
@@ -978,14 +1161,8 @@ class JunkStatementCleaner(ast.NodeTransformer):
 
 
 class ImportAliasNormalizer(ast.NodeTransformer):
-    """
-    Simplifies import aliases for standard/safe modules:
-      import csv as HTza9v1Dldu  → import csv  (and renames uses)
-      from base64 import b64decode as _x → from base64 import b64decode
-
-    Only normalizes aliases for modules in a known-safe set so we don't
-    accidentally rename third-party or user modules.
-    """
+    """Drop aliases on imports of a known-safe module set, renaming uses.
+    The allowlist keeps third-party/user modules from being touched."""
 
     _KNOWN_SAFE = frozenset({
         'base64', 'hashlib', 'zlib', 'bz2', 'lzma', 'codecs', 'binascii',

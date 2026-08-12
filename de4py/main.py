@@ -11,8 +11,70 @@ import sys
 import os
 import argparse
 
-from de4py.core.telemetry_ping import start as _start_telemetry_ping
 from de4py.config.config import settings
+from de4py.utils.platform_utils import IS_WINDOWS, IS_LINUX, IS_BSD
+
+DEFAULT_QSS = ""
+
+
+def check_qt_xcb():
+    if not (IS_LINUX or IS_BSD):
+        return
+    import ctypes
+
+    required = {
+        "libxcb-cursor.so.0": "libxcb-cursor",
+        "libxcb-icccm.so.4": "libxcb-icccm4",
+        "libxcb-keysyms.so.1": "libxcb-keysyms1",
+        "libxcb-image.so.0": "libxcb-image0",
+        "libxcb-randr.so.0": "libxcb-randr0",
+        "libxcb-render-util.so.0": "libxcb-render-util0",
+        "libxcb-shape.so.0": "libxcb-shape0",
+        "libxcb-xinerama.so.0": "libxcb-xinerama0",
+        "libxcb-xkb.so.1": "libxcb-xkb1",
+        "libxkbcommon-x11.so.0": "libxkbcommon-x11-0",
+    }
+
+    missing = []
+    for lib in required:
+        try:
+            ctypes.CDLL(lib)
+        except OSError:
+            missing.append(lib)
+
+    if not missing:
+        return
+
+    distro = None
+    try:
+        with open("/etc/os-release", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("ID="):
+                    distro = line.split("=", 1)[1].strip().strip('"')
+                    break
+    except OSError:
+        pass
+
+    id_lower = (distro or "").lower()
+    if id_lower in ("debian", "ubuntu", "kali", "linuxmint", "elementary", "pop", "zorin"):
+        install = "sudo apt install " + " ".join(sorted(required[lib] for lib in missing))
+    elif id_lower in ("arch", "manjaro", "endeavouros", "arcolinux"):
+        install = "sudo pacman -S --needed " + " ".join(sorted(required[lib] for lib in missing))
+    elif id_lower in ("fedora", "centos", "rhel", "rocky", "alma"):
+        install = "sudo dnf install -y " + " ".join(sorted(required[lib] for lib in missing))
+    else:
+        install = "install the missing Qt xcb platform libraries for your distribution"
+
+    print("\n" + "!" * 60)
+    print("[!] Qt xcb platform dependencies are missing on this system.")
+    print("[!] The GUI cannot create a window until they are installed.")
+    print("\n    Missing libraries:")
+    for lib in missing:
+        print(f"        - {lib}")
+    print("\n[!] Install them with:")
+    print(f"    {install}")
+    print("!" * 60 + "\n")
+    sys.exit(1)
 
 
 def check_dependencies():
@@ -25,9 +87,10 @@ def check_dependencies():
         "pypresence": "pypresence",
         "xdis": "xdis",
         "sentry_sdk": "sentry-sdk",
-        "pefile": "pefile",
-        "msvcrt": "msvcrt"
+        "pefile": "pefile"
     }
+    if IS_WINDOWS:
+        REQUIRED_LIBS["msvcrt"] = "msvcrt"
 
     missing = []
     for module_name, pip_name in REQUIRED_LIBS.items():
@@ -47,8 +110,7 @@ def check_dependencies():
         sys.exit(1)
 
 def load_stylesheet(app):
-    """Loads the dark theme QSS stylesheet."""
-    global DEFAULT_QSS  # noqa: needed for stylesheet caching
+    global DEFAULT_QSS
     from PySide6.QtCore import QFile, QTextStream
     theme_path = os.path.join(os.path.dirname(__file__), "ui", "themes", "dark_theme.qss")
     if os.path.exists(theme_path):
@@ -56,6 +118,12 @@ def load_stylesheet(app):
         if file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
             stream = QTextStream(file)
             qss = stream.readAll()
+            check_svg = os.path.join(os.path.dirname(__file__), "ui", "resources", "check.svg")
+            if os.path.exists(check_svg):
+                qss = qss.replace("{CHECK_SVG}", check_svg.replace("\\", "/"))
+            chevron_svg = os.path.join(os.path.dirname(__file__), "ui", "resources", "chevron-down.svg")
+            if os.path.exists(chevron_svg):
+                qss = qss.replace("{CHEVRON_DOWN_SVG}", chevron_svg.replace("\\", "/"))
             app.setStyleSheet(qss)
             file.close()
             DEFAULT_QSS = qss
@@ -63,18 +131,14 @@ def load_stylesheet(app):
     return ""
 
 def set_stealth_title():
-    """Sets a random console title for stealth if enabled."""
+    if not IS_WINDOWS or not settings.stealth_title:
+        return None
     import random
     import string
     import ctypes
-    if settings.stealth_title:
-        random_title = ''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(10, 40)))
-        try:
-            ctypes.windll.kernel32.SetConsoleTitleW(random_title)
-            return random_title
-        except Exception:
-            pass
-    return None
+    random_title = ''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(10, 40)))
+    ctypes.windll.kernel32.SetConsoleTitleW(random_title)
+    return random_title
 
 def main():
 
@@ -100,7 +164,9 @@ def main():
 
 
     check_dependencies()
-    _start_telemetry_ping()
+
+    from de4py.api.telemetry import start_ping_async
+    start_ping_async()
 
     import logging
     import colorama
@@ -118,9 +184,7 @@ def main():
     colorama.init(autoreset=True)
     setup_logging()
     sentry.init()
-    
-    _IS_WINDOWS = sys.platform == "win32"
-    
+
     tui.clear_console()
     print(tui.__BANNER__)
 
@@ -140,6 +204,8 @@ def main():
             from de4py.tui import cli
             cli.start()
             return
+
+    check_qt_xcb()
 
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
@@ -202,12 +268,9 @@ def main():
         def _on_stealth_changed(enabled):
             if enabled:
                 set_stealth_title()
-            else:
-                try:
-                    import ctypes
-                    ctypes.windll.kernel32.SetConsoleTitleW("de4py")
-                except Exception:
-                    pass
+            elif IS_WINDOWS:
+                import ctypes
+                ctypes.windll.kernel32.SetConsoleTitleW("de4py")
 
         def _initialize_optional_services():
             try:

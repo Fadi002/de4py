@@ -9,7 +9,11 @@
 
 import platform
 import ctypes
-from ctypes import c_int, c_void_p, Structure, POINTER, byref, sizeof, windll
+from ctypes import c_int, c_void_p, Structure, POINTER, byref, sizeof
+if platform.system() == "Windows":
+    from ctypes import windll
+else:
+    windll = None
 from PySide6.QtWidgets import QMainWindow
 from PySide6.QtCore import Qt, QEvent, QObject, QTimer
 

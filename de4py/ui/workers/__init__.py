@@ -6,11 +6,3 @@
 # Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
 #
 # See the LICENSE file for details.
-
-from de4py.ui.workers.deobfuscator_worker import DeobfuscatorWorker
-from de4py.ui.workers.pylingual_worker import PyLingualWorker
-
-__all__ = [
-    'DeobfuscatorWorker',
-    'PyLingualWorker',
-]

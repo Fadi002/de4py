@@ -24,7 +24,6 @@ def PlusOBF(file_path: str) -> str:
         if not regex:
             return "Detected PlusOBF but could not find data patterns."
             
-        # Safely evaluate the bracketed content
         try:
             data = ast.literal_eval(f"[{regex[0]}]")
             # The original logic used len(i), assuming i is a string/list member

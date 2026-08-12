@@ -68,9 +68,10 @@ The project has been refactored for clarity:
 ```
 de4py/
 ├── de4py/               # Main Package
-│   ├── core/            # Core logic (EngineManager, Interfaces)
-│   ├── engines/         # Deobfuscators and Analyzers
+│   ├── engines/         # Deobfuscators and Analyzers (Onyx + legacy)
 │   ├── ui/              # PySide6 User Interface
+│   ├── api/             # Remote API client and telemetry
+│   ├── lang/            # Localization
 │   ├── config/          # Configuration management
 │   └── utils/           # Utilities (RPC, TUI, etc.)
 ├── plugins/             # External Plugins folder (Root)

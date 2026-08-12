@@ -16,7 +16,6 @@ import re
 import builtins
 from typing import Dict, Set, List
 
-# --- Config -------------------------------------------------------------------
 
 CALL_TO_NAME: Dict[str, str] = {
     # I/O
@@ -258,7 +257,6 @@ CALL_TO_NAME: Dict[str, str] = {
     "hstack":            "stacked",
 
     # Database
-    "connect":           "db_conn",
     "cursor":            "db_cursor",
     "execute":           "db_result",
     "fetchall":          "rows",
@@ -284,7 +282,12 @@ NEVER_RENAME: Set[str] = {
     'parse', 'format', 'encode', 'decode', 'read', 'write',
     'get', 'set', 'add', 'remove', 'update', 'delete', 'create',
     'load', 'save', 'open', 'close', 'connect', 'disconnect',
-    'i', 'j', 'k',  # conventional math vars
+    # Conventional single-letter names. These appear in ordinary source as loop
+    # indices, coordinates and counts, so treating them as generated identifiers
+    # makes the passes rewrite and delete real code.
+    'i', 'j', 'k',  # loop indices
+    'n', 'm',       # counts / sizes
+    'x', 'y', 'z',  # coordinates and generic math vars
     'e',    # except Exception as e — convention
     'f',    # file handles (f = open(...))
     'fp',   # file pointer
@@ -303,7 +306,6 @@ NEVER_RENAME: Set[str] = {
     'kw',   # keyword
 }
 
-# --- Pattern detection --------------------------------------------------------
 
 MANGLED_PATTERNS = [
     re.compile(r'^[a-zA-Z]\d{1,3}$'),              # a1, b99, Z12
@@ -340,13 +342,21 @@ def is_mangled(name: str) -> bool:
     return False
 
 
-# --- Main class ---------------------------------------------------------------
-
 class RuleRenamer:
 
     def __init__(self):
         self._rename_map: Dict[str, str] = {}
         self._counters:   Dict[str, int] = {}
+
+    @staticmethod
+    def _collect_imported(tree: ast.AST) -> Set[str]:
+        bound: Set[str] = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                continue
+            for alias in node.names:
+                bound.add(alias.asname or alias.name.split(".")[0])
+        return bound
 
     def rename(self, source: str) -> str:
         self._rename_map = {}
@@ -358,14 +368,18 @@ class RuleRenamer:
             return source
 
         try:
-            # Pass 1: collect rename decisions
             collector = _NameCollector(self._rename_map, self._counters)
             collector.visit(tree)
+
+            # A name the module imports is the library's, not the obfuscator's.
+            # Renaming `AES` or `PBKDF2` to a generated identifier destroys the
+            # strongest clue about what the recovered code actually does.
+            for bound in self._collect_imported(tree):
+                self._rename_map.pop(bound, None)
 
             if not self._rename_map:
                 return source
 
-            # Pass 2: apply renames
             applier = _NameApplier(self._rename_map)
             tree    = applier.visit(tree)
             ast.fix_missing_locations(tree)
@@ -382,15 +396,12 @@ class RuleRenamer:
         return base if n == 0 else f"{base}_{n}"
 
 
-# --- Pass 1: Collector --------------------------------------------------------
-
 class _NameCollector(ast.NodeVisitor):
 
     def __init__(self, rename_map: Dict[str, str], counters: Dict[str, int]):
         self._map      = rename_map
         self._counters = counters
 
-        # Build usage profile: name → list of uses  (for usage-pattern analysis)
         self._usages: Dict[str, List[ast.Call]] = {}
 
     def visit_Assign(self, node: ast.Assign):
@@ -423,7 +434,6 @@ class _NameCollector(ast.NodeVisitor):
             if node.target.id not in self._map:
                 iter_name = self._infer_iter_name(node.iter)
                 self._map[node.target.id] = self._fresh(iter_name)
-        # Also handle tuple unpacking in for loops
         elif isinstance(node.target, ast.Tuple):
             for elt in node.target.elts:
                 if isinstance(elt, ast.Name) and is_mangled(elt.id):
@@ -432,7 +442,6 @@ class _NameCollector(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler):
-        """Rename exception variable in: except SomeError as mangled_name"""
         if node.name and is_mangled(node.name) and node.name not in self._map:
             exc_type = "exc"
             if node.type and isinstance(node.type, ast.Name):
@@ -445,11 +454,9 @@ class _NameCollector(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_withitem(self, node):
-        """Rename with-statement targets: with open(f) as mangled → as file_handle"""
         if node.optional_vars and isinstance(node.optional_vars, ast.Name):
             name = node.optional_vars.id
             if is_mangled(name) and name not in self._map:
-                # Try to infer from the context manager
                 cm_name = self._infer_context_manager(node.context_expr)
                 self._map[name] = self._fresh(cm_name)
 
@@ -474,7 +481,6 @@ class _NameCollector(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_ListComp(self, node: ast.ListComp):
-        """Rename comprehension loop variables."""
         for generator in node.generators:
             if isinstance(generator.target, ast.Name) and is_mangled(generator.target.id):
                 if generator.target.id not in self._map:
@@ -486,7 +492,6 @@ class _NameCollector(ast.NodeVisitor):
     visit_GeneratorExp = visit_ListComp
 
     def visit_Lambda(self, node: ast.Lambda):
-        """Rename lambda parameters if they are mangled."""
         for arg in node.args.args:
             if is_mangled(arg.arg) and arg.arg not in self._map:
                 self._map[arg.arg] = self._fresh('param')
@@ -511,14 +516,12 @@ class _NameCollector(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_NamedExpr(self, node: ast.NamedExpr):
-        """Handle walrus operator: (x := expr)"""
         if isinstance(node.target, ast.Name) and is_mangled(node.target.id):
             if node.target.id not in self._map:
                 name = self._infer_from_value(node.value)
                 self._map[node.target.id] = self._fresh(name)
         self.generic_visit(node)
 
-    # --- Inference helpers ------------------------------------------------------
 
     def _infer_from_value(self, value: ast.expr) -> str:
         if isinstance(value, ast.Constant):
@@ -559,7 +562,6 @@ class _NameCollector(ast.NodeVisitor):
             return "computed_value"
 
         if isinstance(value, ast.Name):
-            # Propagate rename if already seen
             if value.id in self._map:
                 return self._map[value.id]
             if not is_mangled(value.id):
@@ -687,8 +689,6 @@ class _NameCollector(ast.NodeVisitor):
         return base if n == 0 else f"{base}_{n}"
 
 
-# --- Pass 2: Applier ----------------------------------------------------------
-
 class _NameApplier(ast.NodeTransformer):
 
     def __init__(self, rename_map: Dict[str, str]):
@@ -732,8 +732,6 @@ class _NameApplier(ast.NodeTransformer):
         node.names = [self._map.get(n, n) for n in node.names]
         return node
 
-
-# --- Utilities ----------------------------------------------------------------
 
 def _get_func_name(call_node: ast.Call) -> str:
     func = call_node.func

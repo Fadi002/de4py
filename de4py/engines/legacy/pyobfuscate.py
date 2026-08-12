@@ -49,7 +49,6 @@ def pyobfuscate(file_path: str) -> str:
             match = re.search(r'obfuscate = (.+)', line)
             if match:
                 obfuscate_str = match.group(1)
-                # Continue collecting if it's multi-line
                 temp_i = i
                 while temp_i + 1 < len(lines) and ".replace('\\n','')]))" not in obfuscate_str:
                     temp_i += 1
@@ -60,12 +59,9 @@ def pyobfuscate(file_path: str) -> str:
         if not found:
             return "Could not find obfuscated content in the file."
 
-        # Safety first: attempt to use ast.literal_eval for the structure
         try:
             # Often the content is eval'd because it might be a double-encoded string
-            # We'll try to parse it safely.
             if obfuscate_str.startswith("str("):
-                # Peel str() and try to parse what's inside
                 inner_str = obfuscate_str[4:-1]
                 obfuscate_val = ast.literal_eval(inner_str)
             else:

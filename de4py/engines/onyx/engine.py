@@ -9,26 +9,15 @@
 
 import logging
 import os
-from de4py.core.interfaces import Deobfuscator
+import threading
+from typing import Optional
 from de4py.engines.onyx.pipeline import Pipeline
 
 logger = logging.getLogger(__name__)
 
 
-class OnyxAlpha(Deobfuscator):
-    @property
-    def name(self) -> str:
-        return "de4py Onyx-Alpha"
-
-    @property
-    def description(self) -> str:
-        return "Multi-pass pipeline: triage, string decoding, AST cleaning, and rule-based renaming. Uses Ollama local LLM for extreme cases."
-
-    @property
-    def version(self) -> str:
-        return "1.1.0"
-
-    def deobfuscate(self, file_path: str) -> str:
+class OnyxAlpha:
+    def deobfuscate(self, file_path: str, ai_overrides: Optional[dict] = None) -> str:
         if not os.path.exists(file_path):
             return f"Error: File not found: {file_path}"
 
@@ -44,19 +33,17 @@ class OnyxAlpha(Deobfuscator):
                 feed_sample_bg(file_path)
             except Exception:
                 pass
-        
-        import threading
-        threading.Thread(target=_feed, daemon=True).start()
 
         filename = os.path.basename(file_path)
-        
-        # Build the pipeline — wrapped in a top-level guard so the app never crashes
+
+        pipeline_kwargs = {}
+        if ai_overrides:
+            for key in ("use_llm", "annotate", "ai_explain", "ai_simplify"):
+                if key in ai_overrides:
+                    pipeline_kwargs[key] = ai_overrides[key]
+
         try:
-            pipeline = Pipeline(
-                use_llm=True,
-                llm_model="qwen2.5-coder:1.5b",
-                llm_threshold=7.0
-            )
+            pipeline = Pipeline(**pipeline_kwargs)
             
             result = pipeline.run(source, filename=filename)
         except RecursionError:
@@ -83,7 +70,6 @@ class OnyxAlpha(Deobfuscator):
                 f"# Original code preserved below:\n\n{source}"
             )
         
-        # Build the output text shown in the UI
         if not result.success:
             return (
                 f"de4py Onyx-Alpha failed (Syntax Error in output)\n{'-'*40}\n"
@@ -92,10 +78,19 @@ class OnyxAlpha(Deobfuscator):
             )
             
         header = [
-            f"# Cleaned by de4py Onyx-Alpha",
+            "# Cleaned by de4py Onyx-Alpha",
             f"# Engines used: {', '.join(result.log) if result.log else 'None'}",
             f"# Triage Score: {result.triage.score:.1f}/10.0" if result.triage else "",
             "\n"
         ]
+        
+        if result.ai_summary:
+            summary_block = "\n".join(
+                f"# {line}" if line else "#"
+                for line in result.ai_summary.splitlines()
+            )
+            header.append(f"# {'='*50} AI REVIEW START {'='*50}")
+            header.append(f"# AI Analysis:\n{summary_block}")
+            header.append(f"# {'='*50} AI REVIEW END {'='*51}")
         
         return "\n".join(header) + "\n" + result.cleaned

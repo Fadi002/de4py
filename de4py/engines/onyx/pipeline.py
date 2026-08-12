@@ -7,20 +7,13 @@
 #
 # See the LICENSE file for details.
 
-"""
-Main deobfuscation pipeline — Onyx engine.
-"""
-
 import ast
 import logging
 import re
-import subprocess
-import shutil
-import sys
-import psutil
 import threading
 import gc
-from typing import Optional, Callable
+from dataclasses import dataclass, field
+from typing import Any, Callable, List, Optional
 from colorama import Fore, Style
 
 from de4py.engines.onyx.triage import TriageEngine, TriageResult
@@ -39,16 +32,71 @@ from de4py.engines.onyx.validator import Validator, ValidationResult
 
 logger = logging.getLogger(__name__)
 
-_CACHED_LLM_CONFIG: Optional[dict] = None
+_STAGE_THREAD_STACK_BYTES = 64 * 1024 * 1024
 
 
+def _default_ai_enabled() -> bool:
+    try:
+        from de4py.config.config import settings
+        return bool(settings.ai_enabled)
+    except Exception:
+        return False
+
+
+def _default_ai_feature(key: str) -> bool:
+    try:
+        from de4py.config.config import settings
+        return bool(getattr(settings, key, False))
+    except Exception:
+        return False
+
+
+def _resolve_ai_config():
+    try:
+        from de4py.ai.client import resolve_ai_config
+        return resolve_ai_config()
+    except Exception:
+        return None
+
+
+def _run_source_transform_in_thread(name: str, fn: Callable[[str], str], source: str) -> str:
+    # AST passes recurse once per nesting level; heavily obfuscated input blows the
+    # default 8MB stack long before Python's recursion limit is reached, so each
+    # transform runs on a thread with a much larger stack.
+    result = {}
+
+    def worker():
+        try:
+            result["value"] = fn(source)
+        except Exception as exc:
+            result["error"] = exc
+
+    try:
+        previous_stack = threading.stack_size(_STAGE_THREAD_STACK_BYTES)
+    except (ValueError, RuntimeError):
+        previous_stack = None
+
+    try:
+        thread = threading.Thread(target=worker, name=f"onyx-{name}", daemon=True)
+        thread.start()
+        thread.join()
+    finally:
+        if previous_stack is not None:
+            threading.stack_size(previous_stack)
+
+    if "error" in result:
+        raise result["error"]
+    return result["value"]
+
+
+@dataclass
 class PipelineResult:
-    def __init__(self):
-        self.original= ""
-        self.cleaned= ""
-        self.log= []
-        self.triage:     Optional[TriageResult] = None
-        self.validation: Optional[ValidationResult] = None
+    original: str = ""
+    cleaned: str = ""
+    log: List[str] = field(default_factory=list)
+    triage: Optional[TriageResult] = None
+    validation: Optional[ValidationResult] = None
+    ai_summary: str = ""
 
     @property
     def success(self) -> bool:
@@ -58,21 +106,29 @@ class PipelineResult:
 class Pipeline:
     def __init__(
         self,
-        use_llm:       bool  = True,
-        llm_model:     str   = "qwen2.5-coder:1.5b",
-        annotate:      bool  = False,
-        llm_threshold: float = 7.0,
+        use_llm:       Optional[bool] = None,
+        llm_model:     Optional[str]  = None,
+        annotate:      Optional[bool] = None,
+        llm_threshold: float          = 7.0,
+        ai_config:     Optional[Any]  = None,
+        ai_explain:    Optional[bool] = None,
+        ai_simplify:   Optional[bool] = None,
     ):
+        if use_llm is None:
+            use_llm = _default_ai_enabled()
         self.use_llm       = use_llm
-        self.annotate      = annotate
+        self.annotate      = annotate if annotate is not None else _default_ai_feature("ai_annotate")
+        self.ai_explain    = ai_explain if ai_explain is not None else _default_ai_feature("ai_explain")
+        self.ai_simplify   = ai_simplify if ai_simplify is not None else _default_ai_feature("ai_simplify")
         self.llm_threshold = llm_threshold
-        self.llm_config    = self._get_llm_config()
 
         if self.use_llm:
-            t, r, v = (self.llm_config[k] for k in ("tier","ram_gb","vram_gb"))
-            logger.info("[Pipeline] HW Tier: %s (RAM:%sGB VRAM:%sGB)", t, r, v)
-            if self.llm_config["num_gpu"] == 0:
-                logger.info("[Pipeline] CPU-only mode (num_gpu=0)")
+            cfg = ai_config or _resolve_ai_config()
+            if cfg is not None and llm_model:
+                cfg.model = llm_model
+            self.llm = LLMRenamer(cfg)
+        else:
+            self.llm = None
 
         self.triage    = TriageEngine()
         self.decompiler= Decompiler()
@@ -85,12 +141,6 @@ class Pipeline:
         self.vm_lifter = VMLifter()
         self.renamer   = RuleRenamer()
         self.formatter = Formatter()
-        self.llm       = LLMRenamer(
-            model     = llm_model,
-            num_ctx   = self.llm_config["num_ctx"],
-            num_batch = self.llm_config["num_batch"],
-            num_gpu   = self.llm_config["num_gpu"],
-        ) if use_llm else None
         self.validator = Validator()
 
         self._stages = [
@@ -103,54 +153,11 @@ class Pipeline:
             ("ast_cleaner2",   self.cleaner.clean),
         ]
 
-    def _get_llm_config(self) -> dict:
-        global _CACHED_LLM_CONFIG
-        if _CACHED_LLM_CONFIG is not None:
-            return _CACHED_LLM_CONFIG
-
-        ram_gb = round(psutil.virtual_memory().total / (1024**3))
-        vram_gb = 0
-        try:
-            if shutil.which("nvidia-smi"):
-                creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-                out = subprocess.check_output(
-                    ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
-                    text=True, creationflags=creationflags
-                )
-                lines = [l.strip() for l in out.split("\n") if l.strip().isdigit()]
-                if lines: vram_gb = round(int(lines[0])/1024)
-        except Exception:
-            pass
-
-        if vram_gb < 2 or ram_gb < 8:
-            tier, ctx, batch = "Low", 512, 128
-        elif vram_gb < 4 or ram_gb < 16:
-            tier, ctx, batch = "Mid", 1024, 256
-        else:
-            tier, ctx, batch = "High", 4096, 512
-
-        _CACHED_LLM_CONFIG = {
-            "tier": tier, "ram_gb": ram_gb, "vram_gb": vram_gb,
-            "num_ctx": ctx, "num_batch": batch, "num_gpu": 0 if vram_gb < 4 else -1
-        }
-        return _CACHED_LLM_CONFIG
-
     def run(self, source: str, filename: str = "file.py") -> PipelineResult:
-        result          = PipelineResult()
-        result.original = source
-        current         = source
-        log             = []
-        return self._run_inner(result, current, log, source, filename)
+        result = PipelineResult(original=source)
+        log = result.log
+        current = source
 
-    def _run_stage(self, name: str, fn: Callable[[str], str], source: str) -> str:
-        if name not in _THREADED_STAGE_NAMES:
-            return fn(source)
-        return _run_source_transform_in_thread(name, fn, source)
-
-    def _run_inner(self, result: 'PipelineResult', current: str, log: list,
-                   source: str, filename: str) -> 'PipelineResult':
-
-        # ── 0: Decompile .pyc ─────────────────────────────────────────────────
         if filename.endswith(".pyc"):
             _log("[Pipeline] Decompiling .pyc...")
             try:
@@ -159,43 +166,50 @@ class Pipeline:
             except Exception as e:
                 log.append(f"decompiler_failed:{e}")
 
-        # ── 1: Triage ─────────────────────────────────────────────────────────
         _log("[Pipeline] Triage...")
         try:
             triage = self.triage.analyze(current, filename)
         except Exception as e:
             _log(f"[Pipeline] Triage crashed: {e} — using defaults")
-            from de4py.engines.onyx.triage import TriageResult
             triage = TriageResult(score=5.0, route="rule_rename",
-                                 flags=[f"triage_crash:{e}"])
+                                  flags=[f"triage_crash:{e}"])
         result.triage = triage
         log.append(f"triage:score={triage.score:.1f}:route={triage.route}")
         _log(f"[Pipeline] Score={triage.score:.1f}/10.0  Route={triage.route}")
 
-        # ── 2: VM Lifter ──────────────────────────────────────────────────────
-        try:
-            has_vm = self.vm_lifter._has_vm_class_source(current)
-        except Exception:
-            has_vm = False
-        if has_vm:
-            _log("[Pipeline] VM bytecode detected — lifting...")
-            prev = current
-            try:
-                lifted = self.vm_lifter.deobfuscate(current)
-            except Exception as e:
-                log.append(f"vm_lifter_failed:{e}")
-                _log(f"[Pipeline] VM lifter error: {e}")
-            else:
-                if lifted != prev:
-                    current = lifted
-                    log.append("vm_lifter")
-                    _log(f"[Pipeline] VM lift: {_diff(prev, current)}")
+        def try_vm_lift(stage: str, source: str) -> str:
+            """
+            Lift any VM present, reporting what happened.
 
-        # ── 3: Pre-pass: state machine linearization on raw source ─────────────
+            This runs both before and inside the convergence loop because an
+            interpreter is often one layer down: the outer source is a decode
+            stub, and the VM only becomes visible once the string decoder has
+            unpacked it.
+            """
+            try:
+                if not self.vm_lifter.has_vm_class(source):
+                    return source
+            except Exception:
+                return source
+            _log("[Pipeline] VM bytecode detected — lifting...")
+            try:
+                lifted = self.vm_lifter.deobfuscate(source)
+            except Exception as exc:
+                log.append(f"{stage}_failed:{exc}")
+                _log(f"[Pipeline] VM lifter error: {exc}")
+                return source
+            if lifted != source:
+                log.append(stage)
+                _log(f"[Pipeline] VM lift: {_diff(source, lifted)}")
+            return lifted
+
+        current = try_vm_lift("vm_lifter", current)
+
         _log("[Pipeline] Pre-pass: state machine linearization...")
         prev = current
         try:
-            current = self._run_stage("match_sm_prepass", self.match_sm.deobfuscate, current)
+            current = _run_source_transform_in_thread(
+                "match_sm_prepass", self.match_sm.deobfuscate, current)
         except Exception as e:
             current = prev
             log.append(f"match_sm_prepass_failed:{e}")
@@ -204,14 +218,13 @@ class Pipeline:
                 log.append("match_sm_prepass")
                 _log(f"[Pipeline] SM pre-pass: {_diff(prev, current)}")
 
-        # ── 4: Convergence loop ───────────────────────────────────────────────
         _log("[Pipeline] Starting convergence loop...")
         for pass_num in range(1, 10):
             changed = False
             for name, fn in self._stages:
                 prev = current
                 try:
-                    current = self._run_stage(name, fn, current)
+                    current = _run_source_transform_in_thread(name, fn, current)
                 except Exception as e:
                     current = prev
                     log.append(f"{name}_failed:{e}")
@@ -222,13 +235,19 @@ class Pipeline:
                         changed = True
                         _log(f"[Pipeline]  Pass {pass_num} {name}: {_diff(prev, current)}")
 
+            # A decoded layer can expose an interpreter that was not visible in
+            # the previous pass, so retry the lift once the stages have settled.
+            prev = current
+            current = try_vm_lift(f"pass{pass_num}:vm_lifter", current)
+            if current != prev:
+                changed = True
+
             if not changed:
                 _log(f"[Pipeline] Converged at pass {pass_num}")
                 break
 
         gc.collect()
 
-        # ── 5: Rule rename ────────────────────────────────────────────────────
         if triage.route in ("rule_rename", "llm_rename"):
             prev = current
             try:
@@ -241,11 +260,11 @@ class Pipeline:
                     log.append("rule_renamer")
                     _log(f"[Pipeline] Rule rename: {_diff(prev, current)}")
 
-        # ── 6: LLM rename ─────────────────────────────────────────────────────
         if (self.use_llm and self.llm is not None
                 and triage.route == "llm_rename"
                 and triage.score >= self.llm_threshold):
             prev = current
+            _log("[Pipeline] LLM renaming in progress...")
             try:
                 current = self.llm.process_file(current, annotate=self.annotate)
             except Exception as e:
@@ -256,16 +275,15 @@ class Pipeline:
                     log.append("llm_renamer")
                     _log("[Pipeline] LLM renaming complete")
 
-        # ── 7: Final AST clean ────────────────────────────────────────────────
         prev = current
         try:
-            current = self._run_stage("ast_cleaner_final", self.cleaner.clean, current)
+            current = _run_source_transform_in_thread(
+                "ast_cleaner_final", self.cleaner.clean, current)
             if current != prev:
                 log.append("ast_cleaner_final")
         except Exception:
             current = prev
 
-        # ── 8: Format ─────────────────────────────────────────────────────────
         _log("[Pipeline] Formatting...")
         prev = current
         try:
@@ -276,7 +294,23 @@ class Pipeline:
             current = prev
             log.append(f"formatter_failed:{e}")
 
-        # ── 9: Validate ───────────────────────────────────────────────────────
+        if self.use_llm and self.ai_simplify and self.llm is not None:
+            prev = current
+            _log("[Pipeline] LLM simplification in progress...")
+            try:
+                simplified = self.llm.simplify(current)
+                if simplified != prev:
+                    current = simplified
+                    log.append("llm_simplify")
+                    _log("[Pipeline] LLM simplification applied")
+                    try:
+                        current = self.formatter.format(current)
+                    except Exception:
+                        current = simplified
+            except Exception as e:
+                current = prev
+                log.append(f"llm_simplify_failed:{e}")
+
         _log("[Pipeline] Validating...")
         validation = self.validator.validate(source, current)
 
@@ -319,109 +353,57 @@ class Pipeline:
             for w in (validation.warnings or []):
                 _log(f"[Pipeline]  Warning: {w}")
 
+        if (self.use_llm and self.ai_explain and self.llm is not None
+                and validation.syntax_ok):
+            _log("[Pipeline] Generating AI analysis...")
+            try:
+                result.ai_summary = self.llm.explain(current) or ""
+                if result.ai_summary:
+                    log.append("llm_explain")
+                    _log("[Pipeline] AI analysis generated")
+            except Exception as e:
+                log.append(f"llm_explain_failed:{e}")
+
         result.cleaned = current
-        result.log     = log
         return result
 
 
-
-class _StageThreadError(RuntimeError):
-    """Raised when a threaded stage fails inside the worker thread."""
-
-
-_THREADED_STAGE_NAMES = {
-    "match_sm_prepass",
-    "ast_cleaner",
-    "match_sm",
-    "proxy_cleaner",
-    "string_decoder",
-    "lambda_norm",
-    "flow_deobf",
-    "ast_cleaner2",
-    "ast_cleaner_final",
-}
-
-_STAGE_THREAD_STACK_BYTES = 64 * 1024 * 1024
-
-
-def _run_source_transform_in_thread(name: str, fn: Callable[[str], str], source: str) -> str:
-    result_box = {"value": source, "error": None}
-
-    def _worker() -> None:
-        try:
-            result_box["value"] = fn(source)
-        except Exception as exc:
-            result_box["error"] = exc
-
-    old_stack = None
-    stack_applied = False
-    try:
-        try:
-            old_stack = threading.stack_size()
-            threading.stack_size(_STAGE_THREAD_STACK_BYTES)
-            stack_applied = True
-        except (ValueError, RuntimeError):
-            old_stack = None
-            stack_applied = False
-
-        thread = threading.Thread(target=_worker, name=f"onyx-{name}", daemon=True)
-        thread.start()
-        thread.join()
-
-        if result_box["error"] is not None:
-            raise _StageThreadError(f"{name} worker failed: {result_box['error']}")
-
-        return result_box["value"]
-    finally:
-        if stack_applied and old_stack is not None:
-            try:
-                threading.stack_size(old_stack)
-            except (ValueError, RuntimeError):
-                pass
-
-
 def _log(msg: str) -> None:
-    try:
-        msg_lower = msg.lower()
-        if "warning:" in msg_lower:
-            logger.info(f"{Fore.YELLOW}{msg}{Style.RESET_ALL}")
-        elif "error:" in msg_lower or "failed" in msg_lower or "crashed" in msg_lower:
-            logger.error(f"{Fore.LIGHTRED_EX}{msg}{Style.RESET_ALL}")
-        elif "passed" in msg_lower or "succeeded" in msg_lower or "complete" in msg_lower:
-            logger.info(f"{Fore.LIGHTGREEN_EX}{msg}{Style.RESET_ALL}")
-        elif "pass" in msg_lower and "pre-pass" not in msg_lower:
-            logger.info(f"{Fore.CYAN}{msg}{Style.RESET_ALL}")
-        elif "converged" in msg_lower:
-            logger.info(f"{Fore.LIGHTCYAN_EX}{msg}{Style.RESET_ALL}")
-        elif "triage" in msg_lower or "route=" in msg_lower:
-            logger.info(f"{Fore.LIGHTMAGENTA_EX}{msg}{Style.RESET_ALL}")
-        else:
-            logger.info(f"{Fore.LIGHTBLACK_EX}{msg}{Style.RESET_ALL}")
-    except Exception:
-        pass
+    lowered = msg.lower()
+    if "warning:" not in lowered and any(k in lowered for k in ("error:", "failed", "crashed")):
+        logger.error(f"{Fore.LIGHTRED_EX}{msg}{Style.RESET_ALL}")
+        return
+
+    if "warning:" in lowered:
+        color = Fore.YELLOW
+    elif any(k in lowered for k in ("passed", "succeeded", "complete")):
+        color = Fore.LIGHTGREEN_EX
+    elif "pass" in lowered and "pre-pass" not in lowered:
+        color = Fore.CYAN
+    elif "triage" in lowered or "route=" in lowered:
+        color = Fore.LIGHTMAGENTA_EX
+    else:
+        color = Fore.LIGHTBLACK_EX
+    logger.info(f"{color}{msg}{Style.RESET_ALL}")
 
 
 def _diff(before: str, after: str) -> str:
-    try:
-        d = len(before) - len(after)
-        p = abs(d) / max(len(before), 1) * 100
-        arrow = "-" if d > 0 else "+"
-        return f"{arrow}{abs(d)} chars ({p:.1f}%)"
-    except Exception:
-        return "(diff unavailable)"
+    delta = len(before) - len(after)
+    percent = abs(delta) / max(len(before), 1) * 100
+    return f"{'-' if delta > 0 else '+'}{abs(delta)} chars ({percent:.1f}%)"
 
-
-def _ast_rep_ok(s: str) -> bool:
-    try: ast.parse(s); return True
-    except SyntaxError: return False
 
 def _ast_rep_err(s: str) -> Optional[SyntaxError]:
-    try: ast.parse(s); return None
-    except SyntaxError as e: return e
+    try:
+        ast.parse(s)
+        return None
+    except SyntaxError as e:
+        return e
 
-def _ast_rep_fix_line_continuation(s: str) -> str:
-    """Fix 'unexpected character after line continuation character'"""
+
+def _ast_rep_fix_line_continuation(s: str, _e: SyntaxError) -> str:
     return re.sub(r'\\\s+\n', '\\\n', s)
+
 
 def _ast_rep_insert_pass(s: str, e: SyntaxError) -> str:
     if not e.msg or 'expected an indented block' not in e.msg:
@@ -434,23 +416,23 @@ def _ast_rep_insert_pass(s: str, e: SyntaxError) -> str:
         return s
     h = lines[idx]
     indent = len(h) - len(h.lstrip())
-    new_lines = lines[:idx + 1] + [' ' * (indent + 4) + 'pass\n'] + lines[idx + 1:]
-    return ''.join(new_lines)
+    return ''.join(lines[:idx + 1] + [' ' * (indent + 4) + 'pass\n'] + lines[idx + 1:])
 
-def _ast_rep_fix_ast_bodies(s: str) -> str:
-    try: tree = ast.parse(s)
-    except SyntaxError: return s
+
+def _ast_rep_fix_ast_bodies(s: str, _e: SyntaxError) -> str:
+    try:
+        tree = ast.parse(s)
+    except SyntaxError:
+        return s
     changed = False
     for node in ast.walk(tree):
-        for field in ('body', 'orelse', 'finalbody'):
-            val = getattr(node, field, None)
-            if isinstance(val, list) and not val:
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
-                                     ast.ClassDef, ast.If, ast.While,
-                                     ast.For, ast.With, ast.Try,
-                                     ast.ExceptHandler)) and field == 'body':
-                    val.append(ast.Pass())
-                    changed = True
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+                                 ast.If, ast.While, ast.For, ast.With, ast.Try,
+                                 ast.ExceptHandler)):
+            continue
+        if isinstance(node.body, list) and not node.body:
+            node.body.append(ast.Pass())
+            changed = True
     if not changed:
         return s
     try:
@@ -459,44 +441,48 @@ def _ast_rep_fix_ast_bodies(s: str) -> str:
     except Exception:
         return s
 
+
 def _ast_rep_strip_line(s: str, e: SyntaxError) -> str:
     lines = s.splitlines(keepends=True)
     idx = (e.lineno or 1) - 1
     if 0 <= idx < len(lines):
-        c = ''.join(lines[:idx] + lines[idx + 1:])
-        if _ast_rep_ok(c): return c
+        candidate = ''.join(lines[:idx] + lines[idx + 1:])
+        if _ast_rep_err(candidate) is None:
+            return candidate
     return s
 
-def _ast_rep_truncate(s: str) -> str:
+
+def _ast_rep_truncate(s: str, _e: SyntaxError) -> str:
     lines = s.splitlines(keepends=True)
     for end in range(len(lines), max(0, len(lines) - 40), -1):
-        c = ''.join(lines[:end])
-        if _ast_rep_ok(c): return c
+        candidate = ''.join(lines[:end])
+        if _ast_rep_err(candidate) is None:
+            return candidate
     return s
+
+
+_AST_REPAIRS = (
+    _ast_rep_fix_line_continuation,
+    _ast_rep_insert_pass,
+    _ast_rep_fix_ast_bodies,
+    _ast_rep_strip_line,
+    _ast_rep_truncate,
+)
 
 
 def _ast_structural_repair(source: str) -> str:
-    """
-    Repair syntax errors caused by deobfuscation transforms.
-    Primary fix: 'expected an indented block after X on line N' -> insert pass.
-    Falls back to: AST empty-body insertion, bad-line strip, truncation.
-    """
+    """Best-effort repair of syntax errors introduced by the transform passes."""
     result = source
     for _ in range(10):
-        e = _ast_rep_err(result)
-        if e is None:
+        error = _ast_rep_err(result)
+        if error is None:
             return result
-        prev = result
-        result = _ast_rep_fix_line_continuation(result)
-        if result != prev: continue
-        result = _ast_rep_insert_pass(result, e)
-        if result != prev: continue
-        result = _ast_rep_fix_ast_bodies(result)
-        if result != prev: continue
-        result = _ast_rep_strip_line(result, e)
-        if result != prev: continue
-        result = _ast_rep_truncate(result)
-        if result != prev: continue
-        break
+        for repair in _AST_REPAIRS:
+            repaired = repair(result, error)
+            if repaired != result:
+                result = repaired
+                break
+        else:
+            break
 
     return result if _ast_rep_err(result) is None else source

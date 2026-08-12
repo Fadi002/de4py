@@ -12,6 +12,8 @@ import time
 import shutil
 from colorama import Fore, Style
 
+from de4py.utils import ascii_logo
+
 
 __RAW_BANNER__ = '''
 ██████╗ ███████╗██╗  ██╗██████╗ ██╗   ██╗
@@ -29,7 +31,8 @@ _ANSI_ESCAPE_CODES: frozenset = frozenset(
 
 def apply_gradient_coloring(text):
     """Apply a blue-to-green vertical gradient to multi-line text."""
-    os.system("")
+    if os.name == 'nt':
+        os.system("")
     lines = []
     green = 10
     for line in text.splitlines():
@@ -93,35 +96,29 @@ def clear_line():
     sys.stdout.flush()
 
 
-def linux_prompt(tab="~"):
+def shell_prompt(tab="~"):
     """Display a styled prompt line."""
     sys.stdout.write(
-        f"{Fore.GREEN}de4py@{Fore.CYAN}{os.getenv('Username')}{Style.RESET_ALL} "
+        f"{Fore.GREEN}de4py@{Fore.CYAN}{get_username()}{Style.RESET_ALL} "
         f"{Fore.GREEN}{tab}/ {Style.RESET_ALL}$ "
     )
     sys.stdout.flush()
 
 
-windows_logo = f"""{Fore.CYAN}                                ..,
-{Fore.CYAN}                    ....,,:;+ccllll
-{Fore.CYAN}      ...,,+:;  cllllllllllllllllll
-{Fore.CYAN},cclllllllllll  lllllllllllllllllll
-{Fore.CYAN}llllllllllllll  lllllllllllllllllll
-{Fore.CYAN}llllllllllllll  lllllllllllllllllll
-{Fore.CYAN}llllllllllllll  lllllllllllllllllll
-{Fore.CYAN}llllllllllllll  lllllllllllllllllll
-{Fore.CYAN}llllllllllllll  lllllllllllllllllll
-{Fore.CYAN}                                   
-{Fore.CYAN}llllllllllllll  lllllllllllllllllll
-{Fore.CYAN}llllllllllllll  lllllllllllllllllll
-{Fore.CYAN}llllllllllllll  lllllllllllllllllll
-{Fore.CYAN}llllllllllllll  lllllllllllllllllll
-{Fore.CYAN}llllllllllllll  lllllllllllllllllll
-{Fore.CYAN}llllllllllllll  lllllllllllllllllll
-{Fore.CYAN}`'ccllllllllll  lllllllllllllllllll
-{Fore.CYAN}       `' \\*::  :ccllllllllllllllll
-{Fore.CYAN}                       ````''*::cll
-{Fore.CYAN}                                 ``{Style.RESET_ALL}"""
+def get_username():
+    user = (os.getenv("USERNAME") or os.getenv("USER") or os.getenv("LOGNAME") or "").strip()
+    if user:
+        return user
+    try:
+        import getpass
+        return getpass.getuser()
+    except Exception:
+        return "user"
+
+
+def get_logo():
+    from de4py.utils import ascii_logo
+    return ascii_logo.get_logo()
 
 
 class Add:
@@ -148,8 +145,8 @@ class Add:
         ban2 = banner2.splitlines()
         ban1count = len(ban1)
         ban2count = len(ban2)
-        size = Add._longest_line_length(ban1)
-        ban1 = Add._pad_lines(ban1, size)
+        size = Add._longest_line_length(ban1, Add._visible_width)
+        ban1 = Add._pad_lines(ban1, size, Add._visible_width)
         ban1line = 0
         ban2line = 0
         parts = []
@@ -176,14 +173,18 @@ class Add:
             super().__init__(f"Too much spaces [{spaces}].")
 
     @staticmethod
-    def _longest_line_length(lines):
+    def _visible_width(line):
+        return len(ascii_logo.strip_ansi(line))
+
+    @staticmethod
+    def _longest_line_length(lines, measure=len):
         longest = 0
         for line in lines:
-            if len(line) > longest:
-                longest = len(line)
+            if measure(line) > longest:
+                longest = measure(line)
         return longest
 
     @staticmethod
-    def _pad_lines(lines, size):
-        return [line + (size - len(line)) * " " for line in lines]
+    def _pad_lines(lines, size, measure=len):
+        return [line + (size - measure(line)) * " " for line in lines]
 

@@ -14,7 +14,6 @@ from de4py.ui.controllers import pyshell_controller
 
 class BehaviorMonitorWorker(QThread):
     text_received = Signal(str)
-    error = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -23,17 +22,13 @@ class BehaviorMonitorWorker(QThread):
     def run(self):
         from de4py.utils import sentry
         with sentry.transaction("Behavior Monitor Task", "worker.behavior_monitor"):
-            try:
-                while self._running and not pyshell_controller.get_stop_threads():
-                    try:
-                        message = pyshell_controller.read_from_analyzer_pipe()
-                        if message:
-                            self.text_received.emit(message)
-                    except Exception:
-                        break
-            except Exception as e:
-                self.error.emit(str(e))
+            while self._running and pyshell_controller.HANDLE_analyzer is not None:
+                try:
+                    message = pyshell_controller.read_from_analyzer_pipe()
+                except Exception:
+                    break
+                if message:
+                    self.text_received.emit(message)
 
     def stop(self):
         self._running = False
-        pyshell_controller.interrupt_analyzer_read()

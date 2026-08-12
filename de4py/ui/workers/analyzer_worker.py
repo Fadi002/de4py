@@ -9,7 +9,21 @@
 
 from PySide6.QtCore import QThread, Signal
 
-from de4py.ui.controllers import analyzer_controller
+from de4py.engines.analyzers import (
+    detect_packer, unpack_file, get_file_hashs,
+    sus_strings_lookup, all_strings_lookup
+)
+
+
+COMMANDS = {
+    "detect_packer": detect_packer,
+    "unpack_exe": unpack_file,
+    "sus_strings_lookup": sus_strings_lookup,
+    "all_strings_lookup": all_strings_lookup,
+    "get_file_hashs": get_file_hashs,
+}
+
+STR_RESULT_COMMANDS = ("detect_packer", "unpack_exe")
 
 
 class AnalyzerWorker(QThread):
@@ -25,17 +39,10 @@ class AnalyzerWorker(QThread):
         from de4py.utils import sentry
         with sentry.transaction("Analyzer Task", "worker.analyzer"):
             try:
-                result = ""
-                if self._command == "detect_packer":
-                    result = str(analyzer_controller.run_detect_packer(self._file_path))
-                elif self._command == "unpack_exe":
-                    result = str(analyzer_controller.run_unpack_file(self._file_path))
-                elif self._command == "sus_strings_lookup":
-                    result = analyzer_controller.run_sus_strings_lookup(self._file_path)
-                elif self._command == "all_strings_lookup":
-                    result = analyzer_controller.run_all_strings_lookup(self._file_path)
-                elif self._command == "get_file_hashs":
-                    result = analyzer_controller.run_get_file_hashs(self._file_path)
+                func = COMMANDS.get(self._command)
+                result = func(self._file_path) if func else ""
+                if self._command in STR_RESULT_COMMANDS:
+                    result = str(result)
 
                 self.finished.emit(result)
             except Exception as e:

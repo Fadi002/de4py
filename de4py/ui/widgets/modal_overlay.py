@@ -13,14 +13,14 @@ from PySide6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QSizePolicy,
     QLineEdit, QPushButton, QGraphicsOpacityEffect
 )
-from PySide6.QtCore import Qt, Signal, QRectF
+from PySide6.QtCore import Qt, Signal, QRectF, QTimer
 from PySide6.QtGui import QPainter, QColor
 
 from de4py.lang import tr
 from de4py.lang.keys import DIALOG_VALUE_PLACEHOLDER
 from de4py.ui.widgets.glass_utils import GlassBlurCache
-from de4py.ui.motion.spring import spring_gentle, spring_settle, InertiaChain
-from de4py.ui.motion.material import MaterialState, MaterialPainter
+from de4py.ui.motion.spring import spring_gentle, spring_settle, InertiaChain, FramePacer
+from de4py.ui.motion.material import MaterialPainter
 
 
 class ModalOverlay(QWidget):
@@ -47,12 +47,17 @@ class ModalOverlay(QWidget):
         self._opening = False
         self._closing = False
 
-        self._material = MaterialState(self, on_tick=self._sync_springs)
-        from de4py.ui.motion.manager import MotionManager
-        MotionManager.register_material(self, self._material)
+        # The springs are driven by a dedicated timer (like LoadingOverlay).
+        # MaterialState only ticks while its own channels are active, which
+        # nothing drives on this widget — relying on it left the overlay
+        # permanently invisible (opacity stuck at 0).
+        self._spring_timer = QTimer(self)
+        self._spring_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._spring_timer.setInterval(16)
+        self._spring_timer.timeout.connect(self._sync_springs)
 
     def _sync_springs(self):
-        dt = 0.016
+        dt = FramePacer.instance().tick()
         self._fade_spring.tick(dt)
         self._scale_spring.tick(dt)
         self._translate_spring.tick(dt)
@@ -69,10 +74,13 @@ class ModalOverlay(QWidget):
         )
 
         if all_settled:
+            self._spring_timer.stop()
             if self._closing:
                 self._closing = False
                 self.setHidden(True)
-            self._material._dirty = False
+            return
+
+        self.update()
 
     def _setup_ui(self, title: str, input_label: str, button_label: str):
         layout = QVBoxLayout(self)
@@ -151,9 +159,7 @@ class ModalOverlay(QWidget):
         self._backdrop_spring.value = 100.0
         self._backdrop_spring.target = 160.0
 
-        self._material._dirty = True
-        from de4py.ui.motion.manager import MotionManager
-        MotionManager.wake()
+        self._spring_timer.start()
 
         try:
             from de4py.ui.motion.proximity import SurfaceLinker
@@ -176,9 +182,7 @@ class ModalOverlay(QWidget):
         self._backdrop_spring.value = self._backdrop_alpha
         self._backdrop_spring.target = 0.0
 
-        self._material._dirty = True
-        from de4py.ui.motion.manager import MotionManager
-        MotionManager.wake()
+        self._spring_timer.start()
 
     def _create_blur_cache(self):
         top_window = self.window()
@@ -222,22 +226,7 @@ class ModalOverlay(QWidget):
         painter.fillRect(self.rect(), QColor(0, 0, 0, int(self._backdrop_alpha)))
 
         scale = max(0.9, min(1.05, self._scale_spring.value))
-        ty = self._translate_spring.value
         depth = max(0.0, 1.0 - scale) * 5.0
-
-        if self.modal_frame and (abs(scale - 1.0) > 0.001 or abs(ty) > 0.5):
-            frame_rect = self.modal_frame.geometry()
-            center = frame_rect.center()
-            painter.save()
-            painter.translate(center)
-            painter.scale(scale, scale)
-            painter.translate(-center.x(), -center.y() + ty)
-            painter.restore()
-
-            self.modal_frame.move(
-                frame_rect.x(),
-                frame_rect.y() + int(ty * 0.3),
-            )
 
         frect = QRectF(self.modal_frame.geometry())
         if depth > 0.1:

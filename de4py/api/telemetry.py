@@ -11,6 +11,7 @@ import hashlib
 import logging
 import platform
 import sys
+import threading
 from typing import Optional, Dict, Any
 
 from de4py.api.client import De4pyApiClient, ApiError
@@ -25,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 
 def _get_platform() -> str:
-    """Detect the current platform."""
     system = platform.system().lower()
     if system == "darwin":
         return "macos"
@@ -33,12 +33,10 @@ def _get_platform() -> str:
 
 
 def _get_python_version() -> str:
-    """Get Python version string (e.g., '3.11')."""
     return f"{sys.version_info.major}.{sys.version_info.minor}"
 
 
 def _get_architecture() -> str:
-    """Get normalized CPU architecture (e.g., 'amd64', 'arm64')."""
     machine = platform.machine().lower()
     if machine in ("x86_64", "amd64"):
         return "amd64"
@@ -57,27 +55,9 @@ def _machine_id() -> str:
 
 
 class TelemetryClient:
-    """
-    Client for reporting errors to the de4py telemetry system.
-    
-    This client is designed to be fail-safe - errors during telemetry
-    reporting should never crash the application.
-    
-    Usage:
-        client = TelemetryClient()
-        client.report_error(
-            source="core",
-            source_name="deobfuscator",
-            severity="error",
-            error_type="ValueError",
-            error_message="Invalid input format",
-            traceback_str="...",
-            context={"action": "parse_file", "file_hash": "abc123"}
-        )
-    """
-    
+    """Fail-safe: reporting failures are swallowed and never propagate to callers."""
+
     def __init__(self):
-        """Initialize the telemetry client."""
         self._client = De4pyApiClient()
         self._platform = _get_platform()
         self._python_version = _get_python_version()
@@ -93,18 +73,14 @@ class TelemetryClient:
         traceback_str: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> bool:
-        """Report an error to the telemetry system."""
-        # Respect user opt-out
-        if not getattr(settings, 'telemetry', True):
+        if not settings.telemetry:
             return False
-            
-        # Validate inputs
+
         if source not in TELEMETRY_SOURCES:
             source = "core"
         if severity not in TELEMETRY_SEVERITIES:
             severity = "error"
-        
-        # Build payload
+
         payload = {
             "source": source,
             "source_name": source_name,
@@ -132,13 +108,8 @@ class TelemetryClient:
             return False
     
     def close(self):
-        """Close the telemetry client."""
         self._client.close()
 
-
-# =============================================================================
-# Convenience Function
-# =============================================================================
 
 _default_client: Optional[TelemetryClient] = None
 
@@ -152,13 +123,8 @@ def report_error(
     traceback_str: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
 ) -> bool:
-    """Report an error using a shared client instance."""
-    # Respect user opt-out
-    if not getattr(settings, 'telemetry', True):
-        return False
-        
     global _default_client
-    
+
     if _default_client is None:
         _default_client = TelemetryClient()
     
@@ -174,16 +140,11 @@ def report_error(
 
 
 def send_ping() -> bool:
-    """Send a one-shot startup ping to the telemetry system.
-
-    Fail-safe: never raises, never blocks the caller. Respects the
-    user opt-out. Credentials are placeholders until changed in config.
-    """
-    if not getattr(settings, 'telemetry', True):
+    if not settings.telemetry:
         return False
 
-    api_key = getattr(settings, 'telemetry_api_key', '') or ''
-    url = getattr(settings, 'telemetry_ping_url', '') or ''
+    api_key = settings.telemetry_api_key
+    url = settings.telemetry_ping_url
     if not api_key or "xxxxx" in api_key or not url:
         logger.debug("Telemetry ping skipped: placeholder/incomplete credentials")
         return False
@@ -195,7 +156,7 @@ def send_ping() -> bool:
             json={
                 "api_key": api_key,
                 "instance_id": _machine_id(),
-                "version": getattr(settings, 'version', 'V0.0.0').lstrip("Vv"),
+                "version": settings.version.lstrip("Vv"),
                 "platform": _get_platform(),
                 "architecture": _get_architecture(),
             },
@@ -207,3 +168,7 @@ def send_ping() -> bool:
     except Exception as e:
         logger.debug(f"Telemetry ping failed: {e}")
         return False
+
+
+def start_ping_async() -> None:
+    threading.Thread(target=send_ping, daemon=True).start()

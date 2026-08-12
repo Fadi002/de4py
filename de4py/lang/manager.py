@@ -66,13 +66,11 @@ class TranslationManager(QObject):
         self._available_languages: Optional[Dict[str, str]] = None
         self._locale = QLocale(QLocale.Language.English)
         
-        # Determine locales directory path
         self._locales_dir = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), 
             "locales"
         )
         
-        # Load English as fallback
         self._load_fallback()
         
         self._initialized = True
@@ -136,9 +134,7 @@ class TranslationManager(QObject):
         
         success = self.load_language(lang_code)
         if success:
-            # Update application layout direction for RTL
             self._apply_layout_direction()
-            # Emit signal for UI updates
             self.language_changed.emit(self._current_lang)
         
         return success
@@ -155,14 +151,11 @@ class TranslationManager(QObject):
                 app.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
     
     def tr(self, key: str, **kwargs) -> str:
-        # Try current language
         value = self._get_nested_value(self._translations, key)
         
-        # Fallback to English if missing or empty
         if value is None or value == "":
             value = self._get_nested_value(self._fallback_translations, key)
         
-        # Final fallback: return the key itself
         if value is None:
             logger.debug(f"Translation not found: {key}")
             return key
@@ -172,7 +165,6 @@ class TranslationManager(QObject):
             # For dict values without count, return 'other' form or first value
             return str(value.get('other', value.get(list(value.keys())[0], key)))
         
-        # Substitute placeholders
         result = str(value)
         for name, val in kwargs.items():
             result = result.replace(f"{{{name}}}", str(val))
@@ -180,29 +172,22 @@ class TranslationManager(QObject):
         return result
     
     def ntr(self, key: str, count: int, **kwargs) -> str:
-        # Get the plural object
         plural_obj = self._get_nested_value(self._translations, key)
         if plural_obj is None:
             plural_obj = self._get_nested_value(self._fallback_translations, key)
         
         if not isinstance(plural_obj, dict):
-            # Not a plural key, treat as regular
             return self.tr(key, count=count, **kwargs)
         
-        # Determine plural form
         form = self._get_plural_form(count, self._current_lang)
         
-        # Get the translation for this form
         value = plural_obj.get(form, plural_obj.get('other', str(count)))
         
-        # Check if the retrieved value is valid; if empty/None, try fallback
         if not value:
-             # Try to get from fallback
              fallback_obj = self._get_nested_value(self._fallback_translations, key)
              if isinstance(fallback_obj, dict):
                  value = fallback_obj.get(form, fallback_obj.get('other', str(count)))
         
-        # Substitute placeholders including count
         result = str(value)
         result = result.replace("{count}", str(count))
         for name, val in kwargs.items():
@@ -226,18 +211,15 @@ class TranslationManager(QObject):
             else:
                 return "other"
         else:
-            # Simple English/Spanish rules
             if count == 1:
                 return "one"
             else:
                 return "other"
     
     def _get_nested_value(self, data: Dict, key: str) -> Any:
-        # First try direct key lookup (flat structure)
         if key in data:
             return data[key]
         
-        # Try nested lookup
         keys = key.split('.')
         current = data
         for k in keys:
@@ -275,7 +257,7 @@ class TranslationManager(QObject):
         available = {}
         try:
             if not os.path.exists(self._locales_dir):
-                return {"en": "English"} # Should check fallback though
+                return {"en": "English"}
 
             for filename in os.listdir(self._locales_dir):
                 if filename.endswith(".json"):

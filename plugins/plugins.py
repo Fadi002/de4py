@@ -19,7 +19,6 @@ def load_plugins() -> List[Dict[str, Any]]:
     plugins_dir = Path(__file__).parent
     loaded_plugins = []
 
-    # Iterate through all .py files in the plugins folder
     for plugin_file in plugins_dir.glob("*.py"):
         if plugin_file.name in ("__init__.py", "plugins.py"):
             continue

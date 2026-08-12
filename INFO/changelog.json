@@ -148,5 +148,16 @@
             "improving Onyx-Alpha engine",
             "Optimizations and bug fixes"
         ]
+    },
+    {
+        "version": "3.3.2",
+        "changes": [
+            "Introduced AI-powered analysis with local (Ollama) and cloud providers (OpenAI, OpenRouter, Google Gemini, OpenCode Zen and custom OpenAI-compatible endpoints)",
+            "Added AI review markers (annotate / explain / simplify) with privacy consent and credentials vault",
+            "Added cross-platform support (pyshell is still windows only for now)",
+            "Improved TUI",
+            "Updated Onyx engine pipeline",
+            "Optimizations and bug fixes"
+        ]
     }
 ]

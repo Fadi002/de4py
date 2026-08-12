@@ -99,6 +99,9 @@ class TOSDialog(QWidget):
 
     def _setup_animation(self):
         self.effect = QGraphicsOpacityEffect(self)
+        # QGraphicsOpacityEffect defaults to 0.7 — reset so fade_in actually
+        # fades from transparent instead of popping in at 70% opacity.
+        self.effect.setOpacity(0.0)
         self.setGraphicsEffect(self.effect)
         self.anim = QPropertyAnimation(self.effect, b"opacity")
         self.anim.setDuration(300)
@@ -154,6 +157,11 @@ class TOSDialog(QWidget):
         super().showEvent(event)
         if not self._lock_events and self.parent():
             self.setGeometry(self.parent().rect())
+            # Resizing during show doesn't re-activate the layout on a
+            # translucent widget, leaving the frame at the pre-show size.
+            # Force a relayout so the modal_frame stays centered.
+            self.layout().invalidate()
+            self.layout().activate()
             self._blurred_bg = self._create_blur_cache()
 
     def resizeEvent(self, event):

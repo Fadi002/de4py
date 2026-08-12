@@ -7,16 +7,10 @@
 #
 # See the LICENSE file for details.
 
-"""
-de4py Localization Module
-"""
-
 from .manager import TranslationManager
 
-# Singleton instance
 translation_manager = TranslationManager()
 
-# Convenience helpers
 def tr(key: str, **kwargs) -> str:
     return translation_manager.tr(key, **kwargs)
 

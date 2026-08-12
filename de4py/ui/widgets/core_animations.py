@@ -18,7 +18,7 @@ from PySide6.QtCore import (
     QSize, QPointF,
     QRectF
 )
-from PySide6.QtGui import QColor, QCursor, QPainter, QIcon
+from PySide6.QtGui import QColor, QCursor, QPainter, QIcon, QPen
 
 from de4py.utils import sentry
 from de4py.ui.motion.material import MaterialState, MaterialPainter
@@ -478,6 +478,14 @@ class AnimatedStackedWidget(QFrame):
     def fade_to_index(self, index):
         if index < 0 or index >= len(self._widgets) or index == self._current_index:
             return
+
+        # The GlassBlurCache keys only on window id + size, so a blur captured
+        # on one screen would otherwise be reused after navigating to another.
+        try:
+            from de4py.ui.widgets.glass_utils import GlassBlurCache
+            GlassBlurCache.invalidate(self.window())
+        except Exception:
+            pass
 
         if self._is_animating:
             self._stop_animation()

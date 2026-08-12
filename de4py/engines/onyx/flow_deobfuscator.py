@@ -12,11 +12,15 @@ Advanced control-flow and structural deobfuscation pass.
 """
 
 import ast
+import builtins
 import copy
 from typing import Any, Dict, List, Set, Union
 
 from de4py.engines.onyx.rule_renamer import is_mangled
+from de4py.engines.onyx.safe_eval import safe_eval, safe_eval_scalar
 from de4py.engines.onyx.ast_cleaner import _is_safe_block
+
+_BUILTIN_NAMES = frozenset(n for n in dir(builtins) if not n.startswith('__'))
 
 
 def _find_state_machine_vars(tree: ast.AST) -> set:
@@ -44,11 +48,7 @@ def _find_state_machine_vars(tree: ast.AST) -> set:
 class FlowDeobfuscator:
 
     def deobfuscate(self, source: str) -> str:
-        """
-        Apply all flow-level transforms.  Each pass works on the AST; the
-        result is unparsed back to source so subsequent passes see clean text.
-        Returns the original source if anything goes wrong.
-        """
+        """Apply all flow-level transforms, re-unparsing between passes."""
         try:
             tree = ast.parse(source)
         except SyntaxError:
@@ -57,14 +57,15 @@ class FlowDeobfuscator:
         try:
             changed = True
             passes  = 0
+            before = ast.unparse(tree)
             while changed and passes < 8:
                 passes += 1
-                before = ast.unparse(tree)
 
                 tree = self._resolve_constant_aliases(tree)
                 tree = self._resolve_local_constant_aliases(tree)
                 tree = self._resolve_local_aliases(tree)
                 tree = self._resolve_import_aliases(tree)
+                tree = self._resolve_builtin_aliases(tree)
                 tree = self._remove_bogus_try_except(tree)
                 tree = self._fold_redundant_var_chains(tree)
                 tree = self._resolve_getattr_string_calls(tree)
@@ -75,6 +76,7 @@ class FlowDeobfuscator:
                 ast.fix_missing_locations(tree)
                 after = ast.unparse(tree)
                 changed = (before != after)
+                before = after
 
             return ast.unparse(tree)
         except RecursionError:
@@ -84,14 +86,14 @@ class FlowDeobfuscator:
 
     def _resolve_constant_aliases(self, tree: ast.Module) -> ast.Module:
         """
-        Find module-level assignments like X = "literal" or X = 42
-        where X is assigned exactly once and never augmented/deleted.
-        Replace all subsequent uses of X with the literal value.
-        Only handles primitive types (str, int, float, bool, bytes, None).
+        Inline single-assignment module-level constants, plus the bulk
+        constant-pool shape `a, b, c = 'x', 42, ...` a packer emits.
         """
-        # Collect single-assignment constant names at module level
         assignment_count: Dict[str, int] = {}
         constant_value:   Dict[str, ast.Constant] = {}
+        source_stmt:      Dict[str, ast.Assign] = {}
+        full_names_by_stmt: Dict[int, List[str]] = {}
+        tuple_unpack_stmt_ids: Set[int] = set()
 
         for node in tree.body:
             if (
@@ -105,19 +107,39 @@ class FlowDeobfuscator:
                 assignment_count[name] = assignment_count.get(name, 0) + 1
                 if assignment_count[name] == 1:
                     constant_value[name] = node.value
+                    source_stmt[name] = node
+                    full_names_by_stmt.setdefault(id(node), []).append(name)
+            elif (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], (ast.Tuple, ast.List))
+                and node.targets[0].elts
+                and all(isinstance(e, ast.Name) for e in node.targets[0].elts)
+                and isinstance(node.value, (ast.Tuple, ast.List))
+                and len(node.value.elts) == len(node.targets[0].elts)
+                and all(
+                    isinstance(e, ast.Constant)
+                    and isinstance(e.value, (str, int, float, bool, bytes, type(None)))
+                    for e in node.value.elts
+                )
+            ):
+                tuple_unpack_stmt_ids.add(id(node))
+                for name_node, val_node in zip(node.targets[0].elts, node.value.elts):
+                    name = name_node.id
+                    assignment_count[name] = assignment_count.get(name, 0) + 1
+                    if assignment_count[name] == 1:
+                        constant_value[name] = val_node
+                        source_stmt[name] = node
+                        full_names_by_stmt.setdefault(id(node), []).append(name)
 
-        # Remove names that are assigned more than once
         aliases = {k: v for k, v in constant_value.items() if assignment_count[k] == 1}
 
-        # Protect state machine variables from being inlined
         _sm_protected = _find_state_machine_vars(tree)
         for name in _sm_protected:
             aliases.pop(name, None)
 
-        # Also exclude names that are augmented or used as assignment targets elsewhere
-        # Count ALL assignments to each name anywhere in the full tree
-        # (not just module-level). If a name is assigned more than once anywhere,
-        # it is not a true constant alias and must not be folded.
+        # Reassignment anywhere (including AugAssign/NamedExpr/loop targets)
+        # disqualifies a name.
         all_assign_counts: Dict[str, int] = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign):
@@ -135,7 +157,6 @@ class FlowDeobfuscator:
                 if target and isinstance(target, ast.Name):
                     all_assign_counts[target.id] = all_assign_counts.get(target.id, 0) + 99
 
-        # Remove any alias that is re-assigned anywhere in the tree
         for name in list(aliases.keys()):
             if all_assign_counts.get(name, 0) > 1:
                 aliases.pop(name)
@@ -160,26 +181,35 @@ class FlowDeobfuscator:
         if not aliases:
             return tree
 
-        # Replace Name loads with the constant
+        # Record which names were actually substituted: a binding whose value
+        # went nowhere is still payload the analyst needs to read.
+        substituted: Set[str] = set()
+
         class AliasReplacer(ast.NodeTransformer):
             def visit_Name(self, node: ast.Name) -> ast.expr:
                 if node.id in aliases and isinstance(node.ctx, ast.Load):
+                    substituted.add(node.id)
                     return copy.deepcopy(aliases[node.id])
                 return node
 
         tree = AliasReplacer().visit(tree)
 
-        # Remove the original alias assignments (they're now inlined)
-        # ONLY if the target name is mangled.
+        # Only drop the alias statement when every name it bound was inlined.
+        # A single-name source must also look generated (user constants stay
+        # visible); a full tuple/list unpack is already machine-shaped.
+        def _stmt_fully_consumed(node: ast.Assign) -> bool:
+            names = full_names_by_stmt.get(id(node))
+            if not names:
+                return False
+            if not all(n in substituted for n in names):
+                return False
+            if id(node) in tuple_unpack_stmt_ids:
+                return True
+            return len(names) == 1 and is_mangled(names[0])
+
         tree.body = [
             node for node in tree.body
-            if not (
-                isinstance(node, ast.Assign)
-                and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name)
-                and node.targets[0].id in aliases
-                and is_mangled(node.targets[0].id)
-            )
+            if not (isinstance(node, ast.Assign) and _stmt_fully_consumed(node))
         ]
 
         return tree
@@ -194,7 +224,6 @@ class FlowDeobfuscator:
 
             def _fold_stmts(self, stmts):
                 import copy as _copy
-                # Collect names assigned exactly once to a constant at the TOP of this block
                 assign_count = {}
                 const_val    = {}
                 alias_source_stmts = set()  # ids of statements that are alias sources
@@ -212,7 +241,6 @@ class FlowDeobfuscator:
 
                 aliases = {k: v for k, v in const_val.items() if assign_count.get(k, 0) == 1}
 
-                # Check for mutation ANYWHERE in the block — but skip the alias source stmts
                 for s in stmts:
                     if id(s) in alias_source_stmts:
                         continue  # don't let the alias source stmt invalidate itself
@@ -231,23 +259,27 @@ class FlowDeobfuscator:
                 if not aliases:
                     return stmts
 
+                substituted = set()
+
                 class _Replacer(ast.NodeTransformer):
                     def visit_Name(self, node):
                         if node.id in aliases and isinstance(node.ctx, ast.Load):
+                            substituted.add(node.id)
                             return _copy.deepcopy(aliases[node.id])
                         return node
 
+                # Substitute first so the drop decision can see which bindings
+                # were genuinely consumed; a binding nobody read is real content.
+                rewritten = [(s, _Replacer().visit(s)) for s in stmts]
                 new_stmts = []
-                for s in stmts:
-                    # Remove the alias assignment itself
-                    # ONLY if the target name is mangled.
-                    if (isinstance(s, ast.Assign)
-                            and len(s.targets) == 1
-                            and isinstance(s.targets[0], ast.Name)
-                            and s.targets[0].id in aliases
-                            and is_mangled(s.targets[0].id)):
+                for original, s in rewritten:
+                    if (isinstance(original, ast.Assign)
+                            and len(original.targets) == 1
+                            and isinstance(original.targets[0], ast.Name)
+                            and original.targets[0].id in substituted
+                            and is_mangled(original.targets[0].id)):
                         continue
-                    new_stmts.append(_Replacer().visit(s))
+                    new_stmts.append(s)
                 return new_stmts
 
             def visit_FunctionDef(self, node):
@@ -265,11 +297,7 @@ class FlowDeobfuscator:
 
 
     def _resolve_local_constant_aliases(self, tree: ast.Module) -> ast.Module:
-        """
-        Like _resolve_constant_aliases but applied inside each function body.
-        Handles: x = 5; if x > 0: ...  →  if 5 > 0: ...
-        Only folds variables assigned exactly once in the function, never aug-assigned.
-        """
+        """Like _resolve_constant_aliases, applied inside each function body."""
         class LocalFolder(ast.NodeTransformer):
             def _fold_body(self, stmts):
                 assign_counts= {}
@@ -302,7 +330,6 @@ class FlowDeobfuscator:
                 result = []
                 for stmt in stmts:
                     stmt = Sub().visit(stmt)
-                    ast.fix_missing_locations(stmt)
                     result.append(stmt)
                 return result
 
@@ -315,13 +342,7 @@ class FlowDeobfuscator:
         return LocalFolder().visit(tree)
 
     def _resolve_import_aliases(self, tree: ast.Module) -> ast.Module:
-        """
-        Resolve simple module alias assignments:
-          os2 = os          → remove; replace os2.x with os.x
-          sys2 = sys        → similar
-        Only module-level, single-target assignments to a known import name.
-        """
-        # Build set of imported names at module level
+        """Resolve simple module aliases (os2 = os) back to the imported name."""
         imported_names: Set[str] = set()
         for node in tree.body:
             if isinstance(node, ast.Import):
@@ -331,7 +352,6 @@ class FlowDeobfuscator:
                 for alias in node.names:
                     imported_names.add(alias.asname or alias.name)
 
-        # Find   alias_name = imported_name  at module level
         alias_map: Dict[str, str] = {}   # alias → real_name
         for node in tree.body:
             if (
@@ -355,24 +375,59 @@ class FlowDeobfuscator:
 
         tree = ImportAliasReplacer().visit(tree)
 
-        # Keep module-level import aliases to avoid stripping them if they are the only output
         return tree
 
+    def _resolve_builtin_aliases(self, tree: ast.Module) -> ast.Module:
+        """Resolve aliases to bare builtins (jq = vars). Loaders rename
+        vars/globals/exec/__import__ to short generated names so a static grep
+        misses them; substituting lets downstream patterns match."""
+        alias_map: Dict[str, str] = {}
+        for node in tree.body:
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, ast.Name)
+                and node.value.id in _BUILTIN_NAMES
+                and node.targets[0].id != node.value.id
+            ):
+                alias_map[node.targets[0].id] = node.value.id
+
+        if not alias_map:
+            return tree
+
+        assign_counts: Dict[str, int] = {}
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Assign):
+                for t in n.targets:
+                    if isinstance(t, ast.Name):
+                        assign_counts[t.id] = assign_counts.get(t.id, 0) + 1
+            elif isinstance(n, (ast.AugAssign, ast.NamedExpr)):
+                t = getattr(n, 'target', None)
+                if isinstance(t, ast.Name):
+                    assign_counts[t.id] = assign_counts.get(t.id, 0) + 99
+        for name in list(alias_map):
+            if assign_counts.get(name, 0) != 1:
+                alias_map.pop(name)
+        if not alias_map:
+            return tree
+
+        class BuiltinAliasReplacer(ast.NodeTransformer):
+            def visit_Name(self, node: ast.Name) -> ast.expr:
+                if node.id in alias_map and isinstance(node.ctx, ast.Load):
+                    return ast.copy_location(ast.Name(id=alias_map[node.id], ctx=ast.Load()), node)
+                return node
+
+        return BuiltinAliasReplacer().visit(tree)
+
     def _remove_bogus_try_except(self, tree: ast.Module) -> ast.Module:
-        """
-        Remove try/except blocks where:
-          - The try body contains only simple, non-raising statements
-          - All handlers are bare `except: pass` or `except Exception: pass`
-          - There is no finally block doing meaningful work
-        Replace with just the try body.
-        """
+        """Replace try/except blocks with all-bare-pass handlers by the try body."""
 
         class BogusExceptRemover(ast.NodeTransformer):
 
             def visit_Try(self, node: ast.Try) -> Union[ast.Try, List[ast.stmt]]:
                 self.generic_visit(node)
 
-                # All handlers must be pass-only
                 all_pass_handlers = all(
                     len(h.body) == 1 and isinstance(h.body[0], ast.Pass)
                     for h in node.handlers
@@ -380,36 +435,22 @@ class FlowDeobfuscator:
                 if not all_pass_handlers or not node.handlers:
                     return node
 
-                # Try body must be "safe" (no calls that commonly raise)
                 if not _is_safe_block(node.body):
                     return node
 
-                # No meaningful finally
                 if node.finalbody and not all(isinstance(s, ast.Pass) for s in node.finalbody):
                     return node
 
-                # Safe to unwrap — return just the body
                 return node.body
 
         return BogusExceptRemover().visit(tree)
 
     def _fold_redundant_var_chains(self, tree: ast.Module) -> ast.Module:
-        """
-        Within function bodies, collapse single-use variable chains:
-          a = expr
-          b = a        (a used only here)
-          → b = expr
-        Only applies when the intermediate variable is:
-          - Assigned exactly once
-          - Used exactly once (in the next statement as an rhs)
-          - Not a parameter, not in NEVER_RENAME set
-          - Not referenced anywhere else in the function
-        """
+        """Collapse single-use chains: a = expr; b = a (a used only here) → b = expr."""
 
         class ChainFolder(ast.NodeTransformer):
 
             def _fold_block(self, stmts: List[ast.stmt]) -> List[ast.stmt]:
-                """Fold redundant chains within a flat statement list."""
                 result = []
                 skip_next = False
                 for i, stmt in enumerate(stmts):
@@ -429,11 +470,9 @@ class FlowDeobfuscator:
                         and stmts[i+1].value.id == stmt.targets[0].id
                     ):
                         intermediate = stmt.targets[0].id
-                        # Verify it's used only in the next statement
                         rest = stmts[i+2:]
                         rest_source = ast.unparse(ast.Module(body=rest, type_ignores=[]))
                         if intermediate not in rest_source:
-                            # Fold: replace b = a with b = <original rhs>
                             new_stmt = ast.Assign(
                                 targets=stmts[i+1].targets,
                                 value=stmt.value,
@@ -473,19 +512,13 @@ class FlowDeobfuscator:
         return ChainFolder().visit(tree)
 
     def _resolve_getattr_string_calls(self, tree: ast.Module) -> ast.Module:
-        """
-        getattr(obj, "method")  →  obj.method   (as an Attribute node)
-        getattr(obj, "method")(args)  →  obj.method(args)
-
-        Only when the attribute name is a string literal.
-        """
+        """getattr(obj, "method") → obj.method when the name is a string literal."""
 
         class GetAttrResolver(ast.NodeTransformer):
 
             def visit_Call(self, node: ast.Call) -> ast.expr:
                 self.generic_visit(node)
 
-                # getattr(obj, "attr") used as a call: getattr(obj, "attr")(...)
                 if (
                     isinstance(node.func, ast.Call)
                     and isinstance(node.func.func, ast.Name)
@@ -508,7 +541,6 @@ class FlowDeobfuscator:
                 self.generic_visit(node)
                 return node
 
-        # Also replace standalone getattr(obj, "attr") expressions (not calls)
         class GetAttrStandalone(ast.NodeTransformer):
             def visit_Call(self, node: ast.Call) -> ast.expr:
                 self.generic_visit(node)
@@ -519,7 +551,7 @@ class FlowDeobfuscator:
                     and isinstance(node.args[1], ast.Constant)
                     and isinstance(node.args[1].value, str)
                     and node.args[1].value.isidentifier()
-                    and not node.keywords  # no default arg
+                    and not node.keywords
                 ):
                     return ast.Attribute(
                         value=node.args[0],
@@ -535,13 +567,7 @@ class FlowDeobfuscator:
 
 
     def _fold_known_var_joins(self, tree: ast.Module) -> ast.Module:
-        """
-        When a variable is assigned a list of string constants, and then joined:
-          parts = ["a", "b", "c"]
-          code  = "".join(parts)
-        → fold into: code = "abc"
-        Works at module level and inside function bodies.
-        """
+        """Fold `"".join(parts)` when parts is a known list of string constants."""
 
         class VarJoinFolder(ast.NodeTransformer):
 
@@ -549,7 +575,6 @@ class FlowDeobfuscator:
                 known_lists: Dict[str, list] = {}
                 new_stmts = []
                 for stmt in stmts:
-                    # Track: name = [str_const, str_const, ...]
                     if (isinstance(stmt, ast.Assign)
                             and len(stmt.targets) == 1
                             and isinstance(stmt.targets[0], ast.Name)
@@ -557,7 +582,6 @@ class FlowDeobfuscator:
                             and all(isinstance(e, ast.Constant) and isinstance(e.value, str)
                                     for e in stmt.value.elts)):
                         known_lists[stmt.targets[0].id] = [e.value for e in stmt.value.elts]
-                    # Fold: sep.join(name) when name is a known list
                     if (isinstance(stmt, ast.Assign)
                             and isinstance(stmt.value, ast.Call)
                             and isinstance(stmt.value.func, ast.Attribute)
@@ -595,17 +619,8 @@ class FlowDeobfuscator:
         return VarJoinFolder().visit(tree)
 
     def _fold_join_and_chr_lists(self, tree: ast.Module) -> ast.Module:
-        """
-        Fold constant join/chr patterns:
-          "".join(["a","b","c"])           -> "abc"
-          "".join(chr(x) for x in [N...]) -> "..."  (if all printable)
-          "".join(map(chr,[N...]))         -> "..."
-          [chr(x) for x in [N...]]        -> ["a","b","c"]  (if all printable)
-        Also folds known-arg function calls:
-          f(const_arg) when f is a known pure single-arg function returning a constant
-        """
+        """Fold constant join/chr list patterns into literal strings."""
 
-        # Collect module-level and top-level int-list assignments for variable resolution
         int_list_vars= {}
         for node in ast.walk(tree):
             if (isinstance(node, ast.Assign)
@@ -620,7 +635,6 @@ class FlowDeobfuscator:
             def visit_Call(self, node):
                 self.generic_visit(node)
 
-                # "sep".join(iterable)
                 if not (isinstance(node.func, ast.Attribute)
                         and node.func.attr == 'join'
                         and isinstance(node.func.value, ast.Constant)
@@ -631,17 +645,14 @@ class FlowDeobfuscator:
                 sep = node.func.value.value
                 arg = node.args[0]
 
-                # Case 1: join a list/tuple of string constants
                 if isinstance(arg, (ast.List, ast.Tuple)):
                     if all(isinstance(e, ast.Constant) and isinstance(e.value, str)
                            for e in arg.elts):
                         result = sep.join(e.value for e in arg.elts)
                         return ast.Constant(value=result)
 
-                # Case 2: join(chr(x) for x in [N,N,...]) or join(map(chr,[N,...]))
                 chr_vals = self._extract_chr_list(arg)
                 if chr_vals is None:
-                    # Case 2b: join(chr(x) for x in VAR_NAME) where VAR_NAME is known int list
                     if isinstance(arg, (ast.GeneratorExp, ast.ListComp)):
                         if (len(arg.generators) == 1
                                 and isinstance(arg.elt, ast.Call)
@@ -669,8 +680,6 @@ class FlowDeobfuscator:
                 return node
 
             def _extract_chr_list(self, node):
-                """Extract list of ints from chr(x) for x in [...] or map(chr,[...])."""
-                # GeneratorExp/ListComp: chr(x) for x in [N,N,...]
                 if isinstance(node, (ast.GeneratorExp, ast.ListComp)):
                     if (len(node.generators) == 1
                             and isinstance(node.elt, ast.Call)
@@ -688,7 +697,6 @@ class FlowDeobfuscator:
                             if all(isinstance(e, ast.Constant) and isinstance(e.value, int)
                                    for e in elts):
                                 return [e.value for e in elts]
-                # map(chr, [N,N,...])
                 if (isinstance(node, ast.Call)
                         and isinstance(node.func, ast.Name)
                         and node.func.id == 'map'
@@ -706,18 +714,11 @@ class FlowDeobfuscator:
 
 
     def _inline_const_functions(self, tree: ast.Module) -> ast.Module:
-        """
-        Inline zero-arg constant functions:
-          def foo(): return 42
-          x = foo() + foo()  →  x = 42 + 42
-        Then remove the (now-unused) function definitions.
-        Only removes a def if it was actually CALLED somewhere in the module.
-        """
+        """Inline zero-arg constant functions and drop the now-unused defs."""
         inliner = _ConstFnInliner()
         inliner.collect(tree)
         if not inliner.fn_values and not inliner.fn_bodies:
             return tree
-        # Only inline/remove functions that are actually called
         called_names = set()
         for node in ast.walk(tree):
             if (isinstance(node, ast.Call)
@@ -726,7 +727,6 @@ class FlowDeobfuscator:
                 called_names.add(node.func.id)
         if not called_names:
             return tree
-        # Restrict to only called functions
         inliner.fn_values = {k: v for k, v in inliner.fn_values.items() if k in called_names}
         inliner.fn_bodies = {k: v for k, v in inliner.fn_bodies.items() if k in called_names}
         if not inliner.fn_values and not inliner.fn_bodies:
@@ -763,7 +763,6 @@ class _SetAttrInliner(ast.NodeTransformer):
 
 
 class _SubstCallsWithKnown(ast.NodeTransformer):
-    """Substitute zero-arg function calls with their known constant return values."""
     def __init__(self, fn_values: dict):
         self.fn_values = fn_values
     def visit_Call(self, node):
@@ -776,19 +775,14 @@ class _SubstCallsWithKnown(ast.NodeTransformer):
 
 
 class _ConstFnInliner(ast.NodeTransformer):
-    """
-    Collect module-level functions that:
-      - take no args and return a single constant  → inline all zero-arg calls
-      - take one arg and return a constant expression using only that arg + constants
-        → inline when called with a constant argument (safe eval)
-    """
+    """Inline zero-arg constant functions, and one-arg constant expressions
+    when called with a constant argument."""
 
     def __init__(self):
         self.fn_values:    Dict[str, Any] = {}   # name → constant (zero-arg)
         self.fn_bodies:    Dict[str, tuple] = {}  # name → (arg_name, return_expr_node)
 
     def collect(self, tree: ast.Module) -> None:
-        # First pass: collect simple constant-returning zero-arg functions
         for node in tree.body:
             if not isinstance(node, ast.FunctionDef):
                 continue
@@ -806,12 +800,9 @@ class _ConstFnInliner(ast.NodeTransformer):
                 ret_expr = node.body[0].value
                 self.fn_bodies[node.name] = (arg_name, ret_expr)
 
-        # Second pass: try to evaluate zero-arg functions that call other known functions
-        # Also handle multi-stmt bodies where the function reduces to a constant
         import copy as _copy
 
         def _try_eval_fn_body(fn_node) -> tuple:
-            """Try to statically evaluate a zero-arg function body to a constant."""
             if not (not fn_node.args.args and not fn_node.args.vararg
                     and not fn_node.args.kwonlyargs):
                 return False, None
@@ -822,47 +813,25 @@ class _ConstFnInliner(ast.NodeTransformer):
             if ret_val is None:
                 return False, None
 
-            # Build a local env from the function body assignments
             local_env = {}
             for stmt in body[:-1]:
                 if (isinstance(stmt, ast.Assign)
                         and len(stmt.targets) == 1
                         and isinstance(stmt.targets[0], ast.Name)):
-                    # Try to evaluate the rhs with current local_env + fn_values
-                    try:
-                        subst = _copy.deepcopy(stmt.value)
-                        subst = _SubstCallsWithKnown(self.fn_values).visit(subst)
-                        ast.fix_missing_locations(subst)
-                        safe_builtins = {
-                            'chr': chr, 'ord': ord, 'len': len, 'str': str,
-                            'int': int, 'abs': abs, 'join': str.join,
-                            'list': list, 'tuple': tuple, 'map': map,
-                            'range': range,
-                        }
-                        code = compile(ast.Expression(body=subst), '<local>', 'eval')
-                        val = eval(code, {'__builtins__': safe_builtins}, dict(local_env))
-                        local_env[stmt.targets[0].id] = val
-                    except Exception:
-                        return False, None  # can't evaluate — stop
+                    subst = _copy.deepcopy(stmt.value)
+                    subst = _SubstCallsWithKnown(self.fn_values).visit(subst)
+                    ok, val = safe_eval(subst, local_env)
+                    if not ok:
+                        return False, None
+                    local_env[stmt.targets[0].id] = val
                 else:
                     return False, None  # non-assignment stmt — stop
 
-            # Now try to evaluate the return expression
-            try:
-                subst_ret = _copy.deepcopy(ret_val)
-                subst_ret = _SubstCallsWithKnown(self.fn_values).visit(subst_ret)
-                ast.fix_missing_locations(subst_ret)
-                safe_builtins = {
-                    'chr': chr, 'ord': ord, 'len': len, 'str': str, 'int': int,
-                    'abs': abs, 'join': str.join, 'list': list, 'tuple': tuple,
-                    'map': map, 'range': range,
-                }
-                code = compile(ast.Expression(body=subst_ret), '<ret>', 'eval')
-                result = eval(code, {'__builtins__': safe_builtins}, dict(local_env))
-                if isinstance(result, (str, int, float, bool, type(None))):
-                    return True, result
-            except Exception:
-                pass
+            subst_ret = _copy.deepcopy(ret_val)
+            subst_ret = _SubstCallsWithKnown(self.fn_values).visit(subst_ret)
+            ok, result = safe_eval_scalar(subst_ret, local_env)
+            if ok:
+                return True, result
             return False, None
 
         changed = True
@@ -878,49 +847,30 @@ class _ConstFnInliner(ast.NodeTransformer):
                     self.fn_values[node.name] = val
                     changed = True
                     continue
-                # Fallback: single-stmt return with known-call substitution
                 if not (not node.args.args and not node.args.vararg
                         and not node.args.kwonlyargs
                         and len(node.body) == 1
                         and isinstance(node.body[0], ast.Return)):
                     continue
                 ret = node.body[0].value
-                try:
-                    substituted = _copy.deepcopy(ret)
-                    substituted = _SubstCallsWithKnown(self.fn_values).visit(substituted)
-                    ast.fix_missing_locations(substituted)
-                    code = compile(ast.Expression(body=substituted), '<infer>', 'eval')
-                    val = eval(code, {'__builtins__': {'chr': chr, 'ord': ord, 'len': len,
-                                                       'str': str, 'int': int, 'abs': abs,
-                                                       'join': str.join, 'list': list,
-                                                       'map': map, 'range': range}})
-                    if isinstance(val, (str, int, float, bool, type(None))):
-                        self.fn_values[node.name] = val
-                        changed = True
-                except Exception:
-                    pass
+                substituted = _copy.deepcopy(ret)
+                substituted = _SubstCallsWithKnown(self.fn_values).visit(substituted)
+                ok, val = safe_eval_scalar(substituted)
+                if ok:
+                    self.fn_values[node.name] = val
+                    changed = True
 
     def _try_eval_with_arg(self, expr_node, arg_name: str, arg_val) -> tuple:
-        """Try to evaluate return expr substituting arg_name=arg_val."""
         import copy as _copy
-        try:
-            substituted = _SubstituteConst(arg_name, arg_val).visit(_copy.deepcopy(expr_node))
-            ast.fix_missing_locations(substituted)
-            code = compile(ast.Expression(body=substituted), '<inline>', 'eval')
-            result = eval(code, {'__builtins__': {'chr': chr, 'ord': ord, 'len': len,
-                                                   'str': str, 'int': int, 'abs': abs}})
-            return True, result
-        except Exception:
-            return False, None
+        substituted = _SubstituteConst(arg_name, arg_val).visit(_copy.deepcopy(expr_node))
+        return safe_eval(substituted)
 
     def visit_Call(self, node: ast.Call) -> ast.expr:
         self.generic_visit(node)
-        # Zero-arg call
         if (isinstance(node.func, ast.Name)
                 and node.func.id in self.fn_values
                 and not node.args and not node.keywords):
             return ast.Constant(value=self.fn_values[node.func.id])
-        # Single-arg call with constant argument
         if (isinstance(node.func, ast.Name)
                 and node.func.id in self.fn_bodies
                 and len(node.args) == 1
@@ -934,7 +884,6 @@ class _ConstFnInliner(ast.NodeTransformer):
 
     def remove_defs(self, tree: ast.Module) -> ast.Module:
         inlined = set(self.fn_values) | set(self.fn_bodies)
-        # Only remove defs that are no longer called anywhere after inlining
         remaining_calls = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
@@ -948,7 +897,6 @@ class _ConstFnInliner(ast.NodeTransformer):
 
 
 class _SubstituteConst(ast.NodeTransformer):
-    """Replace all occurrences of a name with a constant value."""
     def __init__(self, name: str, value):
         self.name  = name
         self.value = value

@@ -23,6 +23,7 @@ from PySide6.QtGui import QIcon
 from de4py.config.config import settings
 from de4py.lang import translation_manager
 from de4py.ui.motion.manager import MotionManager
+from de4py.utils.platform_utils import IS_WINDOWS
 from de4py.ui.widgets.hamburger_button import HamburgerButton
 from de4py.ui.constants import (
     WINDOW_WIDTH, WINDOW_HEIGHT, SIDEBAR_WIDTH, SPACING_MD,
@@ -137,6 +138,8 @@ class MainWindow(QMainWindow):
             pass
 
     def set_transparent_ui(self, enabled: bool):
+        if not IS_WINDOWS:
+            return
         try:
             from de4py.ui.platform.win32_blur import enable_dynamic_blur, disable_blur
 
@@ -338,11 +341,24 @@ class MainWindow(QMainWindow):
             if self._sidebar_visible:
                 self._toggle_sidebar()
 
+    def open_ai_settings(self):
+        """Jump straight to the AI configuration section in Settings."""
+        self._ensure_screen(SCREEN_SETTINGS)
+        self.screen_stack.fade_to_index(SCREEN_SETTINGS)
+        self.sidebar.set_active("settings")
+        screen = self._screen_widgets.get(SCREEN_SETTINGS)
+        if screen is not None and hasattr(screen, "focus_ai_section"):
+            screen.focus_ai_section()
+
     def navigate_to_behavior_monitor(self):
         self._ensure_screen(SCREEN_BEHAVIOR_MONITOR)
         self.screen_stack.fade_to_index(SCREEN_BEHAVIOR_MONITOR)
 
     def navigate_to_pyshell(self):
+        from de4py.utils.platform_utils import supports
+        if not supports("pyshell"):
+            self._navigate_to("home")
+            return
         self._ensure_screen(SCREEN_PYSHELL)
         self.screen_stack.fade_to_index(SCREEN_PYSHELL)
         self.sidebar.set_active("pyshell")
@@ -398,15 +414,12 @@ class MainWindow(QMainWindow):
         from de4py.lang import tr, keys
         self.setWindowTitle(tr(keys.APP_NAME))
 
-        if hasattr(self.sidebar, 'retranslate_ui'):
-            self.sidebar.retranslate_ui()
+        self.sidebar.retranslate_ui()
 
-        if hasattr(self, 'hamburger_btn'):
-            self.hamburger_btn.setToolTip(tr(TOOLTIP_HAMBURGER))
-            self.hamburger_btn.setAccessibleName(tr(TOOLTIP_HAMBURGER))
+        self.hamburger_btn.setToolTip(tr(TOOLTIP_HAMBURGER))
+        self.hamburger_btn.setAccessibleName(tr(TOOLTIP_HAMBURGER))
 
-        if hasattr(self, 'title_bar'):
-            self.title_bar.retranslate_ui()
+        self.title_bar.retranslate_ui()
 
         for widget in self._screen_widgets.values():
             if hasattr(widget, 'retranslate_ui'):
