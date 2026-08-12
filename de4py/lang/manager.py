@@ -211,18 +211,15 @@ class TranslationManager(QObject):
             else:
                 return "other"
         else:
-            # Simple English/Spanish rules
             if count == 1:
                 return "one"
             else:
                 return "other"
     
     def _get_nested_value(self, data: Dict, key: str) -> Any:
-        # First try direct key lookup (flat structure)
         if key in data:
             return data[key]
         
-        # Try nested lookup
         keys = key.split('.')
         current = data
         for k in keys:
@@ -260,7 +257,7 @@ class TranslationManager(QObject):
         available = {}
         try:
             if not os.path.exists(self._locales_dir):
-                return {"en": "English"} # Should check fallback though
+                return {"en": "English"}
 
             for filename in os.listdir(self._locales_dir):
                 if filename.endswith(".json"):
