@@ -37,9 +37,7 @@ class AnimationRegistry:
                 self._animations.pop(key, None)
 
         anim = QPropertyAnimation(target, prop_name)
-        # We need a way to clean up dead animations, but for now we'll just store it.
-        # It gets cleaned up automatically if target is destroyed, but dict will hold reference.
-        # We don't hold the target, QPropertyAnimation does internally.
+        # The dict owns the animation, not the target; the destroyed signal prunes dead entries.
         self._animations[key] = anim
 
         target.destroyed.connect(lambda obj=None, k=key: self._animations.pop(k, None))

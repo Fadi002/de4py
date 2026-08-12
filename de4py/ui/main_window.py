@@ -341,6 +341,15 @@ class MainWindow(QMainWindow):
             if self._sidebar_visible:
                 self._toggle_sidebar()
 
+    def open_ai_settings(self):
+        """Jump straight to the AI configuration section in Settings."""
+        self._ensure_screen(SCREEN_SETTINGS)
+        self.screen_stack.fade_to_index(SCREEN_SETTINGS)
+        self.sidebar.set_active("settings")
+        screen = self._screen_widgets.get(SCREEN_SETTINGS)
+        if screen is not None and hasattr(screen, "focus_ai_section"):
+            screen.focus_ai_section()
+
     def navigate_to_behavior_monitor(self):
         self._ensure_screen(SCREEN_BEHAVIOR_MONITOR)
         self.screen_stack.fade_to_index(SCREEN_BEHAVIOR_MONITOR)

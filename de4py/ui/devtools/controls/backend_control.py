@@ -80,7 +80,7 @@ class BackendControl(QWidget):
         bus.log.emit("DEBUG", f"API Latency set to: {ms}ms")
 
     def apply_preset(self, val: int):
-        if val == -1: # Offline
+        if val == -1:
             context.dev_flags["api_fail"] = True
             self.mode_group.button(1).setChecked(True)
         else:
