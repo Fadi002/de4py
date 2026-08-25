@@ -1,0 +1,342 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
+import os
+
+from PySide6.QtWidgets import (
+    QApplication, QFileDialog,
+    QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QPushButton, QTextEdit, QFrame,
+    QProgressBar,
+)
+from PySide6.QtCore import Qt
+
+from de4py.ui.workers.pylingual_worker import PyLingualWorker
+from de4py.lang import tr
+from de4py.utils import sentry
+from de4py.ui.widgets.pylingual_widgets import TOSConfig, TOSDialog, ModernToggle
+from de4py.lang.keys import (
+    SCREEN_TITLE_PYLINGUAL, PYLINGUAL_OFFLINE, PYLINGUAL_ONLINE,
+    PYLINGUAL_SELECT_FILE, PYLINGUAL_EXECUTE,
+    PYLINGUAL_TOS_TITLE, PYLINGUAL_TOS_ACCEPTANCE,
+    PYLINGUAL_TOS_CONTENT, PYLINGUAL_CANCEL, PYLINGUAL_I_ACCEPT,
+    PYLINGUAL_TOOLTIP_SELECT, PYLINGUAL_TOOLTIP_EXECUTE, PYLINGUAL_TOOLTIP_COPY,
+    PYLINGUAL_PLACEHOLDER_RESULT, PYLINGUAL_PLACEHOLDER_SELECTED,
+    PYLINGUAL_MSG_OFFLINE_LIMIT, PYLINGUAL_MSG_COMPLETE, PYLINGUAL_MSG_CACHED,
+    PYLINGUAL_MSG_INITIALIZING, MSG_COPIED,
+    MSG_SUCCESS,
+    BTN_COPY_OUTPUT, LBL_OUTPUT
+)
+
+
+class PyLingualScreen(QWidget):
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._consent_accepted = False
+        self._file_selected = False
+        self._selected_file_path = None
+        self._worker = None
+        self._setup_ui()
+
+    def _setup_ui(self):
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(40, 20, 40, 20)
+        root_layout.setSpacing(20)
+
+        self.title_label = QLabel(tr(SCREEN_TITLE_PYLINGUAL))
+        self.title_label.setObjectName("TitleLabel")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        root_layout.addWidget(self.title_label)
+
+        mode_frame = QFrame()
+        mode_frame.setObjectName("ModeSelectorFrame")
+        mode_frame.setFixedHeight(60)
+
+        mode_layout = QHBoxLayout(mode_frame)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        mode_layout.setSpacing(15)
+
+        self.offline_label = QLabel(tr(PYLINGUAL_OFFLINE))
+        self.offline_label.setObjectName("ModeLabel")
+        self.offline_label.setProperty("active", True)
+        self.offline_label.setFixedHeight(26)
+        self.offline_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.mode_toggle = ModernToggle()
+        self.mode_toggle.toggled.connect(self._on_mode_toggled)
+
+        self.online_label = QLabel(tr(PYLINGUAL_ONLINE))
+        self.online_label.setObjectName("ModeLabel")
+        self.online_label.setProperty("active", False)
+        self.online_label.setFixedHeight(26)
+        self.online_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        mode_layout.addStretch()
+        mode_layout.addWidget(self.offline_label, 0, Qt.AlignmentFlag.AlignCenter)
+        mode_layout.addWidget(self.mode_toggle, 0, Qt.AlignmentFlag.AlignCenter)
+        mode_layout.addWidget(self.online_label, 0, Qt.AlignmentFlag.AlignCenter)
+        mode_layout.addStretch()
+
+        root_layout.addWidget(mode_frame)
+
+        self.content_container = QFrame()
+        self.content_container.setObjectName("StyledFrame")
+        root_layout.addWidget(self.content_container, 1)
+
+        content_layout = QVBoxLayout(self.content_container)
+        content_layout.setSpacing(20)
+
+        actions_layout = QHBoxLayout()
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(15)
+
+        self.select_btn = QPushButton(tr(PYLINGUAL_SELECT_FILE))
+        self.select_btn.setToolTip(tr(PYLINGUAL_TOOLTIP_SELECT))
+
+        self.select_btn.setFixedHeight(45)
+        self.select_btn.clicked.connect(self._on_select_file_clicked)
+        actions_layout.addWidget(self.select_btn, 1)
+
+        self.execute_btn = QPushButton(tr(PYLINGUAL_EXECUTE))
+        self.execute_btn.setToolTip(tr(PYLINGUAL_TOOLTIP_EXECUTE))
+
+        self.execute_btn.setFixedHeight(45)
+        self.execute_btn.setEnabled(False)
+        self.execute_btn.clicked.connect(self._on_execute_clicked)
+        actions_layout.addWidget(self.execute_btn, 1)
+
+        self.cancel_btn = QPushButton(tr(PYLINGUAL_CANCEL))
+        self.cancel_btn.setFixedHeight(45)
+        self.cancel_btn.setEnabled(False)
+        self.cancel_btn.clicked.connect(self._on_cancel_clicked)
+        actions_layout.addWidget(self.cancel_btn)
+
+        self.copy_btn = QPushButton(tr(BTN_COPY_OUTPUT))
+        self.copy_btn.setToolTip(tr(PYLINGUAL_TOOLTIP_COPY))
+
+        self.copy_btn.setFixedHeight(45)
+        self.copy_btn.setFixedWidth(140)
+        self.copy_btn.clicked.connect(self._copy_to_clipboard)
+        actions_layout.addWidget(self.copy_btn)
+
+        content_layout.addLayout(actions_layout)
+
+        self.progress_frame = QFrame()
+        self.progress_frame.setVisible(False)
+        progress_layout = QVBoxLayout(self.progress_frame)
+        progress_layout.setContentsMargins(0, 0, 0, 0)
+        progress_layout.setSpacing(8)
+
+        self.progress_label = QLabel("")
+        self.progress_label.setObjectName("SubtitleLabel")
+        progress_layout.addWidget(self.progress_label)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.progress_bar.setFormat("%p%")
+        self.progress_bar.setFixedHeight(22)
+
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                background-color: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(2, 135, 207, 0.3);
+                border-radius: 11px;
+                text-align: center;
+                color: #ffffff;
+                font-weight: bold;
+            }
+            QProgressBar::chunk {
+                background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #0287CF, stop:1 #58a6ff);
+                border-radius: 10px;
+            }
+        """)
+        progress_layout.addWidget(self.progress_bar)
+
+        content_layout.addWidget(self.progress_frame)
+
+        self.result_title = QLabel(tr(LBL_OUTPUT))
+        self.result_title.setObjectName("SubtitleLabel")
+        content_layout.addWidget(self.result_title)
+
+        self.result_area = QTextEdit()
+        self.result_area.setPlaceholderText(tr(PYLINGUAL_PLACEHOLDER_RESULT))
+
+        self.result_area.setReadOnly(True)
+        content_layout.addWidget(self.result_area)
+
+    def _on_mode_toggled(self, checked):
+        self.online_label.setProperty("active", checked)
+        self.offline_label.setProperty("active", not checked)
+
+        for label in [self.online_label, self.offline_label]:
+            label.style().unpolish(label)
+            label.style().polish(label)
+
+        sentry.breadcrumb(f"PyLingual mode toggled: {'Online' if checked else 'Offline'}", category="user.action")
+
+        if checked:
+            if not self._consent_accepted:
+                self._check_consent()
+        else:
+            self.content_container.setEnabled(True)
+
+    def _on_select_file_clicked(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Python File",
+            "",
+            "Python Files (*.py *.pyc *.pyo);;All Files (*)"
+        )
+
+        if filename:
+            self._selected_file_path = filename
+            self._file_selected = True
+            self.execute_btn.setEnabled(True)
+
+            basename = os.path.basename(filename)
+            self.result_area.setPlaceholderText(tr(PYLINGUAL_PLACEHOLDER_SELECTED, filename=basename))
+            sentry.breadcrumb(f"File selected for PyLingual: {basename}", category="user.action", path=filename)
+
+
+            self.window().show_notification("success", tr(MSG_SUCCESS))
+
+
+    def _on_execute_clicked(self):
+        if not self._file_selected:
+            return
+
+        elif self.mode_toggle.is_checked():
+            self._execute_online()
+        else:
+            self._execute_offline()
+
+    def _execute_online(self):
+        if self._worker is not None and self._worker.isRunning():
+            return
+
+        self.result_area.clear()
+        self._show_progress(True)
+        self._set_controls_enabled(False)
+
+        with sentry.transaction("PyLingual Decompilation", "tool.pylingual"):
+            file_size = os.path.getsize(self._selected_file_path) if os.path.exists(self._selected_file_path) else 0
+            sentry.set_extra_context("pylingual_meta", {
+                "mode": "Online",
+                "file_path": self._selected_file_path,
+                "file_size": file_size
+            })
+
+            self._worker = PyLingualWorker(self._selected_file_path)
+            self._worker.progress.connect(self._on_worker_progress)
+            self._worker.finished.connect(self._on_worker_finished)
+            self._worker.error.connect(self._on_worker_error)
+            self._worker.cached.connect(self._on_worker_cached)
+            self._worker.start()
+            self.cancel_btn.setEnabled(True)
+
+    def _on_cancel_clicked(self):
+        worker = self._worker
+        if worker is not None and worker.isRunning():
+            worker.cancel()
+            self.cancel_btn.setEnabled(False)
+
+    def _execute_offline(self):
+        with sentry.transaction("PyLingual Decompilation", "tool.pylingual"):
+            sentry.set_extra_context("pylingual_meta", {"mode": "Offline"})
+            self.window().show_notification("info", tr(PYLINGUAL_MSG_OFFLINE_LIMIT))
+
+
+    def _on_worker_progress(self, stage: str, percentage: float, message: str):
+        # Scale normalization: if percentage is in 0-1 range (and > 0), scale to 0-100
+        # This makes the integration robust to different API response formats
+        display_value = percentage
+        if 0 < percentage <= 1.0:
+            display_value = percentage * 100
+
+        self.progress_label.setText(message)
+        self.progress_bar.setValue(int(display_value))
+
+    def _on_worker_finished(self, source_code: str):
+        self._show_progress(False)
+        self._set_controls_enabled(True)
+        self.result_area.setText(source_code)
+
+        self.window().show_notification("success", tr(PYLINGUAL_MSG_COMPLETE))
+
+
+    def _on_worker_error(self, error_message: str):
+        self._show_progress(False)
+        self._set_controls_enabled(True)
+        self.result_area.setText(f"# Error\n# {error_message}")
+
+        self.window().show_notification("error", error_message)
+
+    def _on_worker_cached(self):
+        self.window().show_notification("info", tr(PYLINGUAL_MSG_CACHED))
+
+
+    def _show_progress(self, show: bool):
+        self.progress_frame.setVisible(show)
+        if show:
+            self.progress_bar.setValue(0)
+            self.progress_label.setText(tr(PYLINGUAL_MSG_INITIALIZING))
+
+
+    def _set_controls_enabled(self, enabled: bool):
+        self.select_btn.setEnabled(enabled)
+        self.execute_btn.setEnabled(enabled and self._file_selected)
+        self.mode_toggle.setEnabled(enabled)
+        self.cancel_btn.setEnabled(not enabled and self._worker is not None
+                                   and self._worker.isRunning())
+
+    def _copy_to_clipboard(self):
+        data = self.result_area.toPlainText()
+        if data:
+            QApplication.clipboard().setText(data)
+            self.window().show_notification("info", tr(MSG_COPIED))
+
+
+    def _check_consent(self):
+        config = TOSConfig(
+            title=tr(PYLINGUAL_TOS_TITLE),
+            acceptance_text=tr(PYLINGUAL_TOS_ACCEPTANCE),
+            tos_content=tr(PYLINGUAL_TOS_CONTENT)
+        )
+        self.tos_overlay = TOSDialog(config=config, parent=self.window())
+
+        self.tos_overlay.cancel_btn.setText(tr(PYLINGUAL_CANCEL))
+        self.tos_overlay.accept_btn.setText(tr(PYLINGUAL_I_ACCEPT))
+
+        self.tos_overlay.accepted.connect(self._on_consent_accepted)
+        self.tos_overlay.rejected.connect(self._on_consent_rejected)
+        self.tos_overlay.fade_in()
+
+    def retranslate_ui(self):
+        self.title_label.setText(tr(SCREEN_TITLE_PYLINGUAL))
+        self.offline_label.setText(tr(PYLINGUAL_OFFLINE))
+        self.online_label.setText(tr(PYLINGUAL_ONLINE))
+        self.select_btn.setText(tr(PYLINGUAL_SELECT_FILE))
+        self.execute_btn.setText(tr(PYLINGUAL_EXECUTE))
+        self.cancel_btn.setText(tr(PYLINGUAL_CANCEL))
+        self.copy_btn.setText(tr(BTN_COPY_OUTPUT))
+        self.result_title.setText(tr(LBL_OUTPUT))
+
+    def _on_consent_accepted(self):
+        self._consent_accepted = True
+        self.content_container.setEnabled(True)
+
+    def _on_consent_rejected(self):
+        self.mode_toggle.set_checked(False)
+        self.content_container.setEnabled(True)

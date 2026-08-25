@@ -1,0 +1,85 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
+from PySide6.QtGui import QColor
+
+
+def qcolor_rgba(value: str) -> QColor:
+    # constants use CSS hex (RRGGBBAA); QColor parses AARRGGBB
+    if len(value) == 9 and value[0] == "#":
+        c = QColor(value[:7])
+        c.setAlpha(int(value[7:9], 16))
+        return c
+    return QColor(value)
+
+
+COLOR_BG_DARK = "#0f0f0f"
+COLOR_BG_FRAME = "#1f1f1f"
+COLOR_BG_INPUT = "#222222"
+COLOR_BG_INPUT_HOVER = "#333333"
+COLOR_BG_INPUT_FOCUS = "#444444"
+COLOR_ACCENT = "#0287CF"
+COLOR_ACCENT_HOVER = "#4ba3e2"
+COLOR_ACCENT_DIM = "#0287cf55"
+COLOR_TEXT = "#ffffff"
+COLOR_TEXT_DIM = "#ffffffaa"
+COLOR_NAVBAR_BG = "#55555511"
+COLOR_OVERLAY = "rgba(0, 0, 0, 0.5)"
+
+FONT_FAMILY_MONO = "Share Tech Mono, Consolas, JetBrains Mono, monospace"
+FONT_FAMILY_UI = "Segoe UI, Inter, sans-serif"
+FONT_SIZE_NORMAL = 14
+FONT_SIZE_LARGE = 16
+FONT_SIZE_TITLE = 24
+FONT_SIZE_CLOCK = 48
+
+SPACING_XS = 5
+SPACING_SM = 8
+SPACING_MD = 16
+SPACING_LG = 24
+SPACING_XL = 32
+
+SIDEBAR_WIDTH = 240
+SIDEBAR_WIDTH_COLLAPSED = 0
+HAMBURGER_SIZE = 50
+BUTTON_PADDING_H = 20
+BUTTON_PADDING_V = 10
+BUTTON_RADIUS = 6
+FRAME_RADIUS = 10
+FRAME_BORDER = 2
+INPUT_RADIUS = 10
+
+WINDOW_WIDTH = 1024
+WINDOW_HEIGHT = 589
+WINDOW_TITLE = "de4py"
+
+NOTIF_WIDTH = 300
+NOTIF_DURATION = 3500
+NOTIF_PROGRESS_DURATION = 3000
+
+SCREEN_HOME = 0
+SCREEN_DEOBFUSCATOR = 1
+SCREEN_PYSHELL = 2
+SCREEN_BEHAVIOR_MONITOR = 3
+SCREEN_ANALYZER = 4
+SCREEN_PLUGINS = 5
+SCREEN_SETTINGS = 6
+SCREEN_ABOUT = 7
+SCREEN_PYLINGUAL = 8
+
+NAV_ITEMS = [
+    ("home", "nav.home", "home.svg"),
+    ("deobfuscator", "nav.deobfuscator", "layers.svg"),
+    ("pyshell", "nav.pyshell", "terminal.svg"),
+    ("analyzer", "nav.analyzer", "file-text.svg"),
+    ("plugins", "nav.plugins", "grid.svg"),
+    ("pylingual", "nav.pylingual", "file.svg"),
+    ("settings", "nav.settings", "settings.svg"),
+    ("about", "nav.about", "info.svg"),
+]

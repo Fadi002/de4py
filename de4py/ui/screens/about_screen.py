@@ -1,0 +1,69 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame
+from PySide6.QtCore import Qt
+
+from de4py.lang import tr
+from de4py.lang.keys import (
+    SCREEN_TITLE_ABOUT
+)
+from de4py._meta import COPYRIGHT, LICENSE
+
+
+class AboutScreen(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(40, 20, 40, 20)
+        layout.setSpacing(20)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        frame = QFrame()
+        frame.setObjectName("StyledFrame")
+
+        frame_layout = QVBoxLayout(frame)
+        frame_layout.setSpacing(12)
+        frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.title_label = QLabel(tr(SCREEN_TITLE_ABOUT))
+        self.title_label.setObjectName("TitleLabel")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(self.title_label)
+
+        github1 = QLabel('GitHub: <a href="https://github.com/fadi002" style="color: #0287CF;">fadi002</a>')
+        github1.setOpenExternalLinks(True)
+        github1.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(github1)
+
+        github2 = QLabel('GitHub: <a href="https://github.com/AdvDebug" style="color: #0287CF;">AdvDebug</a>')
+        github2.setOpenExternalLinks(True)
+        github2.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(github2)
+
+        signal = QLabel('<a href="https://signal.group/#CjQKIGl8b9tJIMoMpwnrzUIDSqJY5UMJOzpixJklsEgYSrjJEhCw2rBAUFVOWkwIZ-gM3mqS" style="color: #0287CF;">Signal Community</a>')
+        signal.setOpenExternalLinks(True)
+        signal.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(signal)
+
+        discord = QLabel("Made by 0xmrpepe & advdebug with <3")
+        discord.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(discord)
+
+        copyright_label = QLabel(f"{COPYRIGHT} | {LICENSE}")
+        copyright_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(copyright_label)
+
+        layout.addWidget(frame)
+
+    def retranslate_ui(self):
+        self.title_label.setText(tr(SCREEN_TITLE_ABOUT))

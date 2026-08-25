@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "de4py"
+version = "3.3.2"
+dependencies = [
+    "PySide6",
+    "requests",
+    "psutil",
+    "colorama",
+    "pypresence",
+    "pycryptodome",
+    "xdis",
+    "pyinstaller",
+    "sentry-sdk",
+    "pefile",
+    "six"
+]
+description = "Python Deobfuscator & Analyzer"
+authors = [
+  {name = "Fadi002"},
+]
+readme = "README.md"
+requires-python = ">=3.9"
+license = "CC-BY-NC-4.0"
+
+[project.scripts]
+de4py = "de4py.main:main"
+
+[tool.setuptools.packages.find]
+include = ["de4py*"]
+
+[tool.setuptools.package-data]
+de4py = [
+    "ui/themes/*.qss",
+    "ui/resources/*.svg",
+    "ui/resources/*.ico",
+    "lang/locales/*.json",
+    "assets/ascii/*.txt",
+    "assets/ascii/CREDITS",
+    "utils/pyshell.dll",
+]

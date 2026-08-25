@@ -1,0 +1,11 @@
+PySide6
+requests
+psutil
+colorama
+pycryptodome
+pypresence
+xdis
+pyinstaller
+sentry-sdk
+pefile
+six

@@ -1,0 +1,163 @@
+[
+    {
+        "version": "1.0",
+        "changes": [
+            "De4py released"
+        ]
+    },
+    {
+        "version": "1.0.1",
+        "changes": [
+            "Bug fixed for BlankOBF deobfuscator"
+        ]
+    },
+    {
+        "version": "1.0.2",
+        "changes": [
+            "Add support for Hyperion obfuscator"
+        ]
+    },
+    {
+        "version": "1.0.3",
+        "changes": [
+            "Add support for pyobfuscate.com obfuscator",
+            "Added file analyzer feature",
+            "Fixed some bugs"
+        ]
+    },
+    {
+        "version": "1.0.4",
+        "changes": [
+            "Added WinAPI hooking features Monitoring Files, Monitoring Processes and Monitoring Connections"
+        ]
+    },
+    {
+        "version": "1.0.5",
+        "changes": [
+            "Fixed some bugs",
+            "Added openssl + sockets dumper to text file"
+        ]
+    },
+    {
+        "version": "1.0.6",
+        "changes": [
+            "Added CLI mode (use --cli to run it)"
+        ]
+    },
+    {
+        "version": "1.0.7",
+        "changes": [
+            "Added plugins feature (https://bit.ly/de4pyplugins)",
+            "Improved WinAPI hooking",
+            "Added test feature (use --test to run it) "
+        ]
+    },
+    {
+        "version": "1.0.8",
+        "changes": [
+            "Added new deobfuscator (development tools obf)",
+            "Added runtime dumper",
+            "Added stealth features (titles + injecton)",
+            "Added error reports"
+        ]
+    },
+    {
+        "version": "1.1.9",
+        "changes": [
+            "Added settings section",
+            "Fixed some bugs in pyshell",
+            "Removed errors reporting",
+            "Ended support on windows binaries",
+            "Follow versions system",
+            "Better logs"
+        ]
+    },
+    {
+        "version": "1.2.9",
+        "changes": [
+            "Added API support"
+        ]
+    },
+    {
+        "version": "2.0.0",
+        "changes": [
+            "Complete UI overhaul: Transitioned from Eel/WebUI to native PySide6 for better performance and stability",
+            "Animation Engine: Added smooth screen transitions, hover effects, and animated overlays",
+            "Professional Diagnostics: Overhauled util/test.py with detailed dependency checks and integrity mapping",
+            "Compatibility: Fixed AST handling to support Python 3.8 through 3.14+",
+            "Theme Improvements: Enhanced QSS styling and added dynamic theme plugin support"
+        ]
+    },
+    {
+        "version": "2.1.1",
+        "changes": [
+            "Added pylingual (pyc decompiler)",
+            "Added error reporting api",
+            "Fixed some bugs"
+        ]
+    },
+    {
+        "version": "2.1.2",
+        "changes": [
+            "Fixed some bugs & Improved stability",
+            "Restructured code"
+        ]
+    },
+    {
+        "version": "2.1.3",
+        "changes": [
+            "Improved animations",
+            "Added new themes",
+            "Fixed some bugs",
+            "Added support for new languages",
+            "help us to translate de4py: https://crowdin.com/project/de4py"
+        ]
+    },
+    {
+        "version": "2.2.3",
+        "changes": [
+            "Added new transparent UI (experimental)",
+            "languages update",
+            "help us to translate de4py: https://crowdin.com/project/de4py"
+        ]
+    },
+    {
+        "version": "2.2.4",
+        "changes": [
+            "Fixed some bugs"
+        ]
+    },
+    {
+        "version": "2.2.5",
+        "changes": [
+            "Optimized code"
+        ]
+    },
+    {
+        "version": "3.1.1",
+        "changes": [
+            "Introduced the new de4py Onyx-Alpha deobfuscation engine",
+            "Refactored engine directory structure",
+            "Optimizations and bug fixes"
+        ]
+    },
+    {
+        "version": "3.2.2",
+        "changes": [
+            "Darg & drop support",
+            "improving Onyx-Alpha engine",
+            "Optimizations and bug fixes"
+        ]
+    },
+    {
+        "version": "3.3.2",
+        "changes": [
+            "Introduced AI-powered analysis with local (Ollama) and cloud providers (OpenAI, OpenRouter, Google Gemini, OpenCode Zen and custom OpenAI-compatible endpoints)",
+            "Added AI review markers (annotate / explain / simplify) with privacy consent and credentials vault",
+            "Added cross-platform support (pyshell is still windows only for now)",
+            "Improved TUI",
+            "Updated Onyx engine pipeline",
+            "Optimizations and bug fixes"
+        ]
+    }
+]

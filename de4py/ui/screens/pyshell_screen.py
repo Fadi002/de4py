@@ -1,0 +1,384 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton,
+    QLineEdit, QGridLayout, QFileDialog, QSizePolicy
+)
+from PySide6.QtCore import Qt, Signal
+
+from de4py.ui.widgets.output_textarea import OutputTextArea
+from de4py.ui.widgets.modal_overlay import ModalOverlay
+from de4py.ui.workers.pyshell_worker import (
+    InjectionWorker, PipeCommandWorker,
+    ShowConsoleWorker, ProcessMonitorWorker
+)
+from de4py.ui.controllers import pyshell_controller
+from de4py.utils import gen_path, sentry
+from de4py.lang import tr
+from de4py.lang.keys import (
+    SCREEN_TITLE_PYSHELL, PYSHELL_ATTACH, PYSHELL_INPUT_PLACEHOLDER, PYSHELL_PID_LABEL, PYSHELL_COMMANDS_TITLE,
+    PYSHELL_CMD_EXEC_PY, PYSHELL_CMD_CRASH, PYSHELL_CMD_FUNCTIONS,
+    PYSHELL_CMD_SHOW_CONSOLE, PYSHELL_CMD_GUI, PYSHELL_CMD_DUMP_STRINGS,
+    PYSHELL_CMD_DEL_EXIT, PYSHELL_CMD_DETACH, PYSHELL_CMD_BEHAVIOR,
+    PYSHELL_INJECTED, PYSHELL_INJECT_FAIL, PYSHELL_PROCESS_DIED,
+    PYSHELL_NEED_INJECT, PYSHELL_ENTER_PID, PYSHELL_INJECTOR_FAILED,
+    PYSHELL_CMD_EXECUTED, PYSHELL_CMD_SAVED_AS, PYSHELL_CMD_EXECUTED_MSG,
+    PYSHELL_CMD_DLL_DETACHED, PYSHELL_CMD_BEHAVIOR_HINT, PYSHELL_BTN_STEALTH,
+    PYSHELL_MODAL_TITLE, PYSHELL_MODAL_PID_LABEL, PYSHELL_MODAL_ACTION,
+    PYSHELL_SELECT_PY_FILE, PYSHELL_PID_INVALID,
+    PYSHELL_CMD_DONE, PYSHELL_CMD_FAILED, MSG_PIPE_FAILED,
+    LBL_OUTPUT
+)
+
+
+
+class PyShellScreen(QWidget):
+    process_died = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._injected = False
+        self._analyzer_handle = False
+        self._workers = []
+        self._process_monitor = None
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(40, 20, 40, 20)
+        layout.setSpacing(20)
+
+        self.title_label = QLabel(tr(SCREEN_TITLE_PYSHELL))
+        self.title_label.setObjectName("TitleLabel")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.title_label)
+
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(20)
+
+        left_layout = QVBoxLayout()
+        left_layout.setSpacing(20)
+
+        inject_frame = self._create_inject_frame()
+        left_layout.addWidget(inject_frame)
+        left_layout.addStretch()
+
+        output_frame = self._create_output_frame()
+
+        content_layout.addLayout(left_layout)
+        content_layout.addWidget(output_frame)
+
+        content_layout.setStretch(0, 0)
+        content_layout.setStretch(1, 1)
+
+        layout.addLayout(content_layout)
+
+        commands_frame = self._create_commands_frame()
+        layout.addWidget(commands_frame)
+
+        self._create_modal()
+
+    def _create_inject_frame(self):
+        frame = QFrame()
+        frame.setObjectName("StyledFrame")
+        frame.setFixedWidth(390)
+        frame.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+
+        layout = QVBoxLayout(frame)
+        layout.setSpacing(10)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        pid_layout = QHBoxLayout()
+        self.pid_label = QLabel(tr(PYSHELL_PID_LABEL))
+        self.pid_input = QLineEdit()
+        self.pid_input.setPlaceholderText(tr(PYSHELL_INPUT_PLACEHOLDER))
+
+        pid_layout.addWidget(self.pid_label)
+        pid_layout.addWidget(self.pid_input)
+        layout.addLayout(pid_layout)
+
+
+        btn_layout = QHBoxLayout()
+
+        self.inject_btn = QPushButton(tr(PYSHELL_ATTACH))
+        self.inject_btn.setFixedHeight(35)
+        self.inject_btn.clicked.connect(lambda: self._inject("normal"))
+        btn_layout.addWidget(self.inject_btn)
+
+        self.stealth_btn = QPushButton(f"{tr(PYSHELL_ATTACH)} ({tr(PYSHELL_BTN_STEALTH)})")
+        self.stealth_btn.setFixedHeight(35)
+        self.stealth_btn.clicked.connect(lambda: self._inject("stealth"))
+        btn_layout.addWidget(self.stealth_btn)
+
+        layout.addLayout(btn_layout)
+        return frame
+
+    def _create_output_frame(self):
+        frame = QFrame()
+        frame.setObjectName("StyledFrame")
+        frame.setMinimumHeight(180)
+        frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+
+        self.output = OutputTextArea(tr(LBL_OUTPUT), show_copy=True)
+        self.output.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self.output)
+
+        return frame
+
+    def _create_commands_frame(self):
+        frame = QFrame()
+        frame.setObjectName("StyledFrame")
+        frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        self.commands_title = QLabel(tr(PYSHELL_COMMANDS_TITLE))
+        self.commands_title.setObjectName("ChangelogTitleLabel")
+        self.commands_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.commands_title)
+
+
+        grid = QGridLayout()
+        grid.setSpacing(10)
+
+        for i in range(4):
+            grid.setColumnStretch(i, 1)
+
+        self.commands_grid = grid
+        self._add_pyshell_buttons()
+
+        layout.addLayout(self.commands_grid)
+        return frame
+
+    def _add_pyshell_buttons(self):
+        commands = [
+            (tr(PYSHELL_CMD_EXEC_PY), "ExecPY"),
+            (tr(PYSHELL_CMD_CRASH), "ForceCrash"),
+            (tr(PYSHELL_CMD_FUNCTIONS), "GetFunctions"),
+            (tr(PYSHELL_CMD_SHOW_CONSOLE), "ShowConsole"),
+            (tr(PYSHELL_CMD_GUI), "PyshellGUI"),
+            (tr(PYSHELL_CMD_DUMP_STRINGS), "DumpStrings"),
+            (tr(PYSHELL_CMD_DEL_EXIT), "delExit"),
+            (tr(PYSHELL_CMD_DETACH), "DeattachDLL"),
+            (tr(PYSHELL_CMD_BEHAVIOR), "GetAnalyzerHandle"),
+        ]
+
+        row = col = 0
+        for label, cmd in commands:
+            btn = QPushButton(label)
+            btn.setFixedHeight(35)
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            btn.clicked.connect(lambda _, c=cmd: self._exec_command(c))
+
+            self.commands_grid.addWidget(btn, row, col)
+            col += 1
+            if col >= 4:
+                col = 0
+                row += 1
+
+
+    def _create_modal(self):
+        self.show_console_modal = ModalOverlay(
+            tr(PYSHELL_MODAL_TITLE),
+            tr(PYSHELL_MODAL_PID_LABEL),
+            tr(PYSHELL_MODAL_ACTION),
+            self.window()
+        )
+        self.show_console_modal.submitted.connect(self._on_show_console)
+        self.show_console_modal.hide()
+
+    def _inject(self, inject_type: str):
+        if any(w.isRunning() for w in self._workers):
+            return
+        pid = self.pid_input.text().strip()
+        if not pid:
+            self.window().show_notification("warning", tr(PYSHELL_ENTER_PID))
+            return
+        if not pid.isdigit():
+            self.window().show_notification("warning", tr(PYSHELL_PID_INVALID))
+            return
+
+        self.inject_btn.setEnabled(False)
+        self.stealth_btn.setEnabled(False)
+        self.window().show_loading()
+        stealth = inject_type == "stealth"
+
+        with sentry.transaction("PyShell Injection", "pyshell.inject"):
+            sentry.set_extra_context("pyshell_meta", {
+                "pid": pid,
+                "stealth": stealth
+            })
+            worker = InjectionWorker(pid, stealth, self)
+            worker.finished.connect(self._on_inject_finished)
+            worker.error.connect(self._on_inject_error)
+            worker.start()
+            self._workers.append(worker)
+
+    def _on_inject_finished(self, handle, success: bool):
+        self.window().hide_loading()
+        self.inject_btn.setEnabled(True)
+        self.stealth_btn.setEnabled(True)
+        if success:
+            self._injected = True
+            pyshell_controller.set_handle(handle)
+            self.output.set_text(tr(PYSHELL_INJECTED))
+            self.window().show_notification("success", tr(PYSHELL_INJECTED))
+
+            try:
+                pid = int(self.pid_input.text().strip())
+            except ValueError:
+                self.window().show_notification("warning", tr(PYSHELL_PID_INVALID))
+                return
+            if self._process_monitor and self._process_monitor.isRunning():
+                self._process_monitor.stop()
+                self._process_monitor.wait(1000)
+            self._process_monitor = ProcessMonitorWorker(pid, self)
+            self._process_monitor.process_died.connect(self._on_process_died)
+            self._process_monitor.start()
+        else:
+            self.output.set_text(tr(PYSHELL_INJECT_FAIL))
+            self.window().show_notification("failure", tr(PYSHELL_INJECT_FAIL))
+
+    def _on_inject_error(self, error: str):
+        self.window().hide_loading()
+        self.inject_btn.setEnabled(True)
+        self.stealth_btn.setEnabled(True)
+        self.output.set_text(f"failed to inject pyshell: {error}")
+        self.window().show_notification("failure", tr(PYSHELL_INJECTOR_FAILED))
+
+    def _on_process_died(self):
+        self._injected = False
+        self._analyzer_handle = False
+        if self._process_monitor:
+            self._process_monitor.stop()
+        pyshell_controller.clear_handles()
+        self.window().show_notification("warning", tr(PYSHELL_PROCESS_DIED))
+        self.process_died.emit()
+
+
+    def _run_pipe_command(self, command: str, success_message: str):
+        """Send a pipe command on a worker; failures surface instead of vanishing."""
+        worker = PipeCommandWorker(command, self)
+
+        def _fail(err):
+            self.output.set_text(err)
+            self.window().show_notification("failure", tr(MSG_PIPE_FAILED, error=err))
+
+        worker.finished.connect(lambda _: self._on_command_result(success_message))
+        worker.error.connect(_fail)
+        worker.finished.connect(worker.deleteLater)
+        worker.error.connect(worker.deleteLater)
+        worker.start()
+        self._workers.append(worker)
+
+    def _exec_command(self, command: str):
+        self._cleanup_workers()
+        if command == "ShowConsole":
+            self.show_console_modal.setParent(self.window())
+            self.show_console_modal.fade_in()
+            self.show_console_modal.raise_()
+            return
+
+        if not self._injected:
+            self.window().show_notification("failure", tr(PYSHELL_NEED_INJECT))
+            return
+
+        if command in ("DumpStrings", "GetFunctions"):
+            path, filename = gen_path()
+            self._run_pipe_command(
+                f"{command}||{path}",
+                tr(PYSHELL_CMD_SAVED_AS, filename=filename),
+            )
+
+        elif command == "ExecPY":
+            file_path, _ = QFileDialog.getOpenFileName(
+                self, tr(PYSHELL_SELECT_PY_FILE), "", "Python Files (*.py)"
+            )
+            if file_path:
+                self._run_pipe_command(
+                    f"ExecPY||{file_path}", tr(PYSHELL_CMD_EXECUTED_MSG)
+                )
+
+        elif command == "GetAnalyzerHandle":
+            if not self._analyzer_handle:
+                worker = PipeCommandWorker("GetAnalyzerHandle", self)
+
+                def _analyzer_ready(_):
+                    pyshell_controller.open_analyzer_handle()
+                    self._analyzer_handle = True
+                    self.output.set_text(tr(PYSHELL_CMD_EXECUTED_MSG) + " | " + tr(PYSHELL_CMD_BEHAVIOR_HINT))
+                    self.window().show_notification("success", tr(PYSHELL_CMD_EXECUTED))
+
+                worker.finished.connect(_analyzer_ready)
+                worker.error.connect(lambda e: self.window().show_notification("failure", tr(MSG_PIPE_FAILED, error=e)))
+                worker.start()
+                self._workers.append(worker)
+            else:
+                self.window().navigate_to_behavior_monitor()
+
+        elif command == "DeattachDLL":
+            self._injected = False
+            self._analyzer_handle = False
+            self._run_pipe_command(command, tr(PYSHELL_CMD_DLL_DETACHED))
+
+        else:
+            with sentry.transaction("PyShell Command", "pyshell.command"):
+                sentry.set_extra_context("pyshell_meta", {"command": command})
+                self._run_pipe_command(command, tr(PYSHELL_CMD_EXECUTED_MSG))
+
+    def _on_command_result(self, message: str):
+        self.output.set_text(message)
+        self.window().show_notification("success", tr(PYSHELL_CMD_EXECUTED))
+
+    def _on_show_console(self, pid: str):
+        worker = ShowConsoleWorker(pid, self)
+        worker.finished.connect(self._on_show_console_result)
+        worker.start()
+        self._workers.append(worker)
+
+    def _cleanup_workers(self):
+        self._workers = [w for w in self._workers if w.isRunning()]
+
+    def shutdown(self):
+        if self._process_monitor and self._process_monitor.isRunning():
+            self._process_monitor.stop()
+            self._process_monitor.wait(2000)
+        for worker in self._workers:
+            if worker.isRunning():
+                worker.wait(2000)
+        self._workers = []
+
+    def _on_show_console_result(self, success: bool):
+        self.output.set_text(tr(PYSHELL_CMD_DONE) if success else tr(PYSHELL_CMD_FAILED))
+        self.window().show_notification(
+            "success" if success else "failure", tr(PYSHELL_CMD_EXECUTED)
+        )
+
+    def retranslate_ui(self):
+        self.title_label.setText(tr(SCREEN_TITLE_PYSHELL))
+        self.pid_label.setText(tr(PYSHELL_PID_LABEL))
+        self.inject_btn.setText(tr(PYSHELL_ATTACH))
+        self.stealth_btn.setText(f"{tr(PYSHELL_ATTACH)} ({tr(PYSHELL_BTN_STEALTH)})")
+        self.pid_input.setPlaceholderText(tr(PYSHELL_INPUT_PLACEHOLDER))
+        self.commands_title.setText(tr(PYSHELL_COMMANDS_TITLE))
+
+        while self.commands_grid.count():
+            item = self.commands_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        self.output.retranslate_ui()
+        self._add_pyshell_buttons()

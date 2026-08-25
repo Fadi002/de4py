@@ -1,0 +1,64 @@
+# de4py
+# Copyright (c) 2026 Fadi002
+#
+# This file is part of the de4py project.
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+#
+# See the LICENSE file for details.
+
+"""
+De4py API Constants
+Defines all API endpoints, rate limits, and error codes.
+"""
+
+
+ENDPOINT_TELEMETRY_ERROR = "/api/telemetry/error"
+
+ENDPOINT_PYLINGUAL_UPLOAD = "/api/integrations/pylingual/upload"
+ENDPOINT_PYLINGUAL_PROGRESS = "/api/integrations/pylingual/progress/{identifier}"
+ENDPOINT_PYLINGUAL_RESULT = "/api/integrations/pylingual/result/{identifier}"
+
+
+RATE_LIMIT_TELEMETRY = 20
+RATE_LIMIT_PYLINGUAL_UPLOAD = 3
+RATE_LIMIT_PYLINGUAL_PROGRESS = 60
+RATE_LIMIT_PYLINGUAL_RESULT = 60
+
+
+MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+
+
+STAGE_WAITING = "waiting_for_decompiler"
+STAGE_DECOMPILING = "decompiling"
+STAGE_DONE = "done"
+STAGE_ERROR = "error"
+
+
+ERROR_CODES = {
+    413: {
+        "name": "Payload Too Large",
+        "meaning": "File exceeds 10MB limit",
+        "action": "Check file size before upload",
+    },
+    429: {
+        "name": "Too Many Requests",
+        "meaning": "Rate limit hit for your IP",
+        "action": "Wait 60s or use exponential backoff",
+    },
+    500: {
+        "name": "Server Error",
+        "meaning": "Unexpected backend crash",
+        "action": "Contact maintainer; check server logs",
+    },
+    502: {
+        "name": "Bad Gateway",
+        "meaning": "PyLingual API error/timeout",
+        "action": "Report via Telemetry, retry later",
+    },
+}
+
+
+TELEMETRY_SOURCES = ["core", "ui", "tui", "integration", "plugin"]
+TELEMETRY_SEVERITIES = ["info", "warning", "error", "critical"]
+TELEMETRY_PLATFORMS = ["windows", "linux", "macos"]

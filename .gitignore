@@ -1,0 +1,159 @@
+# =========================
+# IDEs / Editors
+# =========================
+.vs/
+.vscode/
+.idea/
+*.iml
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.opencode/
+.jules/
+
+# =========================
+# Binaries / Native
+# =========================
+*.pdb
+*.exe
+*.old
+*.nupkg
+*.p7s
+**/packages/
+samples/**/*.dll
+
+# Exceptions
+!dlls/pyshell.dll
+!de4py/utils/pyshell.dll
+!samples/**/*.exe
+
+# =========================
+# Build outputs
+# =========================
+bin/
+obj/
+build/
+dist/
+out/
+target/
+develop-eggs/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+site/
+build-logs/
+de4py/engines/onyx/tools/reports/
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyc.*
+*.so
+.Python
+*.egg
+*.egg-info/
+.installed.cfg
+MANIFEST
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+# =========================
+# Testing / coverage / tools
+# =========================
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
+*.cover
+.hypotheses/
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+cython_debug/
+# =========================
+# Logs
+# =========================
+*.log
+pip-log.txt
+celerybeat-schedule
+celerybeat.pid
+logs/
+# =========================
+# OS files
+# =========================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+# =========================
+# Temp / cache
+# =========================
+.cache/
+tmp/
+temp/
+*.tmp
+.webassets-cache
+# =========================
+# Notebooks / interactive
+# =========================
+.ipynb_checkpoints/
+ipython_config.py
+profile_default/
+# =========================
+# Scrapy / docs / misc tools
+# =========================
+.scrapy/
+docs/_build/
+.pybuilder/
+.cortexkit/
+docs/
+# =========================
+# Packages / installers
+# =========================
+*.zip
+*.tar
+*.tar.gz
+*.nupkg
+*.msi
+# =========================
+# AI agent configs
+# =========================
+AGENTS.md
+CLAUDE.md
+.claude/
+.cursorrules
+.cursor/
+.windsurfrules
+.github/copilot-instructions.md
+.aider*
+prompts/
+# =========================
+# Scratch / prompt files
+# =========================
+answers.txt
+prompt.txt
+gitprompt.txt
+scan_docs/
+ok.txt
+
+CLAUDE.md
